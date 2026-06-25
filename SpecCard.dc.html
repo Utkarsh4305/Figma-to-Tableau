@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="background:#0f1620;border:1px solid #1f2a39;border-radius:8px;padding:0;overflow:hidden;font-family:-apple-system,'Helvetica Neue',Arial,sans-serif;height:100%;display:flex;flex-direction:column">
+  <div style="padding:13px 16px;border-bottom:1px solid #1f2a39;background:#131d2a">
+    <div style="font:600 9px/1.2 'IBM Plex Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:#5a7bb5">Tableau Spec Sheet</div>
+    <div style="font:600 14px/1.2 -apple-system,sans-serif;color:#eaf0fa;margin-top:4px">{{ page }}</div>
+    <div style="font:400 11px/1.45 -apple-system,sans-serif;color:#93a0b4;margin-top:6px">{{ purpose }}</div>
+  </div>
+  <div style="padding:12px 16px;display:flex;flex-direction:column;gap:13px">
+    <sc-for list="{{ sections }}" as="s" hint-placeholder-count="6">
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <div style="font:600 9px/1.2 'IBM Plex Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#e08e0b">{{ s.label }}</div>
+        <sc-for list="{{ s.items }}" as="it" hint-placeholder-count="3">
+          <div style="display:flex;gap:7px;font:400 11px/1.4 'IBM Plex Mono',ui-monospace,monospace;color:#c3cdda"><span style="color:#3f5168">›</span><span>{{ it }}</span></div>
+        </sc-for>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:430,&quot;height&quot;:820},&quot;page&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Study Overview&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;purpose&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Overall study health.&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;sections&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;Array&lt;{label:string,items:string[]}&gt;&quot;}}"></script>
+</body>
+</html>

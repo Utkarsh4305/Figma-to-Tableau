@@ -1,0 +1,13 @@
+{
+  "name": "Figma to Tableau",
+  "id": "figma-to-tableau-twbx",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "dist/index.html",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page",
+  "networkAccess": {
+    "allowedDomains": ["none"],
+    "reasoning": "All parsing and .twbx generation happen locally; the plugin makes no network requests."
+  }
+}

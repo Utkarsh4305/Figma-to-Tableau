@@ -1,0 +1,153 @@
+// ---------------------------------------------------------------------------
+// Shared type definitions — used by BOTH the Figma sandbox (plugin) and the
+// React UI. Keep this file dependency-free so it imports cleanly in both
+// contexts (the sandbox has no DOM; the UI has no `figma` global).
+// ---------------------------------------------------------------------------
+
+/** Tableau field data types we support. */
+export type FieldType = "string" | "date" | "integer" | "real";
+
+/** A column in the (placeholder) Tableau data source. */
+export interface DataField {
+  name: string;
+  type: FieldType;
+}
+
+/** Chart kinds we can detect from a Figma mockup and emit as a worksheet. */
+export type ChartKind =
+  | "bar"
+  | "line"
+  | "pie"
+  | "area"
+  | "scatter"
+  | "heatmap"
+  | "table"
+  | "kpi";
+
+/** How a parsed Figma element is interpreted for Tableau. */
+export type ElementRole =
+  | "dashboard" // the dashboard frame itself
+  | "worksheet" // a chart/table -> Tableau worksheet
+  | "kpi" // KPI card -> text zone (or KPI worksheet)
+  | "filter" // filter panel -> text zone placeholder
+  | "text" // heading / label -> text zone
+  | "button" // nav button -> styled button zone
+  | "container" // auto-layout / rectangle -> layout container
+  | "image" // raster / logo -> Tableau image (bitmap) zone
+  | "ignore";
+
+/** Normalized rectangle in Figma pixel space. */
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** RGB(A) color, components 0..1 (Figma native), plus a derived hex. */
+export interface Color {
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+  hex: string;
+}
+
+/** A single parsed node from the Figma tree. */
+export interface ParsedElement {
+  id: string;
+  name: string;
+  figmaType: string; // FRAME, TEXT, RECTANGLE, ...
+  rect: Rect; // absolute, relative to the dashboard frame
+  role: ElementRole; // heuristic guess (user can override)
+  chartKind?: ChartKind; // when role === "worksheet" | "kpi"
+  text?: string; // for TEXT nodes / KPI values
+  fill?: Color;
+  stroke?: Color;
+  fontSize?: number;
+  fontFamily?: string;
+  bold?: boolean;
+  cornerRadius?: number;
+  children?: ParsedElement[];
+  // True when the role came from an explicit LaDataViz-style layer prefix
+  // (e.g. "SHEET/Sales") rather than a heuristic guess. Authoritative.
+  explicit?: boolean;
+  // Auto Layout direction, when this node is an auto-layout frame. Used to
+  // build Tableau "tiled" containers (layout-flow) faithfully.
+  autoLayout?: "horz" | "vert";
+  // Base64-encoded PNG of this node's render (logos/images), when role==="image"
+  // or when a background-image export rasterizes the whole frame.
+  imagePng?: string;
+}
+
+/** The full structured representation of one Figma dashboard frame. */
+export interface DashboardModel {
+  id?: string; // the source frame's node id (used to detect selection changes)
+  title: string;
+  width: number; // frame width in px
+  height: number; // frame height in px
+  background?: Color;
+  elements: ParsedElement[]; // flattened, dashboard-relative
+  tree?: ParsedElement[]; // hierarchy preserved (for tiled-container export)
+  palette: string[]; // distinct hex colors found, most-used first
+  fonts: string[]; // distinct font families found
+  backgroundPng?: string; // base64 PNG of the whole frame (background-image mode)
+  debugTree?: string; // raw "depth|TYPE|name|wxh -> role" dump, for diagnostics
+}
+
+/** Export settings collected from the UI ExportPanel. */
+export interface ExportSettings {
+  workbookName: string;
+  dashboardName: string;
+  tableauVersion: string; // e.g. "2026.2"
+  layoutWidth: number; // dashboard px width
+  layoutHeight: number; // dashboard px height
+  embedData: boolean; // bundle CSV into the .twbx
+}
+
+/** A user-editable mapping row shown in the MappingPanel. */
+export interface MappingRow {
+  elementId: string;
+  elementName: string;
+  figmaType: string;
+  role: ElementRole;
+  chartKind?: ChartKind;
+}
+
+// --- Messages between the Figma sandbox and the UI iframe ---------------------
+
+export interface MsgModelReady {
+  type: "model-ready";
+  model: DashboardModel | null;
+  error?: string;
+}
+
+export interface MsgRequestParse {
+  type: "request-parse";
+}
+
+export interface MsgRequestBackground {
+  type: "request-background";
+}
+
+export interface MsgBackgroundReady {
+  type: "background-ready";
+  png?: string; // base64 PNG of the whole frame
+  width?: number; // frame width in px (so the export is self-contained)
+  height?: number;
+  error?: string;
+}
+
+export interface MsgResize {
+  type: "resize";
+  width: number;
+  height: number;
+}
+
+export interface MsgNotify {
+  type: "notify";
+  message: string;
+}
+
+export type PluginToUi = MsgModelReady | MsgBackgroundReady;
+export type UiToPlugin = MsgRequestParse | MsgRequestBackground | MsgResize | MsgNotify;

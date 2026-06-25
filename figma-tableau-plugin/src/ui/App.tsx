@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import type { DashboardModel, PluginToUi, UiToPlugin } from "../shared/types";
 import type { WorkbookSpec } from "../shared/spec";
-import { seedSpecFromModel, blankSpec } from "../plugin/seed";
+import { seedSpecFromModel, blankSpec, faithfulSpec } from "../plugin/seed";
 import { exportSpecTwbx } from "../plugin/exporter";
 import DashboardPreview from "./DashboardPreview";
 import DataPanel from "./editor/DataPanel";
 import SheetsPanel from "./editor/SheetsPanel";
 import LayoutPanel from "./editor/LayoutPanel";
 
-const BUILD = "recurse-fix-4";
+const BUILD = "faithful-nan-fix-14";
 
 type Tab = "preview" | "data" | "sheets" | "layout" | "export";
 type ExportMode = "floating" | "tiled" | "background";
@@ -31,7 +31,9 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("preview");
   const [status, setStatus] = useState<Status>(null);
   const [busy, setBusy] = useState(false);
-  const [exportMode, setExportMode] = useState<ExportMode>("floating");
+  // Tiled is the default — nested layout-flow containers (no overlap, no text
+  // clipping). Floating is opt-in for pixel-exact debugging.
+  const [exportMode, setExportMode] = useState<ExportMode>("tiled");
   const [bgPng, setBgPng] = useState<string | null>(null);
   // The frame id we last seeded the spec from; re-seed when the user selects a
   // different frame. `manual` is set when building from scratch so canvas
@@ -43,6 +45,8 @@ export default function App() {
   const forceReseedRef = useRef(false);
   // When set, the next background-ready triggers a one-click "exact design" export.
   const pendingExactRef = useRef(false);
+  // When set, the next faithful-ready triggers the faithful-transpile export.
+  const pendingFaithfulRef = useRef(false);
 
   // Always-current refs so the (once-registered) message handler reads fresh state.
   const modelRef = useRef<DashboardModel | null>(null);
@@ -116,6 +120,32 @@ export default function App() {
           setStatus({ kind: "err", text: msg.error || "Couldn't render the frame image." });
           setBusy(false);
         }
+        return;
+      }
+      if (msg.type === "faithful-ready") {
+        if (!pendingFaithfulRef.current) return;
+        pendingFaithfulRef.current = false;
+        if (msg.error || !msg.model) {
+          setStatus({ kind: "err", text: msg.error || "Couldn't transpile this frame." });
+          setBusy(false);
+          return;
+        }
+        void (async () => {
+          try {
+            const fSpec = faithfulSpec(msg.model!);
+            const res = await exportSpecTwbx(fSpec);
+            const zc = res.zoneCount;
+            setStatus({
+              kind: res.warnings.length ? "warn" : "ok",
+              text: `Faithful design exported — ${zc} zones (${msg.model!.zones.length} layers). Download started.`,
+            });
+            toPlugin({ type: "notify", message: "Faithful .twbx downloaded — check your downloads." });
+          } catch (e) {
+            setStatus({ kind: "err", text: (e as Error).message });
+          } finally {
+            setBusy(false);
+          }
+        })();
         return;
       }
       if (msg.type !== "model-ready") return;
@@ -207,22 +237,70 @@ export default function App() {
   const rereadSelection = () => {
     forceReseedRef.current = true;
     manualRef.current = false;
-    setExportMode("floating");
+    setExportMode("tiled");
     setBgPng(null);
     setStatus({ kind: "warn", text: "Reading current selection…" });
     toPlugin({ type: "request-parse" });
   };
 
-  // One-click: render the CURRENTLY selected frame and export it exactly.
-  const exportExactDesign = () => {
+  // Rename the detected chart/KPI/image layers in Figma with SHEET//KPI/…
+  // prefixes (done in the sandbox), then re-read so classification is explicit.
+  const autoTagLayers = () => {
     if (!modelRef.current) {
       setStatus({ kind: "err", text: "Select your dashboard frame on the canvas first." });
       return;
     }
+    forceReseedRef.current = true;
+    manualRef.current = false;
+    setExportMode("tiled");
+    setBgPng(null);
+    setStatus({ kind: "warn", text: "Tagging layers in Figma…" });
+    toPlugin({ type: "apply-tags" });
+  };
+
+  // Primary export: real LaDataViz-style components — every detected panel
+  // becomes its own Tableau worksheet inside nested layout-flow containers
+  // (card-wrapped), with text zones for labels. No background image.
+  // Faithful transpile: ask the sandbox to recreate the WHOLE frame as native
+  // zones (text/shapes/images), then export. This is the LaDataViz-style output
+  // that LOOKS exactly like the design (no sample-data charts).
+  const exportFaithful = () => {
+    pendingFaithfulRef.current = true;
     setBusy(true);
-    pendingExactRef.current = true;
-    setStatus({ kind: "warn", text: "Rendering your selected frame…" });
-    toPlugin({ type: "request-background" });
+    setStatus({ kind: "warn", text: "Transpiling your design (text, shapes, icons)…" });
+    toPlugin({ type: "request-faithful" });
+  };
+
+  const exportRealComponents = async () => {
+    if (!spec) return;
+    setBusy(true);
+    setStatus(null);
+    try {
+      const out: WorkbookSpec = {
+        ...spec,
+        dashboards: spec.dashboards.map((d, i) =>
+          i === 0
+            ? {
+                ...d,
+                layoutMode: d.root ? "tiled" : "floating",
+                backgroundImage: undefined,
+                backgroundImageFile: undefined,
+              }
+            : d
+        ),
+      };
+      const res = await exportSpecTwbx(out);
+      setStatus(
+        res.warnings.length
+          ? { kind: "warn", text: `Exported with ${res.warnings.length} warning(s): ${res.warnings[0]}` }
+          : { kind: "ok", text: `${res.worksheetCount} sheet(s) in ${res.zoneCount} zones. Download started.` }
+      );
+      toPlugin({ type: "notify", message: "Tableau .twbx generated — check your downloads." });
+    } catch (e) {
+      setStatus({ kind: "err", text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleExport = async () => {
@@ -316,9 +394,13 @@ export default function App() {
               <button className="secondary" onClick={rereadSelection}>
                 ⟳ Re-read selected frame
               </button>
+              <button className="secondary" style={{ marginTop: 6 }} onClick={autoTagLayers}>
+                🏷 Auto-tag layers (SHEET/, KPI/…)
+              </button>
               <p className="muted" style={{ marginTop: 6 }}>
-                Select your dashboard frame on the canvas, then click this to load it. Selecting a
-                different frame reloads automatically.
+                Auto-tag renames your detected charts/KPIs/images in Figma with LaDataViz-style
+                prefixes so the conversion is exact and repeatable. Selecting a different frame
+                reloads automatically.
               </p>
             </div>
             <div className="field">
@@ -370,11 +452,14 @@ export default function App() {
 
       <div className="footer">
         {status && <div className={`status ${status.kind}`}>{status.text}</div>}
-        <button className="primary" disabled={busy} onClick={exportExactDesign}>
-          {busy ? "Working…" : "⬇ Export EXACT design (.twbx)"}
+        <button className="primary" disabled={busy} onClick={exportFaithful}>
+          {busy ? "Working…" : "⬇ Export EXACT design (looks like Figma)"}
+        </button>
+        <button className="secondary" disabled={busy} onClick={exportRealComponents}>
+          {busy ? "…" : "Export as data sheets (sample data)"}
         </button>
         <button className="secondary" disabled={busy} onClick={handleExport}>
-          {busy ? "…" : "Export editable workbook (placeholders)"}
+          {busy ? "…" : "Export with current layout options"}
         </button>
         <div className="muted" style={{ fontSize: 9, textAlign: "center" }}>build {BUILD}</div>
       </div>

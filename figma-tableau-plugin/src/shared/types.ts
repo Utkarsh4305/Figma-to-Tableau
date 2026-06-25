@@ -95,6 +95,48 @@ export interface DashboardModel {
   debugTree?: string; // raw "depth|TYPE|name|wxh -> role" dump, for diagnostics
 }
 
+// --- faithful transpile (LaDataViz-style) ------------------------------------
+// Instead of classifying charts and binding them to sample data, the faithful
+// path recreates the WHOLE Figma design as native Tableau dashboard zones: text
+// layers -> text zones (real content), shapes -> colored `empty` zones, icons/
+// vectors -> bitmap images. The result LOOKS like the design (it carries no
+// live data — exactly what LaDataViz's "Figma to Tableau" plugin produces).
+
+/** One faithfully-transpiled Figma node, positioned in dashboard px. */
+export interface FaithfulZone {
+  id: string; // figma node id (used to rasterize image zones in the sandbox)
+  name: string; // original layer name -> friendly-name
+  kind: "text" | "rect" | "image";
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  // rect
+  fill?: string; // hex background
+  cornerRadius?: number;
+  strokeColor?: string;
+  strokeWidth?: number;
+  // text
+  text?: string;
+  fontSize?: number;
+  fontFamily?: string;
+  fontColor?: string;
+  bold?: boolean;
+  align?: number; // 0 left 1 center 2 right
+  // image
+  imagePng?: string; // base64 (no data: prefix)
+}
+
+/** A whole Figma frame transpiled faithfully (z-ordered back-to-front). */
+export interface FaithfulModel {
+  id?: string;
+  title: string;
+  width: number;
+  height: number;
+  background?: string;
+  zones: FaithfulZone[];
+}
+
 /** Export settings collected from the UI ExportPanel. */
 export interface ExportSettings {
   workbookName: string;
@@ -149,5 +191,27 @@ export interface MsgNotify {
   message: string;
 }
 
-export type PluginToUi = MsgModelReady | MsgBackgroundReady;
-export type UiToPlugin = MsgRequestParse | MsgRequestBackground | MsgResize | MsgNotify;
+/** Ask the sandbox to rename detected layers in Figma with SHEET//KPI/… prefixes. */
+export interface MsgApplyTags {
+  type: "apply-tags";
+}
+
+/** Ask the sandbox for a FAITHFUL transpile of the selected frame. */
+export interface MsgRequestFaithful {
+  type: "request-faithful";
+}
+
+export interface MsgFaithfulReady {
+  type: "faithful-ready";
+  model: FaithfulModel | null;
+  error?: string;
+}
+
+export type PluginToUi = MsgModelReady | MsgBackgroundReady | MsgFaithfulReady;
+export type UiToPlugin =
+  | MsgRequestParse
+  | MsgRequestBackground
+  | MsgResize
+  | MsgNotify
+  | MsgApplyTags
+  | MsgRequestFaithful;

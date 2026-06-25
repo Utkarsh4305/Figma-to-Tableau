@@ -87,11 +87,14 @@ export interface ActionSpec {
   runOn: ActionRunOn;
 }
 
-export type ZoneKind = "sheet" | "text" | "button" | "filter" | "image";
+export type ZoneKind = "sheet" | "text" | "button" | "filter" | "image" | "rect";
 
 export interface ZoneSpec {
   id: string;
   kind: ZoneKind;
+  // Original Figma layer name, emitted as the zone's `friendly-name` (LaDataViz
+  // convention) so the dashboard tree reads like the source design.
+  friendlyName?: string;
   // px coordinates relative to the dashboard; normalized at generation time
   x: number;
   y: number;
@@ -99,6 +102,9 @@ export interface ZoneSpec {
   h: number;
   // sheet / filter (bound worksheet)
   worksheet?: string;
+  // A KPI "big number" sheet. In tiled mode KPIs are pinned (fixed-size) like
+  // text/headers so a KPI row stays short instead of flexing like a chart.
+  isKpi?: boolean;
   // filter card: the (string) dimension the quick filter is on
   field?: string;
   // text / button
@@ -106,8 +112,13 @@ export interface ZoneSpec {
   bg?: string;
   fg?: string;
   fontSize?: number;
+  fontFamily?: string; // faithful transpile: the design's font
   bold?: boolean;
   align?: number; // 0 left 1 center 2 right
+  // rect (faithful transpile of a Figma shape -> a colored `empty` zone)
+  cornerRadius?: number;
+  strokeColor?: string;
+  strokeWidth?: number;
   // button
   targetDashboard?: string;
   // image zone: base64 PNG payload + the in-package filename it's stored under
@@ -126,6 +137,8 @@ export interface ContainerSpec {
   id: string;
   direction: "horz" | "vert";
   children: LayoutNode[];
+  // Original Figma frame name, emitted as `friendly-name` on the container.
+  name?: string;
 }
 
 /** A tiled-layout node: either a reference to a ZoneSpec, or a sub-container. */

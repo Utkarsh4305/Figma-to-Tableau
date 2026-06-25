@@ -58,6 +58,29 @@ function nameMatches(name: string, words: string[]): boolean {
   return words.some((w) => n.includes(w));
 }
 
+/**
+ * Pull a KPI card's label + value out of its child TEXT layers (e.g. the
+ * "metric" frame holds TEXT "Tasks Completed" + TEXT "67/85"). The card is an
+ * opaque leaf, so we read its descendants directly here. Returns "label\nvalue".
+ */
+function kpiText(node: SceneNode): string | undefined {
+  if (!("children" in node)) return undefined;
+  const texts: string[] = [];
+  const walk = (n: SceneNode) => {
+    if (n.type === "TEXT") {
+      const c = (n as TextNode).characters;
+      if (typeof c === "string" && c.trim()) texts.push(c.trim());
+    }
+    if ("children" in n) for (const k of (n as ChildrenMixin).children) walk(k as SceneNode);
+  };
+  for (const k of (node as ChildrenMixin).children) walk(k as SceneNode);
+  if (!texts.length) return undefined;
+  const value = texts.find((t) => /\d/.test(t)); // "67/85", "48%", "3.6"
+  const label = texts.find((t) => !/\d/.test(t) && t.length > 2);
+  const parts = [label, value].filter(Boolean) as string[];
+  return parts.length ? parts.join("\n") : texts[0];
+}
+
 /** True if the node is painted with a raster IMAGE fill (a logo/photo). */
 function hasImageFill(node: SceneNode): boolean {
   const fills = (node as GeometryMixin).fills;
@@ -279,6 +302,23 @@ function parseNode(
 
   if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
     el.cornerRadius = node.cornerRadius;
+  }
+
+  // For a KPI card, pull its label + number out of the child text so the tile
+  // shows "Tasks Completed / 67/85" instead of an empty "—" placeholder.
+  if (role === "kpi" && !el.text) {
+    const kt = kpiText(node);
+    if (kt) el.text = kt;
+  }
+
+  // Auto-name charts/KPIs from their inner TITLE text so sheets are called
+  // "Daily Task Completion", not "container" / "Group 289204". The user can't
+  // hand-name every layer, so we derive a readable name. An explicit prefix
+  // (SHEET/Name) always wins and is left untouched.
+  if (!prefix && (role === "worksheet" || role === "kpi")) {
+    const title =
+      role === "kpi" && el.text ? el.text.split("\n")[0].trim() : firstTitleText(node);
+    if (title && title.length >= 2) el.name = title.slice(0, 60);
   }
 
   // Recurse only one level into chart panels (we don't need their internals),
@@ -511,6 +551,75 @@ export async function attachImages(model: DashboardModel): Promise<void> {
       /* leave imagePng undefined — the element just won't render as a bitmap */
     }
   }
+}
+
+// --- auto-tagging: rename detected layers with LaDataViz-style prefixes -------
+
+const PREFIX_FOR: Partial<Record<ElementRole, string>> = {
+  worksheet: "SHEET/",
+  kpi: "KPI/",
+  image: "IMAGE/",
+  filter: "FILTER/",
+  button: "BUTTON/",
+};
+
+/** First descendant TEXT that reads like a human title (3–40 chars, not a number). */
+function firstTitleText(node: SceneNode): string | undefined {
+  if (!("children" in node)) return undefined;
+  let found: string | undefined;
+  const walk = (n: SceneNode) => {
+    if (found) return;
+    if (n.type === "TEXT") {
+      const c = (n as TextNode).characters;
+      if (typeof c === "string") {
+        const t = c.trim().split("\n")[0];
+        if (t.length >= 3 && t.length <= 40 && !/^\d/.test(t)) found = t;
+      }
+    }
+    if ("children" in n) for (const k of (n as ChildrenMixin).children) walk(k as SceneNode);
+  };
+  for (const k of (node as ChildrenMixin).children) walk(k as SceneNode);
+  return found;
+}
+
+/** A readable name for a worksheet/KPI layer: its title text, else its clean name. */
+function niceName(node: SceneNode, e: ParsedElement): string {
+  if (e.role === "kpi" && e.text) {
+    const label = e.text.split("\n")[0].trim();
+    if (label && !/^\d/.test(label)) return label.slice(0, 40);
+  }
+  if (e.role === "worksheet") {
+    const t = firstTitleText(node);
+    if (t) return t.slice(0, 40);
+  }
+  const base = (e.name || node.name || "Sheet").replace(/[/]/g, " ").trim();
+  return base.slice(0, 40) || "Sheet";
+}
+
+/**
+ * Rename the detected chart/KPI/image/filter/button layers in Figma with the
+ * matching LaDataViz-style prefix (SHEET/, KPI/, …) so future parses are
+ * deterministic. Skips layers that already carry a known prefix. Returns the
+ * number of layers renamed.
+ */
+export async function applyAutoTags(): Promise<number> {
+  const model = parseSelection();
+  let n = 0;
+  for (const e of model.elements) {
+    const prefix = PREFIX_FOR[e.role];
+    if (!prefix) continue;
+    let node: SceneNode | null = null;
+    try {
+      node = (await figma.getNodeByIdAsync(e.id)) as SceneNode | null;
+    } catch {
+      node = null;
+    }
+    if (!node) continue;
+    if (matchLayerPrefix(node.name || "")) continue; // already tagged
+    node.name = prefix + niceName(node, e);
+    n++;
+  }
+  return n;
 }
 
 /** Render the whole frame to a PNG (+ its px size) for background-image export. */

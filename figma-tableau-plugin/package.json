@@ -12,7 +12,7 @@
     "watch:ui": "vite build --watch",
     "watch:code": "esbuild src/plugin/code.ts --bundle --target=es2017 --format=iife --outfile=dist/code.js --watch",
     "typecheck": "tsc --noEmit",
-    "test": "tsx test/smoke.ts && tsx test/spec_smoke.ts && tsx test/lds_smoke.ts"
+    "test": "tsx test/smoke.ts && tsx test/spec_smoke.ts && tsx test/lds_smoke.ts && tsx test/faithful_smoke.ts"
   },
   "dependencies": {
     "file-saver": "^2.0.5",

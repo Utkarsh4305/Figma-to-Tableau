@@ -5,7 +5,8 @@
 // UI iframe (which has Blob + JSZip + FileSaver).
 // ---------------------------------------------------------------------------
 
-import { parseSelection, attachImages, exportFramePng } from "./parser";
+import { parseSelection, attachImages, exportFramePng, applyAutoTags } from "./parser";
+import { parseFaithful, attachFaithfulImages } from "./faithful";
 import type { UiToPlugin, PluginToUi } from "../shared/types";
 import { UI_SIZE } from "../shared/constants";
 
@@ -40,6 +41,34 @@ async function sendBackground(): Promise<void> {
   }
 }
 
+// Rename detected layers with SHEET//KPI/… prefixes, then re-parse so the UI
+// reflects the now-explicit classification.
+async function applyTagsAndResend(): Promise<void> {
+  try {
+    const n = await applyAutoTags();
+    figma.notify(n ? `Tagged ${n} layer(s) — re-reading…` : "Nothing new to tag.");
+    await parseAndSend();
+  } catch (e) {
+    post({ type: "model-ready", model: null, error: (e as Error).message });
+  }
+}
+
+// Faithful transpile: recreate the whole frame as native zones, rasterizing
+// icons/vectors. Best-effort images must not block the model.
+async function sendFaithful(): Promise<void> {
+  try {
+    const model = parseFaithful();
+    try {
+      await attachFaithfulImages(model);
+    } catch {
+      /* some images just won't render */
+    }
+    post({ type: "faithful-ready", model });
+  } catch (e) {
+    post({ type: "faithful-ready", model: null, error: (e as Error).message });
+  }
+}
+
 // Re-parse whenever the user changes their selection.
 figma.on("selectionchange", () => void parseAndSend());
 
@@ -50,6 +79,12 @@ figma.ui.onmessage = (msg: UiToPlugin) => {
       break;
     case "request-background":
       void sendBackground();
+      break;
+    case "apply-tags":
+      void applyTagsAndResend();
+      break;
+    case "request-faithful":
+      void sendFaithful();
       break;
     case "resize":
       figma.ui.resize(Math.max(360, msg.width), Math.max(420, msg.height));

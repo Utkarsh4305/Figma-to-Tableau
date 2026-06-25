@@ -64,9 +64,64 @@ function testSeedTiled() {
   assert(xml.includes("param='horz' type-v2='layout-flow'"), "horizontal container emitted from Auto Layout");
 }
 
+// Geometric layout engine: a realistic 2D design (left sidebar + header + a row
+// of 3 KPIs + two chart rows) must reconstruct a clean nested layout-flow tree
+// — NOT fall back to floating — with KPI/header rows pinned (fixed-size) and
+// chart areas flexible. This is the LaDataViz-grade structure.
+function testGeometricLayout() {
+  const el = (
+    id: string,
+    name: string,
+    role: "worksheet" | "kpi" | "image" | "text",
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    chartKind?: "bar" | "line" | "kpi"
+  ): import("../src/shared/types").ParsedElement => ({
+    id,
+    name,
+    figmaType: "FRAME",
+    rect: { x, y, w, h },
+    role,
+    chartKind,
+    imagePng: role === "image" ? PNG : undefined,
+  });
+  const model: DashboardModel = {
+    title: "Overview",
+    width: 1280,
+    height: 900,
+    elements: [
+      el("side", "Sidebar", "image", 0, 0, 64, 900),
+      el("t1", "Overview", "text", 90, 36, 300, 40),
+      el("k1", "Tasks Completed", "kpi", 90, 130, 360, 70, "kpi"),
+      el("k2", "Streak Length", "kpi", 470, 130, 360, 70, "kpi"),
+      el("k3", "Habit Consistency", "kpi", 850, 130, 360, 70, "kpi"),
+      el("c1", "Daily Task Completion", "worksheet", 90, 230, 560, 180, "bar"),
+      el("c2", "Habit Consistency Trend", "worksheet", 690, 230, 540, 180, "line"),
+      el("c3", "Habit Performance", "worksheet", 90, 440, 560, 220, "bar"),
+      el("c4", "Tasks", "worksheet", 690, 440, 540, 220, "bar"),
+    ],
+    palette: [],
+    fonts: [],
+  };
+  const s = seedSpecFromModel(model);
+  assert(s.dashboards[0].layoutMode === "tiled", "2D design must tile, not float");
+  const root = s.dashboards[0].root!;
+  assert(!!root && root.direction === "horz", "top level splits sidebar | content (horz)");
+  const xml = generateSpecWorkbook(s).twbXml;
+  // KPI/header rows + sidebar must be pinned; chart rows flexible.
+  const pinned = (xml.match(/is-fixed='true'/g) || []).length;
+  assert(pinned >= 6, "expected pinned header/kpi/sidebar zones, got " + pinned);
+  assert((xml.match(/type-v2='layout-flow'/g) || []).length >= 4, "expected nested flow containers");
+  assert((xml.match(/show-title='false'/g) || []).length === 7, "all 7 sheets hide titles");
+  assert(xml.includes("friendly-name='Sidebar' fixed-size='64'"), "sidebar pinned to its width");
+}
+
 async function main() {
   testPrefixes();
   testSeedTiled();
+  testGeometricLayout();
 
   const spec = blankSpec("LDS Test");
   const dash = spec.dashboards[0];

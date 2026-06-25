@@ -52,6 +52,7 @@ export const AGG2026: Record<FieldType, string> = {
 // Matched case-insensitively; surrounding spaces around the slash are allowed.
 export const LAYER_PREFIXES: Array<{ re: RegExp; role: ElementRole }> = [
   { re: /^\s*sheet\s*\/\s*/i, role: "worksheet" },
+  { re: /^\s*kpi\s*\/\s*/i, role: "kpi" },
   { re: /^\s*(?:image|img|logo)\s*\/\s*/i, role: "image" },
   { re: /^\s*button\s*\/\s*/i, role: "button" },
   { re: /^\s*filter\s*\/\s*/i, role: "filter" },

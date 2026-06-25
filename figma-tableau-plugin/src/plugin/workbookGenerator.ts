@@ -476,7 +476,37 @@ function zoneStyle(bg: string | undefined, bc: string, bs: string, bw: string, m
 }
 
 function clampN(v: number, fw: number): number {
+  // NaN/Infinity-proof: a Figma node with no resolvable bounding box would
+  // otherwise emit a "NaN" attribute and break the workbook on load.
+  if (!Number.isFinite(v) || !Number.isFinite(fw) || fw <= 0) return 0;
   return Math.round(Math.max(0, Math.min(100000, (v / fw) * 100000)));
+}
+
+// LaDataViz-style helpers (mirrors confirmed-opening Template.twb shapes) -------
+
+/** Margin-only zone-style for flow containers (no border/bg, like LaDataViz). */
+function containerStyle(margin = "8"): string {
+  return (
+    "          <zone-style>\n" +
+    "            <format attr='border-style' value='none' />\n" +
+    "            <format attr='border-width' value='0' />\n" +
+    `            <format attr='margin' value='${margin}' />\n` +
+    "          </zone-style>\n"
+  );
+}
+
+/** Card zone-style for a worksheet wrapper: white bg, light border, padding. */
+function cardStyle(bg = "#FFFFFF"): string {
+  return (
+    "          <zone-style>\n" +
+    "            <format attr='border-color' value='#E3E6F0' />\n" +
+    "            <format attr='border-style' value='solid' />\n" +
+    "            <format attr='border-width' value='1' />\n" +
+    "            <format attr='margin' value='6' />\n" +
+    "            <format attr='padding' value='16' />\n" +
+    `            <format attr='background-color' value='${bg}' />\n` +
+    "          </zone-style>\n"
+  );
 }
 
 function dashboardXml(
@@ -491,47 +521,95 @@ function dashboardXml(
   const nid = () => ++zid;
   const zoneById = new Map(dash.zones.map((z) => [z.id, z] as const));
 
-  // Emit one leaf zone (sheet / image / filter / text / button).
-  const emitZone = (z: ZoneSpec): string => {
+  // A zone "flexes" (absorbs free space in its flow) only if it is a real chart
+  // sheet. KPIs, text, buttons, filters and images are pinned to their Figma
+  // size — this is exactly the Template.twb rule (chart areas flexible, headers
+  // / labels fixed-size), and it's what keeps KPI/header rows short instead of
+  // ballooning to an equal share of the height.
+  const zoneFlexible = (z: ZoneSpec): boolean => z.kind === "sheet" && !z.isKpi;
+  const nodeFlexible = (node: LayoutNode): boolean => {
+    if (!isContainer(node)) {
+      const z = zoneById.get(node.zone);
+      return !!z && zoneFlexible(z);
+    }
+    return node.children.some(nodeFlexible);
+  };
+
+  // Emit one leaf zone (sheet / image / filter / text / button). In `tiled`
+  // mode, sheets are card-wrapped and zones carry a `friendly-name` (the Figma
+  // layer name) to mirror the LaDataViz reference output. `parentDir` lets a
+  // non-flexible leaf pin its natural pixel size so it keeps its height in a
+  // vert flow (width in a horz flow) instead of stretching.
+  const emitZone = (z: ZoneSpec, tiled = false, parentDir?: "horz" | "vert"): string => {
     const X = clampN(z.x, fw);
     const Y = clampN(z.y, fh);
     const W = Math.max(1, clampN(z.w, fw));
     const H = Math.max(1, clampN(z.h, fh));
     const o: string[] = [];
+    const fn = z.friendlyName ? ` friendly-name='${esc(z.friendlyName)}'` : "";
+    // Chart sheets flex to fill; everything else is pinned to its Figma size.
+    const fixedPx = zoneFlexible(z) ? 0 : Math.round(parentDir === "horz" ? z.w : z.h);
+    const fix = tiled && parentDir && fixedPx > 0 ? ` fixed-size='${fixedPx}' is-fixed='true'` : "";
 
     if (z.kind === "sheet" && z.worksheet) {
       sheetNames.push(z.worksheet);
-      o.push(`        <zone h='${H}' id='${nid()}' name='${esc(z.worksheet)}' w='${W}' x='${X}' y='${Y}'>\n`);
-      o.push(zoneStyle(z.bg || "#FFFFFF", "#D7DAEC", "solid", "1", "4", "6"));
-      o.push("        </zone>\n");
+      if (tiled) {
+        o.push(`        <zone${fn}${fix} h='${H}' id='${nid()}' name='${esc(z.worksheet)}' show-title='false' w='${W}' x='${X}' y='${Y}'>\n`);
+        o.push("          <layout-cache cell-count-h='1' cell-count-w='1' type-h='cell' type-w='cell' />\n");
+        o.push(cardStyle(z.bg || "#FFFFFF"));
+        o.push("        </zone>\n");
+      } else {
+        o.push(`        <zone h='${H}' id='${nid()}' name='${esc(z.worksheet)}' w='${W}' x='${X}' y='${Y}'>\n`);
+        o.push(zoneStyle(z.bg || "#FFFFFF", "#D7DAEC", "solid", "1", "4", "6"));
+        o.push("        </zone>\n");
+      }
     } else if (z.kind === "image" && z.imageFile) {
       // bitmap zone (CONFIRMED schema from VOTD.twbx): self-closing, param=path.
+      // In a flow, pin it (a logo/sidebar must keep its size, not flex to 50%).
       const sc = z.scaled === false ? "is-centered='1' is-scaled='0'" : "is-centered='0' is-scaled='1'";
       o.push(
-        `        <zone h='${H}' id='${nid()}' ${sc} param='Image/${esc(z.imageFile)}' type-v2='bitmap' w='${W}' x='${X}' y='${Y}' />\n`
+        `        <zone${fn}${fix} h='${H}' id='${nid()}' ${sc} param='Image/${esc(z.imageFile)}' type-v2='bitmap' w='${W}' x='${X}' y='${Y}' />\n`
       );
     } else if (z.kind === "filter" && z.worksheet && z.field) {
       // dashboard quick-filter card bound to a worksheet + dimension (CONFIRMED)
       const f = reg.get(z.field);
       const param = f ? `[${dsName}].${dimInstance(f.base)}` : `[${dsName}].[none:${z.field}:nk]`;
       o.push(
-        `        <zone h='${H}' id='${nid()}' mode='checkdropdown' name='${esc(z.worksheet)}' param='${param}' type-v2='filter' w='${W}' x='${X}' y='${Y}'>\n`
+        `        <zone${fn}${fix} h='${H}' id='${nid()}' mode='checkdropdown' name='${esc(z.worksheet)}' param='${param}' type-v2='filter' w='${W}' x='${X}' y='${Y}'>\n`
       );
       o.push(zoneStyle(z.bg || "#FFFFFF", z.fg || "#D7DAEC", "solid", "1", "3", "6"));
+      o.push("        </zone>\n");
+    } else if (z.kind === "rect") {
+      // Faithful transpile of a Figma shape/card/bar: a colored `empty` zone
+      // (the LaDataViz pattern — every rectangle becomes a background-filled
+      // empty zone). No worksheet, no data; purely visual.
+      o.push(`        <zone${fn}${fix} h='${H}' id='${nid()}' type-v2='empty' w='${W}' x='${X}' y='${Y}'>\n`);
+      const hasStroke = !!z.strokeColor && (z.strokeWidth ?? 0) > 0;
+      o.push(
+        zoneStyle(
+          z.bg,
+          z.strokeColor || "#000000",
+          hasStroke ? "solid" : "none",
+          hasStroke ? String(Math.max(1, Math.round(z.strokeWidth || 1))) : "0",
+          "0"
+        )
+      );
       o.push("        </zone>\n");
     } else {
       // text and button (button rendered as a styled text zone — load-safe)
       const isButton = z.kind === "button";
-      o.push(`        <zone h='${H}' id='${nid()}' type-v2='text' w='${W}' x='${X}' y='${Y}'>\n`);
+      o.push(`        <zone${fn}${fix} h='${H}' id='${nid()}' type-v2='text' w='${W}' x='${X}' y='${Y}'>\n`);
       o.push("          <formatted-text>\n");
       const label = z.text || (isButton ? z.targetDashboard || "Button" : "");
       if (label) {
         let attrs = "";
         if (z.bold || isButton) attrs += " bold='true'";
+        if (z.fontFamily) attrs += ` fontname='${esc(z.fontFamily)}'`;
         attrs += ` fontsize='${z.fontSize || (isButton ? 13 : 14)}'`;
         attrs += ` fontcolor='${z.fg || (isButton ? "#FFFFFF" : "#101828")}'`;
         if (z.align != null) attrs += ` fontalignment='${z.align}'`;
         else if (isButton) attrs += " fontalignment='1'";
+        // preserve line breaks in multi-line text (LaDataViz keeps them as runs)
         o.push(`            <run${attrs}>${esc(label)}</run>\n`);
       }
       o.push("          </formatted-text>\n");
@@ -559,27 +637,42 @@ function dashboardXml(
     return { x, y, w: x2 - x, h: y2 - y };
   };
 
-  // Emit a layout-flow container (CONFIRMED schema: no zone-style on container).
-  const emitContainer = (c: ContainerSpec, placed: Set<string>): string => {
+  // Emit a layout-flow container. Mirrors LaDataViz Template.twb: friendly-name
+  // = the Figma frame name, distribute-evenly strategy, margin-only zone-style.
+  const emitContainer = (
+    c: ContainerSpec,
+    placed: Set<string>,
+    parentDir?: "horz" | "vert"
+  ): string => {
     const b = boundsOf(c);
     if (!b) return "";
     const X = clampN(b.x, fw);
     const Y = clampN(b.y, fh);
     const W = Math.max(1, clampN(b.w, fw));
     const H = Math.max(1, clampN(b.h, fh));
+    const fn = c.name ? ` friendly-name='${esc(c.name)}'` : "";
+    // A container that holds NO flexible chart (e.g. a header row or a KPI row)
+    // is pinned to its Figma extent along the parent's flow axis — mirrors the
+    // Template.twb `fixed-size='44' is-fixed='true'` on its header row. A
+    // container that DOES hold a chart stays flexible to absorb free space.
+    // NOTE: deliberately NO `layout-strategy-id='distribute-evenly'` — that
+    // forces every child to an equal share and stretches titles/sidebars.
+    const fixPx = parentDir && !nodeFlexible(c) ? Math.round(parentDir === "horz" ? b.w : b.h) : 0;
+    const fix = fixPx > 0 ? ` fixed-size='${fixPx}' is-fixed='true'` : "";
     const o: string[] = [
-      `        <zone h='${H}' id='${nid()}' param='${c.direction}' type-v2='layout-flow' w='${W}' x='${X}' y='${Y}'>\n`,
+      `        <zone${fn}${fix} h='${H}' id='${nid()}' param='${c.direction}' type-v2='layout-flow' w='${W}' x='${X}' y='${Y}'>\n`,
     ];
     for (const ch of c.children) {
-      if (isContainer(ch)) o.push(emitContainer(ch, placed));
+      if (isContainer(ch)) o.push(emitContainer(ch, placed, c.direction));
       else {
         const z = zoneById.get(ch.zone);
         if (z) {
           placed.add(z.id);
-          o.push(emitZone(z));
+          o.push(emitZone(z, true, c.direction));
         }
       }
     }
+    o.push(containerStyle());
     o.push("        </zone>\n");
     return o.join("");
   };

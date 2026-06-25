@@ -4,7 +4,7 @@
 // Also provides a blank spec for building from scratch (no Figma).
 // ---------------------------------------------------------------------------
 
-import type { DashboardModel, ParsedElement } from "../shared/types";
+import type { DashboardModel, FaithfulModel } from "../shared/types";
 import type {
   WorkbookSpec,
   WorksheetSpec,
@@ -15,7 +15,7 @@ import type {
   ContainerSpec,
   LayoutNode,
 } from "../shared/spec";
-import { nextId } from "../shared/spec";
+import { nextId, isContainer } from "../shared/spec";
 import { DOMAIN_KEYWORDS, DOMAIN_FIELDS } from "../shared/constants";
 import { generateSampleRows } from "./csv";
 
@@ -50,44 +50,86 @@ function slugFile(s: string): string {
   );
 }
 
-/** Infer flow direction from a set of sibling rects (horizontal vs vertical). */
-function inferDirection(nodes: ParsedElement[]): "horz" | "vert" {
-  if (nodes.length < 2) return "vert";
-  const cx = nodes.map((n) => n.rect.x + n.rect.w / 2);
-  const cy = nodes.map((n) => n.rect.y + n.rect.h / 2);
-  const spread = (a: number[]) => Math.max(...a) - Math.min(...a);
-  return spread(cx) > spread(cy) ? "horz" : "vert";
+// --- geometric layout engine (recursive guillotine partitioning) ------------
+//
+// This is how LaDataViz-grade tiled output is reconstructed from a flat set of
+// placed zones, INDEPENDENT of how messy the Figma nesting was. We recursively
+// cut the set of rectangles along clean horizontal/vertical gutters:
+//   - a vertical gutter (no rect spans across it) splits into COLUMNS -> horz
+//   - a horizontal gutter splits into ROWS -> vert
+// Each side recurses. The result is a nested layout-flow tree that mirrors the
+// visual structure (sidebar | (header / kpi-row / charts)) with no overlap and
+// no truncation, because the flow — not absolute coords — drives sizing.
+
+interface LRect {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
-/** Recursively turn the parsed hierarchy into tiled layout nodes. */
-function buildNodes(nodes: ParsedElement[], zoneByEl: Map<string, string>): LayoutNode[] {
-  const out: LayoutNode[] = [];
-  for (const n of nodes) {
-    const kids = n.children && n.children.length ? buildNodes(n.children, zoneByEl) : [];
-    const zid = zoneByEl.get(n.id);
-    if (kids.length > 1) {
-      out.push({
-        id: nextId("c"),
-        direction: n.autoLayout ?? inferDirection(n.children!),
-        children: kids,
-      });
-    } else if (kids.length === 1) {
-      out.push(kids[0]);
-    } else if (zid) {
-      out.push({ zone: zid });
+// Treat near-touching / slightly-overlapping edges (sloppy designs) as a clean
+// cut; only a real overlap (one rect well inside another's span) merges them.
+const GUTTER_TOL = 8;
+
+/** Split items into bands separated by clean gutters along one axis. */
+function bands(items: LRect[], axis: "x" | "y"): LRect[][] {
+  const start = (i: LRect) => (axis === "x" ? i.x : i.y);
+  const end = (i: LRect) => (axis === "x" ? i.x + i.w : i.y + i.h);
+  const sorted = [...items].sort((a, b) => start(a) - start(b));
+  const groups: LRect[][] = [];
+  let cur: LRect[] = [sorted[0]];
+  let curEnd = end(sorted[0]);
+  for (let i = 1; i < sorted.length; i++) {
+    const it = sorted[i];
+    if (start(it) >= curEnd - GUTTER_TOL) {
+      groups.push(cur);
+      cur = [it];
+      curEnd = end(it);
+    } else {
+      cur.push(it);
+      curEnd = Math.max(curEnd, end(it));
     }
   }
-  return out;
+  groups.push(cur);
+  return groups;
 }
 
-/** Wrap the top-level parsed tree into a single root flow container. */
-function buildContainer(
-  tree: ParsedElement[],
-  zoneByEl: Map<string, string>
-): ContainerSpec | undefined {
-  const kids = buildNodes(tree, zoneByEl);
-  if (!kids.length) return undefined;
-  return { id: nextId("c"), direction: inferDirection(tree), children: kids };
+/** Recursively partition a set of rects into a layout-flow node tree. */
+function partition(items: LRect[]): LayoutNode {
+  if (items.length === 1) return { zone: items[0].id };
+  const cols = bands(items, "x"); // vertical gutters -> columns (horz flow)
+  const rows = bands(items, "y"); // horizontal gutters -> rows (vert flow)
+
+  // Pick the axis that actually splits and yields the finer top-level cut. Ties
+  // favour rows (dashboards stack vertically); a sidebar (cols=2, rows=1) still
+  // wins horz because it has strictly more groups.
+  let dir: "horz" | "vert" | null = null;
+  if (cols.length > 1 && cols.length >= rows.length) dir = "horz";
+  else if (rows.length > 1) dir = "vert";
+  else if (cols.length > 1) dir = "horz";
+
+  if (!dir) {
+    // No clean gutter on either axis (rects overlap) — stack in reading order.
+    const sorted = [...items].sort((a, b) => a.y - b.y || a.x - b.x);
+    return { id: nextId("c"), direction: "vert", children: sorted.map((i) => ({ zone: i.id })) };
+  }
+  const groups = dir === "horz" ? cols : rows;
+  return { id: nextId("c"), direction: dir, children: groups.map(partition) };
+}
+
+/** Build the root flow container from the placed zones' geometry. */
+function inferLayoutTree(zones: ZoneSpec[]): ContainerSpec | undefined {
+  const items: LRect[] = zones.map((z) => ({ id: z.id, x: z.x, y: z.y, w: z.w, h: z.h }));
+  if (!items.length) return undefined;
+  if (items.length === 1) {
+    return { id: nextId("c"), direction: "vert", children: [{ zone: items[0].id }], name: "Body" };
+  }
+  const node = partition(items);
+  if (!isContainer(node)) return { id: nextId("c"), direction: "vert", children: [node], name: "Body" };
+  node.name = "Body";
+  return node;
 }
 
 function fieldsForDomain(domain: string): SpecField[] {
@@ -133,6 +175,82 @@ export function blankSpec(name = "Workbook"): WorkbookSpec {
   };
 }
 
+/**
+ * Build a WorkbookSpec that FAITHFULLY reproduces the Figma design as native
+ * Tableau dashboard zones (LaDataViz style): text -> text zones, shapes ->
+ * colored `empty` zones, icons -> bitmaps. No charts are bound to data — the
+ * dashboard just LOOKS like the design. One unplaced dummy worksheet satisfies
+ * Tableau's requirement that a workbook contains at least one sheet.
+ */
+export function faithfulSpec(model: FaithfulModel): WorkbookSpec {
+  const fields: SpecField[] = [{ name: "Value", type: "real", role: "measure" }];
+  const ws: WorksheetSpec = {
+    id: nextId("ws"),
+    name: "Sheet 1",
+    mark: "Bar",
+    measures: [{ field: "Value", agg: "Sum" }],
+    dualAxis: false,
+    showLabels: false,
+  };
+  let imgN = 0;
+  const zones: ZoneSpec[] = model.zones.map((z) => {
+    const base = { x: z.x, y: z.y, w: z.w, h: z.h, friendlyName: z.name };
+    if (z.kind === "text") {
+      return {
+        id: nextId("z"),
+        kind: "text" as const,
+        ...base,
+        text: z.text,
+        fontSize: z.fontSize ? Math.round(z.fontSize) : 14,
+        fontFamily: z.fontFamily,
+        fg: z.fontColor,
+        bold: z.bold,
+        align: z.align,
+      };
+    }
+    if (z.kind === "image") {
+      imgN++;
+      return {
+        id: nextId("z"),
+        kind: "image" as const,
+        ...base,
+        image: z.imagePng,
+        imageFile: `${slugFile(z.name || "img")}_${imgN}.png`,
+        scaled: true,
+      };
+    }
+    return {
+      id: nextId("z"),
+      kind: "rect" as const,
+      ...base,
+      bg: z.fill,
+      cornerRadius: z.cornerRadius,
+      strokeColor: z.strokeColor,
+      strokeWidth: z.strokeWidth,
+    };
+  });
+
+  const dash: DashboardSpec = {
+    id: nextId("db"),
+    name: (model.title || "Dashboard").slice(0, 80),
+    widthPx: Math.round(model.width),
+    heightPx: Math.round(model.height),
+    bg: model.background || "#FFFFFF",
+    zones,
+    layoutMode: "floating",
+  };
+
+  return {
+    workbookName: (model.title || "Workbook").replace(/[\\/:*?"<>|]+/g, " ").trim() || "Workbook",
+    tableauVersion: "2026.2",
+    data: { fileName: "data.csv", fields, calcs: [], rows: [["1"]] },
+    worksheets: [ws],
+    dashboards: [dash],
+    actions: [],
+    includeActions: false,
+  };
+}
+
 export function seedSpecFromModel(model: DashboardModel): WorkbookSpec {
   const domain = detectDomain(model);
   const fields = fieldsForDomain(domain);
@@ -150,8 +268,6 @@ export function seedSpecFromModel(model: DashboardModel): WorkbookSpec {
     return n;
   };
 
-  // element id -> the zone id it produced (used to build the tiled tree)
-  const zoneByEl = new Map<string, string>();
   let imgN = 0;
 
   let combo = 0;
@@ -186,18 +302,21 @@ export function seedSpecFromModel(model: DashboardModel): WorkbookSpec {
         scaled: true,
       });
     } else if (e.role === "kpi") {
-      const value = e.text && /\d/.test(e.text) ? e.text.split("\n")[0] : "—";
-      zones.push({
-        id: zoneId,
-        kind: "text",
-        ...base,
-        text: `${(e.name || "KPI").slice(0, 40)}\n${value}`,
-        fontSize: 18,
-        bold: true,
-        fg: "#101828",
-        bg: e.fill?.hex || "#FFFFFF",
-        align: 1,
+      // Every KPI is a real Tableau worksheet (a "big number": Text mark, one
+      // measure, no dimension) — so the dashboard is all sheets, no text tiles.
+      const name = uniq(e.name || "KPI");
+      const m = meas[combo % meas.length];
+      combo++;
+      worksheets.push({
+        id: nextId("ws"),
+        name,
+        mark: "Text",
+        measures: [{ field: m?.name ?? "Value", agg: "Sum" }],
+        dualAxis: false,
+        showLabels: true,
+        kpi: true,
       });
+      zones.push({ id: zoneId, kind: "sheet", ...base, worksheet: name, bg: e.fill?.hex || "#FFFFFF", isKpi: true });
     } else if (e.role === "button") {
       zones.push({
         id: zoneId,
@@ -214,11 +333,16 @@ export function seedSpecFromModel(model: DashboardModel): WorkbookSpec {
       zones.push({ id: zoneId, kind: "text", ...base, text: e.name || "Filter", fontSize: 13, fg: "#101828", bg: e.fill?.hex || "#FFFFFF", align: 1 });
     } else if (e.role === "text") {
       const txt = (e.text || e.name || "").split("\n").slice(0, 3).join("\n");
-      if (txt.trim()) zones.push({ id: zoneId, kind: "text", ...base, text: txt, fontSize: e.fontSize ? Math.round(e.fontSize) : 14, bold: e.bold, fg: e.fill?.hex || "#101828" });
-    } else if (e.role === "container" && e.fill) {
-      zones.push({ id: zoneId, kind: "text", ...base, text: "", bg: e.fill.hex });
+      // Only real, non-trivial text becomes a zone — an EMPTY Tableau text
+      // object renders as an ugly dashed placeholder box, so we skip those.
+      if (txt.trim().length >= 2)
+        zones.push({ id: zoneId, kind: "text", ...base, text: txt, fontSize: e.fontSize ? Math.round(e.fontSize) : 14, bold: e.bold, fg: e.fill?.hex || "#101828" });
     }
-    if (zones.length > before) zoneByEl.set(e.id, zoneId);
+    // NOTE: pure `container` fills are intentionally dropped — they previously
+    // became empty text zones (the dashed placeholder boxes the user saw).
+    if (zones.length > before) {
+      zones[zones.length - 1].friendlyName = e.name;
+    }
   }
 
   if (worksheets.length === 0) {
@@ -227,12 +351,15 @@ export function seedSpecFromModel(model: DashboardModel): WorkbookSpec {
     zones.push({ id: nextId("z"), kind: "sheet", x: 40, y: 90, w: model.width - 80, h: model.height - 130, worksheet: name, bg: "#FFFFFF" });
   }
 
-  // Build the tiled container tree from the parsed hierarchy. Floating mode
-  // ignores it; tiled mode wraps the same zones in nested layout-flow containers.
-  // Guarded: a malformed tree must never break seeding (floating still works).
+  // Reconstruct a clean nested layout-flow tree from the placed zones' geometry
+  // (recursive guillotine partitioning). This is independent of the Figma
+  // nesting — it works on a flat pile of absolutely-positioned layers just as
+  // well as on tidy Auto-Layout frames, so a real-world 2D design (sidebar +
+  // header + content) tiles correctly instead of falling back to (truncating,
+  // overlapping) floating. Guarded: a failure leaves root undefined -> floating.
   let root: ContainerSpec | undefined;
   try {
-    root = model.tree ? buildContainer(model.tree, zoneByEl) : undefined;
+    root = inferLayoutTree(zones);
   } catch {
     root = undefined;
   }
@@ -244,7 +371,7 @@ export function seedSpecFromModel(model: DashboardModel): WorkbookSpec {
     heightPx: Math.round(model.height),
     bg: model.background?.hex || "#F4F5FB",
     zones,
-    layoutMode: "floating",
+    layoutMode: root ? "tiled" : "floating",
     root,
   };
 

@@ -261,17 +261,17 @@ function walk(node: SceneNode, origin: { x: number; y: number }, zones: Faithful
         rect.y = Math.max(0, rect.y - (needH - rect.h) / 2);
         rect.h = needH;
       }
-      // Width: a FLOATING text zone hard-clips its text, and the design fonts
-      // (Roboto/Inter/Poppins) are usually NOT installed on the viewer's machine
-      // -> Tableau substitutes a WIDER fallback (~1.1x the point size per char),
-      // so a tight Figma bbox truncates short values to "67/.." / "Overv..". Give
-      // SHORT strings generous room (only ever grows; harmless empty space for
-      // left-aligned text). LONG text (subtitles, axis label strips) already has
-      // an appropriately wide Figma bbox — widening it by char count would
-      // explode the layout, so leave anything past ~20 visible chars alone.
+      // Width safety: the emitted font is mapped to Segoe UI (see safeFont in the
+      // generator), whose average glyph advance is ~0.6× the point size — close
+      // to the design fonts (Inter/Roboto) the Figma box was sized for, so the
+      // text should already FIT its box. Only nudge the width up when the box is
+      // genuinely too small for that real Segoe UI width (a modest, only-grows
+      // cushion), so text no longer OVERFLOWS past its container. The old 1.15×
+      // factor assumed a much wider substituted fallback and over-grew massively.
+      // Short strings only (≤20 visible chars); long text keeps its Figma bbox.
       const longestLine = chars.split("\n").reduce((a, b) => (b.length > a.length ? b : a), "");
       if (longestLine.replace(/\s/g, "").length <= 20) {
-        const estW = Math.ceil(longestLine.length * maxPt * 1.15 + maxPt);
+        const estW = Math.ceil(longestLine.length * maxPt * 0.62 + maxPt * 0.3);
         if (rect.w < estW) rect.w = estW;
       }
       zones.push({

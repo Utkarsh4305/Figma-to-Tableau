@@ -27,6 +27,10 @@ export const MANIFEST_ENTRIES = [
   "SchemaViewerObjectModel",
   "SheetIdentifierTracking",
   "WindowsPersistSimpleIdentifiers",
+  // Enables the rounded-corner zone-style format (the `_.fcp.DashboardRounded
+  // Corners.true...format attr='corner-radius'` lines). Confirmed schema-valid:
+  // multi.twbx declares it and only `shelf-sorts` was rejected on load.
+  "_.fcp.DashboardRoundedCorners.true...DashboardRoundedCorners",
 ] as const;
 
 /** Native Tableau 2026.2 remote-type codes (verified against reference.twb). */

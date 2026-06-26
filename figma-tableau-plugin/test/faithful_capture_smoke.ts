@@ -74,8 +74,10 @@ async function main() {
   assert(Math.abs((t.fontSize ?? 0) - 37.5) < 0.01, "font px->pt converted (50->37.5), got " + t.fontSize);
   // 3. short box grown so glyph tops aren't clipped (>= ~37.5*1.5)
   assert((t.h ?? 0) >= 55, "short title box grown to fit line, got h=" + t.h);
-  // width slack added so Tableau doesn't truncate (orig 300 + ~1 char)
-  assert((t.w ?? 0) > 300, "width slack added to avoid ellipsis truncation, got w=" + t.w);
+  // Width FITS the text (Segoe UI ~0.6×pt) but is NOT over-grown past the Figma
+  // box — "Overview" @37.5pt needs ~198px, the 300px box is enough, so no grow
+  // and crucially no OVERFLOW beyond the container.
+  assert((t.w ?? 0) >= 198 && (t.w ?? 0) <= 300, "title width fits without overflowing its box, got w=" + t.w);
   assert(t.bold === true, "true Bold weight stays bold");
 
   // SemiBold KPI value must NOT be bold (else it widens and truncates)

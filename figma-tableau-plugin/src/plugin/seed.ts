@@ -175,15 +175,40 @@ export function blankSpec(name = "Workbook"): WorkbookSpec {
   };
 }
 
-/** Sample dataset the SHEET/-tagged worksheets bind to (Superstore-style, the
- * same shape LaDataViz used in Template.twbx: a category dimension + measures). */
+/**
+ * Sample dataset the SHEET/-tagged worksheets bind to — Superstore-style, the
+ * shape LaDataViz used in multi.twbx. A `Region` CATEGORY dimension (so bars sum
+ * to big realistic numbers like 739,814) AND a `Period` TIME dimension of
+ * lexically-sortable quarters "2021 Q1".."2023 Q4" (so line/area charts read as
+ * real upward trends, not flat blobs over 6 nominal categories). 4 regions × 12
+ * quarters = 48 rows. Integer measures so labels are clean ("549,600", no ".00").
+ */
 function sampleData(): { fields: SpecField[]; rows: string[][] } {
   const fields: SpecField[] = [
     { name: "Region", type: "string", role: "dimension" },
-    { name: "Sales", type: "real", role: "measure" },
-    { name: "Profit", type: "real", role: "measure" },
+    { name: "Period", type: "string", role: "dimension" },
+    { name: "Sales", type: "integer", role: "measure" },
+    { name: "Profit", type: "integer", role: "measure" },
   ];
-  return { fields, rows: generateSampleRows(fields) };
+  // Region weight (West highest → South lowest) and a per-quarter trend that
+  // rises across the 3 years with seasonal dips — gives differentiated bar
+  // totals and an interesting trend line.
+  const regions: [string, number][] = [["West", 1.0], ["East", 0.92], ["Central", 0.66], ["South", 0.5]];
+  const periodVal = [9, 14, 20, 11, 17, 23, 15, 21, 27, 18, 24, 30];
+  const years = [2021, 2022, 2023];
+  const rows: string[][] = [];
+  for (const [rname, rmul] of regions) {
+    let pi = 0;
+    for (const y of years) {
+      for (let q = 1; q <= 4; q++) {
+        const pv = periodVal[pi++];
+        const sales = Math.round(rmul * pv * 2400);
+        const profit = Math.round(sales * (0.18 + 0.04 * rmul));
+        rows.push([rname, `${y} Q${q}`, String(sales), String(profit)]);
+      }
+    }
+  }
+  return { fields, rows };
 }
 
 /** Coerce a faithful zone's mark tag to a valid MarkType (default Bar). */
@@ -213,20 +238,51 @@ export function faithfulSpec(model: FaithfulModel): WorkbookSpec {
     return n;
   };
 
+  // Make each chart cover the CONTAINER it sits in: if a rect (a Figma card
+  // frame) snugly contains a SHEET zone, grow the sheet to that card's bounds,
+  // inherit the card's corner radius, and DROP the card — the sheet's own
+  // rounded white card then fills the container edge-to-edge instead of floating
+  // inset with the card showing around it. Conservative: only a card-sized rect
+  // (< 50% of the dashboard) that actually encloses the sheet qualifies.
+  const dashArea = Math.max(1, model.width * model.height);
+  const dropped = new Set<string>();
+  for (const s of model.zones) {
+    if (s.kind !== "sheet") continue;
+    let best: (typeof model.zones)[number] | undefined;
+    for (const r of model.zones) {
+      if (r === s || r.kind !== "rect" || dropped.has(r.id)) continue;
+      const encloses =
+        r.x <= s.x + 2 && r.y <= s.y + 2 && r.x + r.w >= s.x + s.w - 2 && r.y + r.h >= s.y + s.h - 2;
+      const cardLike = r.w * r.h <= dashArea * 0.5 && r.w * r.h > s.w * s.h;
+      if (encloses && cardLike && (!best || r.w * r.h < best.w * best.h)) best = r;
+    }
+    if (best) {
+      s.x = best.x;
+      s.y = best.y;
+      s.w = best.w;
+      s.h = best.h;
+      if (s.cornerRadius == null) s.cornerRadius = best.cornerRadius;
+      dropped.add(best.id);
+    }
+  }
+  const srcZones = model.zones.filter((z) => !dropped.has(z.id));
+
   let imgN = 0;
   let sheetN = 0;
-  const zones: ZoneSpec[] = model.zones.map((z) => {
+  const zones: ZoneSpec[] = srcZones.map((z) => {
     const base = { x: z.x, y: z.y, w: z.w, h: z.h, friendlyName: z.name };
     if (z.kind === "sheet") {
       const wsName = uniqName(z.sheetName || z.name || "Sheet");
       const mark = markTypeOf(z.chart);
       // Alternate the measure so adjacent sample charts aren't identical.
       const measure = sheetN++ % 2 === 0 ? "Sales" : "Profit";
+      // Line/area read as a TIME TREND over Period; bars/others compare Regions.
+      const isTrend = mark === "Line" || mark === "Area";
       worksheets.push({
         id: nextId("ws"),
         name: wsName,
         mark,
-        dimension: "Region",
+        dimension: isTrend ? "Period" : "Region",
         measures: [{ field: measure, agg: "Sum" }],
         dualAxis: false,
         // Neutral gray marks, matching the LaDataViz reference (multi.twbx uses
@@ -236,7 +292,7 @@ export function faithfulSpec(model: FaithfulModel): WorkbookSpec {
         markColor: "#898989",
         showLabels: true,
       });
-      return { id: nextId("z"), kind: "sheet" as const, ...base, worksheet: wsName, bg: "#FFFFFF" };
+      return { id: nextId("z"), kind: "sheet" as const, ...base, worksheet: wsName, bg: "#FFFFFF", cornerRadius: z.cornerRadius };
     }
     if (z.kind === "text") {
       return {

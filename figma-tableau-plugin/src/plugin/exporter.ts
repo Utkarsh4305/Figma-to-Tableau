@@ -93,8 +93,58 @@ export interface SpecExportResult extends ExportResult {
   csvText: string;
 }
 
+/**
+ * Guarantee unique worksheet names so an export NEVER blocks or breaks on
+ * duplicates. Tableau maps windows/viewpoints by worksheet name, so two sheets
+ * called "Sales" corrupt the workbook; LaDataViz refuses to export in that case.
+ * We instead auto-rename ("Sales" → "Sales 2", "Sales 3", …) and carry on.
+ *
+ * No-op (returns the SAME object) when names are already unique — the faithful
+ * path already dedupes at creation, so its output stays byte-identical. Sheet/
+ * filter zone `worksheet` references are remapped positionally (zones are emitted
+ * in worksheet order) so each zone still points at its own renamed worksheet.
+ */
+export function dedupeWorksheetNames(spec: WorkbookSpec): WorkbookSpec {
+  const used = new Set<string>();
+  const queues = new Map<string, string[]>(); // original name -> assigned names, in order
+  let changed = false;
+  const worksheets = spec.worksheets.map((ws) => {
+    let name = ws.name;
+    if (used.has(name)) {
+      let i = 2;
+      while (used.has(`${ws.name} ${i}`)) i++;
+      name = `${ws.name} ${i}`;
+      changed = true;
+    }
+    used.add(name);
+    const q = queues.get(ws.name) ?? [];
+    q.push(name);
+    queues.set(ws.name, q);
+    return name === ws.name ? ws : { ...ws, name };
+  });
+  if (!changed) return spec;
+  const cursor = new Map<string, number>();
+  const remap = (original: string): string => {
+    const q = queues.get(original);
+    if (!q || q.length === 0) return original;
+    const i = cursor.get(original) ?? 0;
+    cursor.set(original, i + 1);
+    return q[Math.min(i, q.length - 1)];
+  };
+  const dashboards = spec.dashboards.map((d) => ({
+    ...d,
+    zones: d.zones.map((z) =>
+      (z.kind === "sheet" || z.kind === "filter") && z.worksheet
+        ? { ...z, worksheet: remap(z.worksheet) }
+        : z
+    ),
+  }));
+  return { ...spec, worksheets, dashboards };
+}
+
 /** Generate the .twb XML from the editable WorkbookSpec, with validation. */
 export function generateSpecWorkbook(spec: WorkbookSpec): SpecExportResult {
+  spec = dedupeWorksheetNames(spec); // auto-rename any duplicate sheet names
   const twbXml = generateWorkbookXml(spec, DATA_DIR);
   const warnings = validateTwb(
     twbXml,

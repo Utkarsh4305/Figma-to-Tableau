@@ -4,7 +4,7 @@
 > device without the local Claude memory**. It folds in the essential facts from
 > the private memory files (the Tableau 2026.2 recipe, the reference-export
 > workflow, and project state). Last updated: **2026-06-26**, build
-> `lds-polish-26`.
+> `dedupe-names-30`.
 
 ---
 
@@ -151,13 +151,49 @@ This is the heart of the recent work. A `sheet` zone produces both a
 - `mark-color='#898989'` — the exact neutral gray LaDataViz uses on every sheet.
 - Data labels: bars `all`, line/area `line-ends` (only the end value). A bold,
   color-matched `datalabel` rule.
-- Line/area get point markers; area gets `mark-transparency='27'`.
+- Line/area get point markers; **area gets `mark-transparency='65'`** — higher
+  than the reference's 27 because our area is standalone (no opaque line layered
+  on top like LaDataViz), so 27 washed out to near-white.
+
+### Sample data (`seed.ts sampleData`) — what the charts bind to
+- `Region × Period` (4 regions × 12 quarters `2021 Q1…2023 Q4`, 48 rows),
+  **integer** Sales/Profit (clean labels, no `.00`). Bars sum over Region → big
+  differentiated numbers (`West 549,600` …); **line/area bind to `Period`** so
+  they render as real upward trends, not flat blobs over nominal categories.
+  `faithfulSpec` picks the dimension by mark: Line/Area → `Period`, else `Region`.
 
 ### Dashboard sheet zone (floating)
 `<zone friendly-name='SHEET/…' name='<worksheet>' show-title='false'>` +
-`<layout-cache>` + a white card `<zone-style>` (border none, **padding 8**) so the
-fat marks fill edge-to-edge. (`faithfulSpec` sets `markColor:'#898989'` and
+`<layout-cache>` + a white **rounded** card `<zone-style>` (border none,
+**padding 8**, `corner-radius` from the Figma container or 10) so the fat marks
+fill edge-to-edge. (`faithfulSpec` sets `markColor:'#898989'` and
 `showLabels:true` on every sheet.)
+
+### Sheet fills its container (`faithfulSpec` pre-pass)
+When a `SHEET/` layer sits inside a Figma card rect, a pre-pass **grows the sheet
+to the card's bounds, inherits the card's corner radius, and drops the card** so
+the chart's own rounded card fills the container edge-to-edge. Conservative: only
+a card-sized rect (<50% of the dashboard) that actually encloses the sheet.
+
+### Rounded corners (`cornerXml` + manifest)
+Figma `cornerRadius` → Tableau via `<_.fcp.DashboardRoundedCorners.true...format
+attr='corner-radius' value='N'/>` (+ the three named-corner variants) inside a
+`<zone-style>`. **Requires** the feature declared in the manifest
+(`_.fcp.DashboardRoundedCorners.true...DashboardRoundedCorners`, in
+`constants.ts MANIFEST_ENTRIES`). Applied to sheet cards and rect/card zones.
+
+### Entire-View fit (`windowsXml`)
+Every graph fills its pane/card by default via `<zoom type='entire-view'/>` in
+TWO places (confirmed from `Our.twb`/`DM_Dashboards.twb`): each **worksheet
+window** gets `<viewpoint><zoom type='entire-view'/></viewpoint>` after its
+`<cards>`; each **dashboard viewpoint** becomes
+`<viewpoint name='Sheet'><zoom type='entire-view'/></viewpoint>`.
+
+### Font: maintain size, never overflow (`faithful.ts`)
+Fonts are kept (px→pt ×0.75) and non-Windows families mapped to **Segoe UI**
+(`safeFont`). The width-grow safety uses a realistic Segoe UI advance (`~0.62×`
+the pt size, was a wildly-too-big `1.15×` that overflowed cards) — text only
+nudges wider when genuinely too narrow, so it fits without spilling past its box.
 
 ---
 
@@ -176,7 +212,8 @@ from the proven Python generator and confirmed against the example workbooks.)
    block, and the workbook header needs `<document-format-change-manifest>` with
    `AnimationOnByDefault, MarkAnimation, ObjectModelEncapsulateLegacy,
    ObjectModelTableType, SchemaViewerObjectModel, SheetIdentifierTracking,
-   WindowsPersistSimpleIdentifiers`.
+   WindowsPersistSimpleIdentifiers` and (for rounded corners)
+   `_.fcp.DashboardRoundedCorners.true...DashboardRoundedCorners`.
 3. **CSV/textscan datasource**: `<columns character-set='UTF-8' header='yes'
    locale='en_US' separator=','>`. metadata remote-type codes: **string=129,
    date=133, integer=20, real=5**. String cols add `<scale>1</scale><width>
@@ -196,6 +233,14 @@ from the proven Python generator and confirmed against the example workbooks.)
    the file won't load).
 6. **`.twbx` packaging** (`twbxBuilder.ts`): the `.twb` + `Data/data.csv` +
    `Image/*` zipped; datasource connection `directory='Data'`.
+7. **Entire-View fit** (so a graph fills its zone): `<zoom type='entire-view'/>`
+   inside each worksheet window's `<viewpoint>` (after `<cards>`) AND inside each
+   dashboard `<viewpoint name='Sheet'>`. Confirmed from `Our.twb`/`DM_Dashboards`.
+8. **Rounded corners**: `<_.fcp.DashboardRoundedCorners.true...format
+   attr='corner-radius' value='N'/>` (+ `-top-right`/`-bottom-left`/
+   `-bottom-right`) inside a `<zone-style>`, gated by the manifest entry above.
+   Confirmed schema-valid (declared in `multi.twbx`; only `shelf-sorts` was
+   rejected there).
 
 ### Known LOAD-KILLERS (do not emit)
 - **`<shelf-sorts>`** → **error D2E8DA72** (`no declaration found for element
@@ -251,9 +296,11 @@ current tag. Many "it's still broken" reports were just a stale build.
   asserts px→pt fonts, grown short titles, 8-digit alpha fills, gradient
   resolution, rotated-bar fix, SemiBold-not-bold.
 
-Floating `.twb` output has historically been kept **byte-identical** across
-refactors (smoke 15277 / spec_smoke ~15336–17408 as features were added) — check
-the byte counts didn't change unexpectedly when you mean a refactor to be inert.
+Floating `.twb` output was historically kept **byte-identical** across refactors,
+but the byte counts have since shifted intentionally as features landed (the
+rounded-corners manifest entry + corner/zoom XML add bytes to every workbook).
+Current reference sizes: smoke ~15346, spec_smoke ~18010. Don't treat a byte-count
+change as a regression by itself — confirm via the assertions instead.
 
 ---
 
@@ -269,7 +316,7 @@ It sends `request-faithful`; the `faithful-ready` handler builds `faithfulSpec` 
 (`exportRealComponents`, `handleExport`) were **removed**, along with the
 background-image export mode and all its plumbing. The Export tab still has:
 workbook name, Tableau version, a re-read/auto-tag source card, and a summary
-table. Build tag is in `App.tsx` `const BUILD` (currently `lds-polish-26`).
+table. Build tag is in `App.tsx` `const BUILD` (currently `entire-view-29`).
 
 ---
 
@@ -278,18 +325,31 @@ table. Build tag is in `App.tsx` `const BUILD` (currently `lds-polish-26`).
 **Working & verified (typecheck + smoke + XML inspection):**
 - Faithful transpile: text stays text; `SHEET/Name[type]` → real worksheet on
   sample data; rect/image faithful zones; px→pt fonts; 8-digit alpha fills;
-  rotated-bar fix; font substitution mapped to Segoe UI.
+  rotated-bar fix; font substitution mapped to Segoe UI; **text width-grow gentle
+  (~0.62×) so text fits without overflowing its card**.
 - LaDataViz-style worksheets: horizontal single-measure bars, gray `#898989`
   fat marks that fill the card, value labels (bars `all` / line-area `line-ends`),
-  hidden axes/gridlines/field-labels, area transparency, `show-title='false'`
+  hidden axes/gridlines/field-labels, area transparency 65, `show-title='false'`
   card zones.
+- **Rich sample data**: `Region × Period` (48 rows, integer measures); bars sum to
+  big differentiated numbers, line/area bind to `Period` → real quarterly trends.
+- **Rounded cards** (corner-radius from Figma, default 10) + the manifest entry.
+- **Sheet fills its container** (pre-pass grows the sheet to a containing card rect
+  and drops the card).
+- **Entire-View fit** by default (`<zoom type='entire-view'/>` in worksheet windows
+  + dashboard viewpoints) — matches the user's `Our.twb` reference exactly.
+- **Duplicate sheet names auto-renamed** (`Sales` → `Sales 2` …) so an export never
+  blocks/breaks (LaDataViz refuses to export on dup names; we don't). Two layers:
+  `faithfulSpec`'s `uniqName` dedupes at creation, AND `exporter.dedupeWorksheetNames`
+  is a generator-level safety net for ANY spec (no-op when already unique, so
+  byte-identical; remaps sheet/filter zone refs positionally).
 - `.twb` well-formed, `<windows>` present, no `<shelf-sorts>`/`NaN`, images
   packaged under `Image/`.
 
 **Unconfirmed (needs the user to open in Tableau after a manifest re-import):**
-- Whether `lds-polish-26` visually matches `multi.twbx` in Tableau. The user's
-  last few reports came from STALE builds — always have them confirm the footer
-  tag first.
+- Whether `entire-view-29` visually matches `multi.twbx`/their `Our.twb` in
+  Tableau. The user's reports have repeatedly come from STALE Figma builds — ALWAYS
+  have them confirm the footer reads the current tag before trusting a screenshot.
 
 **Deferred / known limits:**
 - **Sample data only.** SHEET/ worksheets bind to the built-in Region/Sales/

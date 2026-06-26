@@ -553,7 +553,9 @@ function markPaneStyle(ws: WorksheetSpec): string {
     o.push("                <format attr='mark-labels-cull' value='false' />\n");
   }
   if (isLine || isArea) o.push("                <format attr='mark-markers-mode' value='all' />\n");
-  if (isArea) o.push("                <format attr='mark-transparency' value='27' />\n");
+  // Standalone area (no opaque line layered on top like the reference) needs a
+  // higher opacity than the reference's 27 or it washes out to near-white.
+  if (isArea) o.push("                <format attr='mark-transparency' value='65' />\n");
   o.push("              </style-rule>\n");
   o.push("            </style>\n");
   return o.join("");
@@ -561,7 +563,15 @@ function markPaneStyle(ws: WorksheetSpec): string {
 
 // --- dashboard ---------------------------------------------------------------
 
-function zoneStyle(bg: string | undefined, bc: string, bs: string, bw: string, margin: string, padding?: string): string {
+function zoneStyle(
+  bg: string | undefined,
+  bc: string,
+  bs: string,
+  bw: string,
+  margin: string,
+  padding?: string,
+  corner?: number
+): string {
   const s: string[] = ["          <zone-style>\n"];
   s.push(`            <format attr='border-color' value='${bc}' />\n`);
   s.push(`            <format attr='border-style' value='${bs}' />\n`);
@@ -569,8 +579,22 @@ function zoneStyle(bg: string | undefined, bc: string, bs: string, bw: string, m
   s.push(`            <format attr='margin' value='${margin}' />\n`);
   if (padding) s.push(`            <format attr='padding' value='${padding}' />\n`);
   if (bg) s.push(`            <format attr='background-color' value='${bg}' />\n`);
+  s.push(cornerXml(corner));
   s.push("          </zone-style>\n");
   return s.join("");
+}
+
+/** Rounded-corner format lines (Figma cornerRadius → Tableau). Empty for 0. */
+function cornerXml(radius: number | undefined): string {
+  const r = radius == null ? 0 : Math.max(0, Math.round(radius));
+  if (r <= 0) return "";
+  const p = "            <_.fcp.DashboardRoundedCorners.true...format attr=";
+  return (
+    `${p}'corner-radius' value='${r}' />\n` +
+    `${p}'corner-radius-top-right' value='${r}' />\n` +
+    `${p}'corner-radius-bottom-left' value='${r}' />\n` +
+    `${p}'corner-radius-bottom-right' value='${r}' />\n`
+  );
 }
 
 function clampN(v: number, fw: number): number {
@@ -680,9 +704,10 @@ function dashboardXml(
         // layout-cache Tableau writes for a placed sheet.
         o.push(`        <zone${fn} h='${H}' id='${nid()}' name='${esc(z.worksheet)}' show-title='false' w='${W}' x='${X}' y='${Y}'>\n`);
         o.push("          <layout-cache cell-count-h='1' cell-count-w='1' type-h='cell' type-w='cell' />\n");
-        // White card, no border, small padding so the chart fills the box (the
-        // LaDataViz card look). The fat marks (markPaneStyle) do the filling.
-        o.push(zoneStyle(z.bg || "#FFFFFF", "#000000", "none", "0", "0", "8"));
+        // White ROUNDED card, no border, small padding so the chart fills the box
+        // (the LaDataViz card look). The fat marks (markPaneStyle) do the filling.
+        // Corner radius comes from the Figma container (default 10 if unknown).
+        o.push(zoneStyle(z.bg || "#FFFFFF", "#000000", "none", "0", "0", "8", z.cornerRadius ?? 10));
         o.push("        </zone>\n");
       }
     } else if (z.kind === "image" && z.imageFile) {
@@ -713,7 +738,9 @@ function dashboardXml(
           z.strokeColor || "#000000",
           hasStroke ? "solid" : "none",
           hasStroke ? String(Math.max(1, Math.round(z.strokeWidth || 1))) : "0",
-          "0"
+          "0",
+          undefined,
+          z.cornerRadius // rounded Figma rect/card → rounded zone
         )
       );
       o.push("        </zone>\n");
@@ -878,6 +905,10 @@ function windowsXml(wsNames: string[], dashboards: { name: string; sheets: strin
   for (const nm of wsNames) {
     x.push(`    <window class='worksheet' name='${esc(nm)}'>\n`);
     x.push(WS_CARDS);
+    // The worksheet's own default fit = Entire View (the chart fills its pane
+    // instead of sizing to content). Confirmed from DM_Dashboards.twb: a
+    // <viewpoint> after <cards> carrying <zoom type='entire-view'/>.
+    x.push("      <viewpoint>\n        <zoom type='entire-view' />\n      </viewpoint>\n");
     x.push(`      <simple-id uuid='${uid()}' />\n`);
     x.push("    </window>\n");
   }
@@ -887,7 +918,12 @@ function windowsXml(wsNames: string[], dashboards: { name: string; sheets: strin
     // to the screen instead of opening at actual pixel size.
     x.push(`    <window class='dashboard' maximized='true' name='${esc(d.name)}'>\n`);
     x.push("      <viewpoints>\n");
-    for (const s of d.sheets) x.push(`        <viewpoint name='${esc(s)}' />\n`);
+    // Each sheet AS PLACED on the dashboard also defaults to Entire View so the
+    // graph fills its zone/card (same <zoom> inside the named viewpoint).
+    for (const s of d.sheets)
+      x.push(
+        `        <viewpoint name='${esc(s)}'>\n          <zoom type='entire-view' />\n        </viewpoint>\n`
+      );
     x.push("      </viewpoints>\n");
     x.push("      <active id='-1' />\n");
     x.push(`      <simple-id uuid='${uid()}' />\n`);

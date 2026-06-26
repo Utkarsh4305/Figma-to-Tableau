@@ -8,7 +8,7 @@ import DataPanel from "./editor/DataPanel";
 import SheetsPanel from "./editor/SheetsPanel";
 import LayoutPanel from "./editor/LayoutPanel";
 
-const BUILD = "faithful-nan-fix-14";
+const BUILD = "rotate-fix-22";
 
 type Tab = "preview" | "data" | "sheets" | "layout" | "export";
 type ExportMode = "floating" | "tiled" | "background";

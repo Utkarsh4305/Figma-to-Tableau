@@ -8,22 +8,65 @@
 // The output LOOKS like the design; it carries no live data.
 // ---------------------------------------------------------------------------
 
-import type { FaithfulModel, FaithfulZone, Rect } from "../shared/types";
+import type { FaithfulModel, FaithfulTextRun, FaithfulZone, Rect } from "../shared/types";
 
+// Figma font sizes are PIXELS; Tableau `fontsize` is POINTS. Without this 96->72
+// dpi conversion every font comes out ~1.33x too big (titles clip / text
+// overlaps). 0.75 = 72/96. Matches the LaDataViz reference's font sizes.
+const PT_PER_PX = 0.75;
+
+const hh = (v: number) =>
+  Math.round(Math.max(0, Math.min(1, v)) * 255)
+    .toString(16)
+    .padStart(2, "0");
+
+/** 6-digit #RRGGBB (font colors — the reference uses 6-digit for runs). */
 function toHex(c: { r: number; g: number; b: number }): string {
-  const h = (v: number) =>
-    Math.round(Math.max(0, Math.min(1, v)) * 255)
-      .toString(16)
-      .padStart(2, "0");
-  return `#${h(c.r)}${h(c.g)}${h(c.b)}`.toUpperCase();
+  return `#${hh(c.r)}${hh(c.g)}${hh(c.b)}`.toUpperCase();
 }
 
-function firstSolidFill(node: SceneNode): { hex: string; a: number } | undefined {
+/**
+ * 8-digit #RRGGBBAA (zone background fills). Tableau 2026.2 accepts the alpha
+ * byte (the LaDataViz reference uses it for all 162 fills) — CRITICAL because a
+ * low-opacity black (e.g. a progress-bar track) must stay faint, not collapse to
+ * a solid black bar when we drop the alpha.
+ */
+function toHex8(c: { r: number; g: number; b: number }, alpha: number): string {
+  return `#${hh(c.r)}${hh(c.g)}${hh(c.b)}${hh(alpha)}`.toUpperCase();
+}
+
+/**
+ * The representative background fill of a node as an 8-digit color + effective
+ * alpha. Handles SOLID and GRADIENT_* paints (a gradient is approximated by its
+ * highest-alpha stop) so gradient cards/bars render in their real color family
+ * instead of being skipped (which left the dark layer underneath showing).
+ */
+function fillOf(node: SceneNode): { hex: string; a: number } | undefined {
+  const fills = (node as GeometryMixin).fills;
+  if (!fills || fills === figma.mixed || !Array.isArray(fills)) return undefined;
+  const p = fills.find(
+    (f) => f.visible !== false && (f.type === "SOLID" || f.type.indexOf("GRADIENT") === 0)
+  );
+  if (!p) return undefined;
+  const op = p.opacity ?? 1;
+  if (p.type === "SOLID") {
+    const a = op;
+    return { hex: toHex8((p as SolidPaint).color, a), a };
+  }
+  const stops = (p as GradientPaint).gradientStops || [];
+  if (!stops.length) return undefined;
+  let best = stops[Math.floor(stops.length / 2)];
+  for (const s of stops) if ((s.color.a ?? 1) > (best.color.a ?? 1)) best = s;
+  const a = op * (best.color.a ?? 1);
+  return { hex: toHex8(best.color, a), a };
+}
+
+/** First visible solid fill as a 6-digit hex (font colors). */
+function solidHex(node: SceneNode): string | undefined {
   const fills = (node as GeometryMixin).fills;
   if (!fills || fills === figma.mixed || !Array.isArray(fills)) return undefined;
   const s = fills.find((f) => f.type === "SOLID" && f.visible !== false) as SolidPaint | undefined;
-  if (!s) return undefined;
-  return { hex: toHex(s.color), a: s.opacity ?? 1 };
+  return s ? toHex(s.color) : undefined;
 }
 
 function firstSolidStroke(node: SceneNode): { hex: string; w: number } | undefined {
@@ -47,11 +90,77 @@ const FILLABLE = ["RECTANGLE", "FRAME", "COMPONENT", "INSTANCE"];
 
 function rectOf(node: SceneNode, origin: { x: number; y: number }): Rect {
   const bb = (node as SceneNode & { absoluteBoundingBox?: Rect | null }).absoluteBoundingBox;
+  const rot = (node as SceneNode & { rotation?: number }).rotation;
+  // Rotated node: its absoluteBoundingBox is the AABB of the rotated shape, so a
+  // thin bar rotated 90deg comes out tall+thin (a vertical sliver) — e.g. the
+  // Tasks-panel progress bars collapsed into one blue line. Tableau zones can't
+  // rotate, so render the node's UNROTATED size centered in that AABB; a
+  // 90deg-rotated bar then lays back down as the horizontal bar it's meant to be.
+  if (bb && typeof rot === "number" && Math.abs(rot) > 1 && node.width > 0 && node.height > 0) {
+    const cx = bb.x + (bb.w ?? node.width) / 2;
+    const cy = bb.y + (bb.h ?? node.height) / 2;
+    return { x: cx - node.width / 2 - origin.x, y: cy - node.height / 2 - origin.y, w: node.width, h: node.height };
+  }
   if (bb) return { x: bb.x - origin.x, y: bb.y - origin.y, w: bb.w ?? node.width, h: bb.h ?? node.height };
   return { x: node.x - origin.x, y: node.y - origin.y, w: node.width, h: node.height };
 }
 
 const MAX_ZONES = 1500;
+
+function isBoldStyle(style: string | undefined): boolean {
+  // Only true heavy weights (>=700) are bold. Medium/SemiBold render at normal
+  // weight in the LaDataViz reference; treating them as bold widens the text and
+  // makes Tableau truncate it ("67/85" -> "6.."). `\bbold\b` matches "Bold" but
+  // not the "Bold" inside "SemiBold" (no word boundary there).
+  return /\bbold\b|black|heavy|extrabold/i.test(style || "");
+}
+
+/**
+ * Split a text layer into styled runs (size / font / color spans). A KPI card
+ * is frequently ONE text node mixing an 11pt label with a 20pt value; flattening
+ * that to a single fallback size makes the big number render tiny. Reading the
+ * per-character styles preserves each run's real size — exactly how the
+ * LaDataViz reference emits separate sized <run>s.
+ */
+function styledRuns(tn: TextNode): FaithfulTextRun[] | undefined {
+  const getSeg = (tn as unknown as {
+    getStyledTextSegments?: (fields: string[]) => Array<{
+      characters: string;
+      fontSize: number;
+      fontName: FontName | symbol;
+      fills: readonly Paint[] | symbol;
+    }>;
+  }).getStyledTextSegments;
+  if (typeof getSeg !== "function") return undefined;
+  let segs: ReturnType<NonNullable<typeof getSeg>>;
+  try {
+    segs = getSeg.call(tn, ["fontSize", "fontName", "fills"]);
+  } catch {
+    return undefined;
+  }
+  if (!segs || segs.length <= 1) return undefined; // single style -> flat path
+  const runs: FaithfulTextRun[] = [];
+  for (const s of segs) {
+    if (!s.characters) continue;
+    const fam = s.fontName !== figma.mixed ? (s.fontName as FontName).family : undefined;
+    const style = s.fontName !== figma.mixed ? (s.fontName as FontName).style : "";
+    let color: string | undefined;
+    if (Array.isArray(s.fills)) {
+      const solid = s.fills.find((f) => f.type === "SOLID" && f.visible !== false) as
+        | SolidPaint
+        | undefined;
+      if (solid) color = toHex(solid.color);
+    }
+    runs.push({
+      text: s.characters,
+      fontSize: typeof s.fontSize === "number" ? s.fontSize * PT_PER_PX : undefined,
+      fontFamily: fam,
+      fontColor: color,
+      bold: isBoldStyle(style),
+    });
+  }
+  return runs.length > 1 ? runs : undefined;
+}
 
 function alignOf(node: TextNode): number {
   switch (node.textAlignHorizontal) {
@@ -85,20 +194,55 @@ function walk(node: SceneNode, origin: { x: number; y: number }, zones: Faithful
     const tn = node as TextNode;
     const chars = typeof tn.characters === "string" ? tn.characters : "";
     if (chars.trim()) {
-      const fill = firstSolidFill(node);
       const fam = tn.fontName !== figma.mixed ? (tn.fontName as FontName).family : undefined;
       const style = tn.fontName !== figma.mixed ? (tn.fontName as FontName).style : "";
+      const runs = styledRuns(tn); // run sizes already px->pt converted
+      // Flat fallback in POINTS (used for single-style text and by consumers that
+      // ignore `runs`). With mixed styles, fall back to the run covering the most
+      // characters instead of a hardcoded 14.
+      let flatPt = tn.fontSize !== figma.mixed ? (tn.fontSize as number) * PT_PER_PX : undefined;
+      if (flatPt == null && runs) {
+        flatPt = runs.reduce((a, b) => (b.text.length > a.text.length ? b : a)).fontSize;
+      }
+      const sizePt = flatPt ?? 14;
+      // Grow a too-short Figma text box so Tableau doesn't clip glyph tops (a
+      // big title in an auto-height layer can have a bbox shorter than its line
+      // box). Only ever grows, never shrinks; ~1.7px per point per line.
+      const lines = Math.max(1, chars.replace(/\n+$/, "").split("\n").length);
+      const maxPt = Math.max(sizePt, ...(runs ? runs.map((r) => r.fontSize ?? 0) : [0]));
+      const needH = Math.ceil(maxPt * 1.5 * lines);
+      if (rect.h < needH) {
+        // Grow CENTERED on the original text box so the extra height doesn't all
+        // push downward into the element below (a big title would otherwise
+        // overlap the subtitle beneath it).
+        rect.y = Math.max(0, rect.y - (needH - rect.h) / 2);
+        rect.h = needH;
+      }
+      // Width: a FLOATING text zone hard-clips its text, and the design fonts
+      // (Roboto/Inter/Poppins) are usually NOT installed on the viewer's machine
+      // -> Tableau substitutes a WIDER fallback (~1.1x the point size per char),
+      // so a tight Figma bbox truncates short values to "67/.." / "Overv..". Give
+      // SHORT strings generous room (only ever grows; harmless empty space for
+      // left-aligned text). LONG text (subtitles, axis label strips) already has
+      // an appropriately wide Figma bbox — widening it by char count would
+      // explode the layout, so leave anything past ~20 visible chars alone.
+      const longestLine = chars.split("\n").reduce((a, b) => (b.length > a.length ? b : a), "");
+      if (longestLine.replace(/\s/g, "").length <= 20) {
+        const estW = Math.ceil(longestLine.length * maxPt * 1.15 + maxPt);
+        if (rect.w < estW) rect.w = estW;
+      }
       zones.push({
         id: node.id,
         name: node.name || "Text",
         kind: "text",
         ...rect,
         text: chars,
-        fontSize: tn.fontSize !== figma.mixed ? (tn.fontSize as number) : 14,
+        fontSize: sizePt,
         fontFamily: fam,
-        fontColor: fill?.hex || "#101828",
-        bold: /bold|semibold|black|heavy|medium/i.test(style),
+        fontColor: solidHex(node) || "#101828",
+        bold: isBoldStyle(style),
         align: alignOf(tn),
+        runs,
       });
     }
     return; // text has no children we care about
@@ -110,8 +254,10 @@ function walk(node: SceneNode, origin: { x: number; y: number }, zones: Faithful
     return; // treat as a single bitmap; don't descend into path internals
   }
 
-  // A shape/card/bar with a solid fill becomes a colored `empty` zone.
-  const fill = firstSolidFill(node);
+  // A shape/card/bar with a fill becomes a colored `empty` zone. The 8-digit
+  // fill preserves alpha so a low-opacity layer stays faint instead of rendering
+  // as a solid (this is what turned the progress-bar track into a black bar).
+  const fill = fillOf(node);
   const stroke = firstSolidStroke(node);
   if ((fill && fill.a > 0.01) || stroke) {
     if (FILLABLE.indexOf(t) !== -1) {
@@ -169,7 +315,7 @@ export function parseFaithful(): FaithfulModel {
   const zones: FaithfulZone[] = [];
 
   // The frame's own background first (so it sits behind everything).
-  const bg = firstSolidFill(frame);
+  const bg = fillOf(frame);
   if (bg && bg.a > 0.01) {
     zones.push({ id: frame.id + ":bg", name: frame.name || "Background", kind: "rect", x: 0, y: 0, w: bb.w, h: bb.h, fill: bg.hex });
   }

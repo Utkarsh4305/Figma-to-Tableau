@@ -482,6 +482,23 @@ function clampN(v: number, fw: number): number {
   return Math.round(Math.max(0, Math.min(100000, (v / fw) * 100000)));
 }
 
+// Fonts that ship with Windows (so Tableau renders them at their true width
+// instead of substituting a wider fallback that overflows / truncates the
+// zone). A design font not in this set (Roboto/Inter/Poppins/etc.) is mapped to
+// Segoe UI — the Windows system sans-serif, close in proportion to Inter/Roboto.
+const WINDOWS_SAFE_FONTS = new Set([
+  "segoe ui", "segoe ui semibold", "segoe ui light", "arial", "arial black",
+  "calibri", "cambria", "candara", "consolas", "constantia", "corbel",
+  "courier new", "franklin gothic medium", "gabriola", "georgia", "impact",
+  "lucida console", "lucida sans unicode", "palatino linotype", "tahoma",
+  "times new roman", "trebuchet ms", "verdana",
+]);
+
+function safeFont(family: string | undefined): string {
+  if (!family) return "Segoe UI";
+  return WINDOWS_SAFE_FONTS.has(family.trim().toLowerCase()) ? family : "Segoe UI";
+}
+
 // LaDataViz-style helpers (mirrors confirmed-opening Template.twb shapes) -------
 
 /** Margin-only zone-style for flow containers (no border/bg, like LaDataViz). */
@@ -600,21 +617,52 @@ function dashboardXml(
       const isButton = z.kind === "button";
       o.push(`        <zone${fn}${fix} h='${H}' id='${nid()}' type-v2='text' w='${W}' x='${X}' y='${Y}'>\n`);
       o.push("          <formatted-text>\n");
-      const label = z.text || (isButton ? z.targetDashboard || "Button" : "");
-      if (label) {
+      // Shared run-attribute builder (a multi-size text layer becomes one <run>
+      // per style so a KPI value keeps its big font instead of collapsing).
+      const runXml = (
+        text: string,
+        opt: { size?: number; family?: string; color?: string; bold?: boolean }
+      ): string => {
         let attrs = "";
-        if (z.bold || isButton) attrs += " bold='true'";
-        if (z.fontFamily) attrs += ` fontname='${esc(z.fontFamily)}'`;
-        attrs += ` fontsize='${z.fontSize || (isButton ? 13 : 14)}'`;
-        attrs += ` fontcolor='${z.fg || (isButton ? "#FFFFFF" : "#101828")}'`;
+        if (opt.bold || isButton) attrs += " bold='true'";
+        if (opt.family) attrs += ` fontname='${esc(safeFont(opt.family))}'`;
+        attrs += ` fontsize='${opt.size || (isButton ? 13 : 14)}'`;
+        attrs += ` fontcolor='${opt.color || (isButton ? "#FFFFFF" : "#101828")}'`;
         if (z.align != null) attrs += ` fontalignment='${z.align}'`;
         else if (isButton) attrs += " fontalignment='1'";
-        // preserve line breaks in multi-line text (LaDataViz keeps them as runs)
-        o.push(`            <run${attrs}>${esc(label)}</run>\n`);
+        return `            <run${attrs}>${esc(text)}</run>\n`;
+      };
+      if (z.runs && z.runs.length > 1) {
+        for (const r of z.runs)
+          if (r.text)
+            o.push(
+              runXml(r.text, {
+                size: r.fontSize ? Math.round(r.fontSize) : z.fontSize,
+                family: r.fontFamily || z.fontFamily,
+                color: r.fontColor || z.fg,
+                bold: r.bold ?? z.bold,
+              })
+            );
+      } else {
+        const label = z.text || (isButton ? z.targetDashboard || "Button" : "");
+        if (label)
+          o.push(runXml(label, { size: z.fontSize, family: z.fontFamily, color: z.fg, bold: z.bold }));
       }
       o.push("          </formatted-text>\n");
       const bg = z.bg || (isButton ? "#2563EB" : undefined);
-      o.push(zoneStyle(bg, isButton ? "#1E4FBF" : "#000000", isButton ? "solid" : "none", isButton ? "1" : "0", "3", isButton ? "10" : "6"));
+      // Text zones: padding 0 + minimal margin (matches the LaDataViz reference).
+      // Our old padding=6/margin=3 ate ~12px on each axis, which clipped glyph
+      // tops and truncated values in the small KPI zones.
+      o.push(
+        zoneStyle(
+          bg,
+          isButton ? "#1E4FBF" : "#000000",
+          isButton ? "solid" : "none",
+          isButton ? "1" : "0",
+          isButton ? "3" : "1",
+          isButton ? "10" : "0"
+        )
+      );
       o.push("        </zone>\n");
     }
     return o.join("");
@@ -679,7 +727,14 @@ function dashboardXml(
 
   const x: string[] = [`    <dashboard name='${esc(dash.name)}'>\n`];
   x.push("      <style />\n");
-  x.push(`      <size maxheight='${fh}' maxwidth='${fw}' minheight='${fh}' minwidth='${fw}' />\n`);
+  // Explicit `sizing-mode='fixed'` matches the proven LaDataViz reference
+  // (Template.twb). A fixed-size dashboard is scaled-to-fit (aspect preserved)
+  // by Tableau in presentation / slideshow mode; combined with the window's
+  // `maximized='true'` (see windowsXml) it opens filling the screen instead of
+  // sitting at actual pixel size with scrollbars.
+  x.push(
+    `      <size maxheight='${fh}' maxwidth='${fw}' minheight='${fh}' minwidth='${fw}' sizing-mode='fixed' />\n`
+  );
   x.push("        <zones>\n");
   x.push(`          <zone h='100000' id='2' type-v2='layout-basic' w='100000' x='0' y='0'>\n`);
 
@@ -722,7 +777,10 @@ function windowsXml(wsNames: string[], dashboards: { name: string; sheets: strin
     x.push("    </window>\n");
   }
   for (const d of dashboards) {
-    x.push(`    <window class='dashboard' name='${esc(d.name)}'>\n`);
+    // maximized='true' -> the workbook opens with the dashboard filling the
+    // window (matches the LaDataViz reference); this is what makes it "adjust"
+    // to the screen instead of opening at actual pixel size.
+    x.push(`    <window class='dashboard' maximized='true' name='${esc(d.name)}'>\n`);
     x.push("      <viewpoints>\n");
     for (const s of d.sheets) x.push(`        <viewpoint name='${esc(s)}' />\n`);
     x.push("      </viewpoints>\n");

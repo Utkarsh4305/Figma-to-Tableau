@@ -11,7 +11,7 @@
 // losing the whole workbook.
 // ---------------------------------------------------------------------------
 
-import type { FieldType } from "./types";
+import type { FaithfulTextRun, FieldType } from "./types";
 
 export type MarkType =
   | "Automatic"
@@ -115,6 +115,10 @@ export interface ZoneSpec {
   fontFamily?: string; // faithful transpile: the design's font
   bold?: boolean;
   align?: number; // 0 left 1 center 2 right
+  // Per-style runs (faithful transpile of a multi-size/color text layer). When
+  // present, each is emitted as its own <run>; otherwise the flat text/fontSize
+  // above is used as a single run.
+  runs?: FaithfulTextRun[];
   // rect (faithful transpile of a Figma shape -> a colored `empty` zone)
   cornerRadius?: number;
   strokeColor?: string;

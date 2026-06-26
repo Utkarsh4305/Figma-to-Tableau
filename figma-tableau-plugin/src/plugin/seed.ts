@@ -206,6 +206,7 @@ export function faithfulSpec(model: FaithfulModel): WorkbookSpec {
         fg: z.fontColor,
         bold: z.bold,
         align: z.align,
+        runs: z.runs,
       };
     }
     if (z.kind === "image") {

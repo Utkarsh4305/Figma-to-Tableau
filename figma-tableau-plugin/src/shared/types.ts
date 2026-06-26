@@ -102,6 +102,15 @@ export interface DashboardModel {
 // vectors -> bitmap images. The result LOOKS like the design (it carries no
 // live data — exactly what LaDataViz's "Figma to Tableau" plugin produces).
 
+/** One styled run within a text layer (a contiguous span of one style). */
+export interface FaithfulTextRun {
+  text: string;
+  fontSize?: number;
+  fontFamily?: string;
+  fontColor?: string;
+  bold?: boolean;
+}
+
 /** One faithfully-transpiled Figma node, positioned in dashboard px. */
 export interface FaithfulZone {
   id: string; // figma node id (used to rasterize image zones in the sandbox)
@@ -123,6 +132,9 @@ export interface FaithfulZone {
   fontColor?: string;
   bold?: boolean;
   align?: number; // 0 left 1 center 2 right
+  // Per-style runs within one text layer (see FaithfulTextRun). Present when a
+  // single Figma text node mixes sizes/colors (e.g. KPI label + big value).
+  runs?: FaithfulTextRun[];
   // image
   imagePng?: string; // base64 (no data: prefix)
 }

@@ -621,15 +621,3 @@ export async function applyAutoTags(): Promise<number> {
   }
   return n;
 }
-
-/** Render the whole frame to a PNG (+ its px size) for background-image export. */
-export async function exportFramePng(): Promise<
-  { png: string; width: number; height: number } | undefined
-> {
-  const frame = findFrame();
-  if (!frame) return undefined;
-  const png = await exportPng(frame, 2);
-  if (!png) return undefined;
-  const bb = (frame as SceneNode & { absoluteBoundingBox?: Rect | null }).absoluteBoundingBox;
-  return { png, width: bb?.w ?? frame.width, height: bb?.h ?? frame.height };
-}

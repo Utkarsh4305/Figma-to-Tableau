@@ -5,7 +5,7 @@
 // UI iframe (which has Blob + JSZip + FileSaver).
 // ---------------------------------------------------------------------------
 
-import { parseSelection, attachImages, exportFramePng, applyAutoTags } from "./parser";
+import { parseSelection, attachImages, applyAutoTags } from "./parser";
 import { parseFaithful, attachFaithfulImages } from "./faithful";
 import type { UiToPlugin, PluginToUi } from "../shared/types";
 import { UI_SIZE } from "../shared/constants";
@@ -28,16 +28,6 @@ async function parseAndSend(): Promise<void> {
     post({ type: "model-ready", model });
   } catch (e) {
     post({ type: "model-ready", model: null, error: (e as Error).message });
-  }
-}
-
-async function sendBackground(): Promise<void> {
-  try {
-    const r = await exportFramePng();
-    if (r) post({ type: "background-ready", png: r.png, width: r.width, height: r.height });
-    else post({ type: "background-ready", error: "Select a frame to render." });
-  } catch (e) {
-    post({ type: "background-ready", error: (e as Error).message });
   }
 }
 
@@ -76,9 +66,6 @@ figma.ui.onmessage = (msg: UiToPlugin) => {
   switch (msg.type) {
     case "request-parse":
       void parseAndSend();
-      break;
-    case "request-background":
-      void sendBackground();
       break;
     case "apply-tags":
       void applyTagsAndResend();

@@ -37,11 +37,6 @@ export function installDevSandbox(): void {
     if (msg.type === "request-parse") {
       // reply the way the Figma sandbox would
       window.postMessage({ pluginMessage: { type: "model-ready", model: SAMPLE } }, "*");
-    } else if (msg.type === "request-background") {
-      // 1x1 transparent PNG stand-in for the rendered frame
-      const png =
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
-      window.postMessage({ pluginMessage: { type: "background-ready", png } }, "*");
     } else if (msg.type === "notify") {
       // eslint-disable-next-line no-console
       console.log("[figma.notify]", msg.message);

@@ -175,26 +175,63 @@ export function blankSpec(name = "Workbook"): WorkbookSpec {
   };
 }
 
+/** Sample dataset the SHEET/-tagged worksheets bind to (Superstore-style, the
+ * same shape LaDataViz used in Template.twbx: a category dimension + measures). */
+function sampleData(): { fields: SpecField[]; rows: string[][] } {
+  const fields: SpecField[] = [
+    { name: "Region", type: "string", role: "dimension" },
+    { name: "Sales", type: "real", role: "measure" },
+    { name: "Profit", type: "real", role: "measure" },
+  ];
+  return { fields, rows: generateSampleRows(fields) };
+}
+
+/** Coerce a faithful zone's mark tag to a valid MarkType (default Bar). */
+function markTypeOf(chart: string | undefined): MarkType {
+  const ok: MarkType[] = ["Bar", "Line", "Area", "Pie", "Circle"];
+  return (ok.find((m) => m === chart) as MarkType) || "Bar";
+}
+
 /**
  * Build a WorkbookSpec that FAITHFULLY reproduces the Figma design as native
  * Tableau dashboard zones (LaDataViz style): text -> text zones, shapes ->
- * colored `empty` zones, icons -> bitmaps. No charts are bound to data — the
- * dashboard just LOOKS like the design. One unplaced dummy worksheet satisfies
- * Tableau's requirement that a workbook contains at least one sheet.
+ * colored `empty` zones, icons -> bitmaps. EXCEPTION: any layer the designer
+ * named "SHEET/Name[type]" becomes a REAL Tableau worksheet bound to the sample
+ * data (mark class from the [type] tag) and placed at that layer's position —
+ * exactly how LaDataViz built the live charts in Template.twbx. Text stays
+ * faithful; only the SHEET/-tagged things become interactive sheets.
  */
 export function faithfulSpec(model: FaithfulModel): WorkbookSpec {
-  const fields: SpecField[] = [{ name: "Value", type: "real", role: "measure" }];
-  const ws: WorksheetSpec = {
-    id: nextId("ws"),
-    name: "Sheet 1",
-    mark: "Bar",
-    measures: [{ field: "Value", agg: "Sum" }],
-    dualAxis: false,
-    showLabels: false,
+  const { fields, rows } = sampleData();
+  const worksheets: WorksheetSpec[] = [];
+  const used = new Set<string>();
+  const uniqName = (base: string): string => {
+    let n = (base || "Sheet").slice(0, 60);
+    let i = 2;
+    while (used.has(n)) n = `${(base || "Sheet").slice(0, 55)} ${i++}`;
+    used.add(n);
+    return n;
   };
+
   let imgN = 0;
+  let sheetN = 0;
   const zones: ZoneSpec[] = model.zones.map((z) => {
     const base = { x: z.x, y: z.y, w: z.w, h: z.h, friendlyName: z.name };
+    if (z.kind === "sheet") {
+      const wsName = uniqName(z.sheetName || z.name || "Sheet");
+      // Alternate the measure so adjacent sample charts aren't identical.
+      const measure = sheetN++ % 2 === 0 ? "Sales" : "Profit";
+      worksheets.push({
+        id: nextId("ws"),
+        name: wsName,
+        mark: markTypeOf(z.chart),
+        dimension: "Region",
+        measures: [{ field: measure, agg: "Sum" }],
+        dualAxis: false,
+        showLabels: false,
+      });
+      return { id: nextId("z"), kind: "sheet" as const, ...base, worksheet: wsName, bg: "#FFFFFF" };
+    }
     if (z.kind === "text") {
       return {
         id: nextId("z"),
@@ -231,6 +268,20 @@ export function faithfulSpec(model: FaithfulModel): WorkbookSpec {
     };
   });
 
+  // A workbook needs >=1 worksheet. If the design had no SHEET/-tagged layers,
+  // keep one unplaced dummy so the faithful (text/shape) export still opens.
+  if (worksheets.length === 0) {
+    worksheets.push({
+      id: nextId("ws"),
+      name: "Sheet 1",
+      mark: "Bar",
+      dimension: "Region",
+      measures: [{ field: "Sales", agg: "Sum" }],
+      dualAxis: false,
+      showLabels: false,
+    });
+  }
+
   const dash: DashboardSpec = {
     id: nextId("db"),
     name: (model.title || "Dashboard").slice(0, 80),
@@ -244,8 +295,8 @@ export function faithfulSpec(model: FaithfulModel): WorkbookSpec {
   return {
     workbookName: (model.title || "Workbook").replace(/[\\/:*?"<>|]+/g, " ").trim() || "Workbook",
     tableauVersion: "2026.2",
-    data: { fileName: "data.csv", fields, calcs: [], rows: [["1"]] },
-    worksheets: [ws],
+    data: { fileName: "data.csv", fields, calcs: [], rows },
+    worksheets,
     dashboards: [dash],
     actions: [],
     includeActions: false,

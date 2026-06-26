@@ -9,6 +9,38 @@
 // ---------------------------------------------------------------------------
 
 import type { FaithfulModel, FaithfulTextRun, FaithfulZone, Rect } from "../shared/types";
+import { matchLayerPrefix } from "../shared/constants";
+
+// Map a "[type]" tag (from a "SHEET/Name[type]" layer name, the LaDataViz
+// convention) to a Tableau mark class. Default Bar. Mirrors Template.twbx,
+// where "[bar-hor]" -> Bar and "[area]" -> Area worksheets were generated.
+function markFromTag(tag: string | undefined): string {
+  switch ((tag || "").toLowerCase()) {
+    case "line":
+    case "trend":
+      return "Line";
+    case "area":
+      return "Area";
+    case "pie":
+    case "donut":
+    case "doughnut":
+      return "Pie";
+    case "scatter":
+    case "bubble":
+    case "circle":
+      return "Circle";
+    default:
+      // bar / bar-hor / bar-vert / column / table / anything else -> Bar
+      return "Bar";
+  }
+}
+
+/** Split a cleaned SHEET name ("Sheet 1[bar-hor]") into its name + mark class. */
+function parseSheetTag(clean: string): { sheetName: string; chart: string } {
+  const m = clean.match(/\[([^\]]*)\]/);
+  const sheetName = clean.replace(/\[[^\]]*\]/g, "").trim() || clean || "Sheet";
+  return { sheetName, chart: markFromTag(m ? m[1] : undefined) };
+}
 
 // Figma font sizes are PIXELS; Tableau `fontsize` is POINTS. Without this 96->72
 // dpi conversion every font comes out ~1.33x too big (titles clip / text
@@ -189,6 +221,17 @@ function walk(node: SceneNode, origin: { x: number; y: number }, zones: Faithful
   if (![rect.x, rect.y, rect.w, rect.h].every((n) => Number.isFinite(n))) return;
   if (rect.w <= 0 || rect.h <= 0) return;
   const t = node.type;
+
+  // SHEET/-tagged layer -> a REAL Tableau worksheet (bound to sample data) sits
+  // here instead of the static design. Emit one sheet zone and DON'T recurse:
+  // the worksheet replaces whatever the designer drew inside the frame. This is
+  // exactly how LaDataViz produced the live charts in Template.twbx.
+  const pfx = matchLayerPrefix(node.name || "");
+  if (pfx && pfx.role === "worksheet") {
+    const { sheetName, chart } = parseSheetTag(pfx.clean);
+    zones.push({ id: node.id, name: node.name || sheetName, kind: "sheet", ...rect, sheetName, chart });
+    return;
+  }
 
   if (t === "TEXT") {
     const tn = node as TextNode;

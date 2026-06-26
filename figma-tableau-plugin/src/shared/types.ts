@@ -91,7 +91,6 @@ export interface DashboardModel {
   tree?: ParsedElement[]; // hierarchy preserved (for tiled-container export)
   palette: string[]; // distinct hex colors found, most-used first
   fonts: string[]; // distinct font families found
-  backgroundPng?: string; // base64 PNG of the whole frame (background-image mode)
   debugTree?: string; // raw "depth|TYPE|name|wxh -> role" dump, for diagnostics
 }
 
@@ -115,11 +114,17 @@ export interface FaithfulTextRun {
 export interface FaithfulZone {
   id: string; // figma node id (used to rasterize image zones in the sandbox)
   name: string; // original layer name -> friendly-name
-  kind: "text" | "rect" | "image";
+  // "sheet" is a layer the designer tagged "SHEET/Name[type]" — it becomes a
+  // REAL Tableau worksheet bound to sample data (the LaDataViz convention seen
+  // in Template.twbx), instead of being recreated as static text/rect/image.
+  kind: "text" | "rect" | "image" | "sheet";
   x: number;
   y: number;
   w: number;
   h: number;
+  // sheet (SHEET/-tagged layer)
+  sheetName?: string; // clean worksheet name (prefix + [type] tag stripped)
+  chart?: string; // Tableau mark class from the [type] tag: Bar/Line/Area/Pie/Circle
   // rect
   fill?: string; // hex background
   cornerRadius?: number;
@@ -180,18 +185,6 @@ export interface MsgRequestParse {
   type: "request-parse";
 }
 
-export interface MsgRequestBackground {
-  type: "request-background";
-}
-
-export interface MsgBackgroundReady {
-  type: "background-ready";
-  png?: string; // base64 PNG of the whole frame
-  width?: number; // frame width in px (so the export is self-contained)
-  height?: number;
-  error?: string;
-}
-
 export interface MsgResize {
   type: "resize";
   width: number;
@@ -219,10 +212,9 @@ export interface MsgFaithfulReady {
   error?: string;
 }
 
-export type PluginToUi = MsgModelReady | MsgBackgroundReady | MsgFaithfulReady;
+export type PluginToUi = MsgModelReady | MsgFaithfulReady;
 export type UiToPlugin =
   | MsgRequestParse
-  | MsgRequestBackground
   | MsgResize
   | MsgNotify
   | MsgApplyTags

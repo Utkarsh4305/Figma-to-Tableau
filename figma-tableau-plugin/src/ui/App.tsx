@@ -8,20 +8,13 @@ import DataPanel from "./editor/DataPanel";
 import SheetsPanel from "./editor/SheetsPanel";
 import LayoutPanel from "./editor/LayoutPanel";
 
-const BUILD = "rotate-fix-22";
+const BUILD = "sheet-prefix-23";
 
 type Tab = "preview" | "data" | "sheets" | "layout" | "export";
-type ExportMode = "floating" | "tiled" | "background";
 type Status = { kind: "ok" | "err" | "warn"; text: string } | null;
 
 function toPlugin(msg: UiToPlugin) {
   parent.postMessage({ pluginMessage: msg }, "*");
-}
-
-function slugFile(s: string): string {
-  return (
-    s.replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "Dashboard"
-  );
 }
 
 export default function App() {
@@ -31,10 +24,6 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("preview");
   const [status, setStatus] = useState<Status>(null);
   const [busy, setBusy] = useState(false);
-  // Tiled is the default — nested layout-flow containers (no overlap, no text
-  // clipping). Floating is opt-in for pixel-exact debugging.
-  const [exportMode, setExportMode] = useState<ExportMode>("tiled");
-  const [bgPng, setBgPng] = useState<string | null>(null);
   // The frame id we last seeded the spec from; re-seed when the user selects a
   // different frame. `manual` is set when building from scratch so canvas
   // selection changes don't wipe a hand-built workbook.
@@ -43,85 +32,17 @@ export default function App() {
   // When set, the next model-ready re-seeds unconditionally (used by the
   // explicit "Re-read selected frame" action, which forces a fresh parse).
   const forceReseedRef = useRef(false);
-  // When set, the next background-ready triggers a one-click "exact design" export.
-  const pendingExactRef = useRef(false);
-  // When set, the next faithful-ready triggers the faithful-transpile export.
+  // When set, the next faithful-ready triggers the export.
   const pendingFaithfulRef = useRef(false);
 
-  // Always-current refs so the (once-registered) message handler reads fresh state.
+  // Always-current ref so the (once-registered) message handler reads fresh state.
   const modelRef = useRef<DashboardModel | null>(null);
-  const specRef = useRef<WorkbookSpec | null>(null);
   modelRef.current = model;
-  specRef.current = spec;
-
-  // One-click "exact design": use the freshly rendered frame PNG as the
-  // dashboard background at the frame's exact size, keeping only worksheet zones
-  // on top. Independent of element detection — the design comes out pixel-exact.
-  const doExactExport = async (png: string, w?: number, h?: number) => {
-    const s = specRef.current;
-    const m = modelRef.current;
-    if (!s) {
-      setStatus({ kind: "err", text: "Open a frame first." });
-      setBusy(false);
-      return;
-    }
-    const width = Math.round(w || m?.width || 1280);
-    const height = Math.round(h || m?.height || 800);
-    setBusy(true);
-    setStatus(null);
-    try {
-      const file = `${slugFile(s.workbookName)}-bg.png`;
-      const out: WorkbookSpec = {
-        ...s,
-        dashboards: s.dashboards.map((d, i) =>
-          i === 0
-            ? {
-                ...d,
-                layoutMode: "floating" as const,
-                widthPx: width,
-                heightPx: height,
-                backgroundImage: png,
-                backgroundImageFile: file,
-                // exact design = ONLY the rendered image; no placeholder
-                // worksheets laid on top (those would cover your design).
-                zones: [],
-              }
-            : d
-        ),
-      };
-      const res = await exportSpecTwbx(out);
-      setStatus({
-        kind: res.warnings.length ? "warn" : "ok",
-        text: res.warnings.length
-          ? `Exported with warnings: ${res.warnings[0]}`
-          : `Exact design exported (${width}×${height}px). Download started.`,
-      });
-      toPlugin({ type: "notify", message: "Exact-design .twbx downloaded — check your downloads." });
-    } catch (e) {
-      setStatus({ kind: "err", text: (e as Error).message });
-    } finally {
-      setBusy(false);
-    }
-  };
 
   useEffect(() => {
     const handler = (event: MessageEvent) => {
       const msg = event.data.pluginMessage as PluginToUi | undefined;
       if (!msg) return;
-      if (msg.type === "background-ready") {
-        if (msg.png) {
-          setBgPng(msg.png);
-          if (pendingExactRef.current) {
-            pendingExactRef.current = false;
-            void doExactExport(msg.png, msg.width, msg.height);
-          }
-        } else {
-          pendingExactRef.current = false;
-          setStatus({ kind: "err", text: msg.error || "Couldn't render the frame image." });
-          setBusy(false);
-        }
-        return;
-      }
       if (msg.type === "faithful-ready") {
         if (!pendingFaithfulRef.current) return;
         pendingFaithfulRef.current = false;
@@ -134,12 +55,12 @@ export default function App() {
           try {
             const fSpec = faithfulSpec(msg.model!);
             const res = await exportSpecTwbx(fSpec);
-            const zc = res.zoneCount;
+            const sheets = msg.model!.zones.filter((z) => z.kind === "sheet").length;
             setStatus({
               kind: res.warnings.length ? "warn" : "ok",
-              text: `Faithful design exported — ${zc} zones (${msg.model!.zones.length} layers). Download started.`,
+              text: `Exported — ${res.zoneCount} zones, ${sheets} live SHEET/ worksheet(s) (${msg.model!.zones.length} layers). Download started.`,
             });
-            toPlugin({ type: "notify", message: "Faithful .twbx downloaded — check your downloads." });
+            toPlugin({ type: "notify", message: ".twbx downloaded — check your downloads." });
           } catch (e) {
             setStatus({ kind: "err", text: (e as Error).message });
           } finally {
@@ -156,7 +77,6 @@ export default function App() {
       }
       setParseError(null);
       setModel(msg.model);
-      setBgPng(null); // a new frame invalidates any cached background render
       // Re-seed whenever a DIFFERENT frame is selected, so "select frame ->
       // convert" always reflects the current selection. Editing the same frame
       // persists (same id => no re-seed). `manual` mode (Start from scratch)
@@ -190,45 +110,8 @@ export default function App() {
     return () => window.removeEventListener("message", handler);
   }, []);
 
-  // Pick an export layout. Floating/tiled map onto the spec; background renders
-  // the whole frame to an image (requested from the sandbox) with only the
-  // worksheets floating on top — the LaDataViz "background image" export.
-  const chooseExportMode = (m: ExportMode) => {
-    setExportMode(m);
-    if (m !== "background") {
-      update((s) => ({
-        ...s,
-        dashboards: s.dashboards.map((d, i) => (i === 0 ? { ...d, layoutMode: m } : d)),
-      }));
-    } else if (!bgPng) {
-      setStatus({ kind: "warn", text: "Rendering frame image…" });
-      toPlugin({ type: "request-background" });
-    }
-  };
-
   const update = (updater: (s: WorkbookSpec) => WorkbookSpec) =>
     setSpec((s) => (s ? updater(s) : s));
-
-  // For background mode, bake the rendered frame as the dashboard background and
-  // keep only the worksheets floating on top (text/buttons live in the image).
-  const specForExport = (s: WorkbookSpec): WorkbookSpec => {
-    if (exportMode !== "background" || !bgPng) return s;
-    const file = `${slugFile(s.workbookName)}-bg.png`;
-    return {
-      ...s,
-      dashboards: s.dashboards.map((d, i) =>
-        i === 0
-          ? {
-              ...d,
-              layoutMode: "floating",
-              backgroundImage: bgPng,
-              backgroundImageFile: file,
-              zones: d.zones.filter((z) => z.kind === "sheet"),
-            }
-          : d
-      ),
-    };
-  };
 
   // Force a FRESH parse of whatever is currently selected on the canvas, then
   // re-seed from it. Going back to the sandbox (rather than reusing the cached
@@ -237,8 +120,6 @@ export default function App() {
   const rereadSelection = () => {
     forceReseedRef.current = true;
     manualRef.current = false;
-    setExportMode("tiled");
-    setBgPng(null);
     setStatus({ kind: "warn", text: "Reading current selection…" });
     toPlugin({ type: "request-parse" });
   };
@@ -252,8 +133,6 @@ export default function App() {
     }
     forceReseedRef.current = true;
     manualRef.current = false;
-    setExportMode("tiled");
-    setBgPng(null);
     setStatus({ kind: "warn", text: "Tagging layers in Figma…" });
     toPlugin({ type: "apply-tags" });
   };
@@ -269,61 +148,6 @@ export default function App() {
     setBusy(true);
     setStatus({ kind: "warn", text: "Transpiling your design (text, shapes, icons)…" });
     toPlugin({ type: "request-faithful" });
-  };
-
-  const exportRealComponents = async () => {
-    if (!spec) return;
-    setBusy(true);
-    setStatus(null);
-    try {
-      const out: WorkbookSpec = {
-        ...spec,
-        dashboards: spec.dashboards.map((d, i) =>
-          i === 0
-            ? {
-                ...d,
-                layoutMode: d.root ? "tiled" : "floating",
-                backgroundImage: undefined,
-                backgroundImageFile: undefined,
-              }
-            : d
-        ),
-      };
-      const res = await exportSpecTwbx(out);
-      setStatus(
-        res.warnings.length
-          ? { kind: "warn", text: `Exported with ${res.warnings.length} warning(s): ${res.warnings[0]}` }
-          : { kind: "ok", text: `${res.worksheetCount} sheet(s) in ${res.zoneCount} zones. Download started.` }
-      );
-      toPlugin({ type: "notify", message: "Tableau .twbx generated — check your downloads." });
-    } catch (e) {
-      setStatus({ kind: "err", text: (e as Error).message });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleExport = async () => {
-    if (!spec) return;
-    if (exportMode === "background" && !bgPng) {
-      setStatus({ kind: "err", text: "Frame image isn't ready yet — wait a moment or reselect the frame." });
-      return;
-    }
-    setBusy(true);
-    setStatus(null);
-    try {
-      const res = await exportSpecTwbx(specForExport(spec));
-      setStatus(
-        res.warnings.length
-          ? { kind: "warn", text: `Exported with ${res.warnings.length} warning(s): ${res.warnings[0]}` }
-          : { kind: "ok", text: `${res.worksheetCount} worksheet(s), ${res.zoneCount} zones. Download started.` }
-      );
-      toPlugin({ type: "notify", message: "Tableau .twbx generated — check your downloads." });
-    } catch (e) {
-      setStatus({ kind: "err", text: (e as Error).message });
-    } finally {
-      setBusy(false);
-    }
   };
 
   if (!spec) {
@@ -413,25 +237,6 @@ export default function App() {
                 <option value="2026.2">2026.2 (recommended)</option>
               </select>
             </div>
-            <div className="field">
-              <label>Export layout</label>
-              <select value={exportMode} onChange={(e) => chooseExportMode(e.target.value as ExportMode)}>
-                <option value="floating">Floating — pixel-perfect positions</option>
-                <option value="tiled">Tiled — Auto-Layout containers</option>
-                <option value="background" disabled={!model}>
-                  Background image — frame as image + sheets on top
-                </option>
-              </select>
-              <p className="muted" style={{ marginTop: 4 }}>
-                {exportMode === "tiled"
-                  ? "Zones become nested Tableau containers (from your Figma Auto Layout)."
-                  : exportMode === "background"
-                  ? bgPng
-                    ? "Frame rendered ✓ — exports as a background image with worksheets on top."
-                    : "Rendering the frame image from Figma…"
-                  : "Each object keeps its exact x/y position from Figma."}
-              </p>
-            </div>
             <table className="map-table">
               <tbody>
                 <tr><td>Fields</td><td style={{ textAlign: "right" }}>{spec.data.fields.length}</td></tr>
@@ -453,14 +258,12 @@ export default function App() {
       <div className="footer">
         {status && <div className={`status ${status.kind}`}>{status.text}</div>}
         <button className="primary" disabled={busy} onClick={exportFaithful}>
-          {busy ? "Working…" : "⬇ Export EXACT design (looks like Figma)"}
+          {busy ? "Working…" : "⬇ Export to Tableau (exact design + live sheets)"}
         </button>
-        <button className="secondary" disabled={busy} onClick={exportRealComponents}>
-          {busy ? "…" : "Export as data sheets (sample data)"}
-        </button>
-        <button className="secondary" disabled={busy} onClick={handleExport}>
-          {busy ? "…" : "Export with current layout options"}
-        </button>
+        <p className="muted" style={{ fontSize: 10, marginTop: 6, textAlign: "center" }}>
+          Text stays as text; every <b>SHEET/</b>-tagged layer becomes a real Tableau worksheet
+          bound to sample data (like LaDataViz) — editable from inside each sheet.
+        </p>
         <div className="muted" style={{ fontSize: 9, textAlign: "center" }}>build {BUILD}</div>
       </div>
     </>

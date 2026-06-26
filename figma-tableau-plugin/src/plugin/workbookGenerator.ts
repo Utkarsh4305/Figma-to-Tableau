@@ -576,7 +576,12 @@ function dashboardXml(
         o.push(cardStyle(z.bg || "#FFFFFF"));
         o.push("        </zone>\n");
       } else {
-        o.push(`        <zone h='${H}' id='${nid()}' name='${esc(z.worksheet)}' w='${W}' x='${X}' y='${Y}'>\n`);
+        // Floating worksheet zone — mirrors the LaDataViz Template.twbx SHEET/
+        // zones: keep the Figma layer name as friendly-name, hide the worksheet
+        // title (the design supplies its own heading text), and carry the
+        // layout-cache Tableau writes for a placed sheet.
+        o.push(`        <zone${fn} h='${H}' id='${nid()}' name='${esc(z.worksheet)}' show-title='false' w='${W}' x='${X}' y='${Y}'>\n`);
+        o.push("          <layout-cache cell-count-h='1' cell-count-w='1' type-h='cell' type-w='cell' />\n");
         o.push(zoneStyle(z.bg || "#FFFFFF", "#D7DAEC", "solid", "1", "4", "6"));
         o.push("        </zone>\n");
       }

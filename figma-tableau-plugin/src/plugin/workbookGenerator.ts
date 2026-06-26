@@ -342,6 +342,27 @@ function worksheetXml(
   for (const p of filterPairs) inst(p.f, "None", dimInstance(p.f.base));
   x.push("          </datasource-dependencies>\n");
 
+  // Orientation: a Bar chart reads best HORIZONTALLY — category down the rows,
+  // measure across the cols (so long text labels list cleanly on the left
+  // instead of truncating to "B.." under cramped vertical bars). Line/Area keep
+  // the category on the cols (a left-to-right time axis). Mirrors LaDataViz /
+  // Template.twb, where the bar worksheet put [Region] on rows, [Sales] on cols.
+  // Only a single-measure bar flips horizontal — a multi-measure (stacked) bar
+  // keeps measures on rows / dimension on cols (the established layout).
+  const horizontalBar = ws.mark === "Bar" && measFields.length <= 1;
+  const dimPill = dim ? `[${dsName}].${dimInstance(dim.base)}` : "";
+  const measPills = measFields
+    .map((mf) => `[${dsName}].${measInstance(mf.f.base, mf.pfx)}`)
+    .join(" ");
+  const meas0Inst = measFields[0]
+    ? `[${dsName}].${measInstance(measFields[0].f.base, measFields[0].pfx)}`
+    : "";
+
+  // NOTE: no <shelf-sorts> here — that element is not in the 2026.2 <view>
+  // content model (datasources?, datasource-dependencies*, filter, sort,
+  // perspectives, slices?, aggregation) and triggers load error D2E8DA72.
+  // Bars render in natural data order, which is fine for the sample data.
+
   // quick filters (CONFIRMED) + slices, before aggregation
   for (const p of filterPairs) x.push(filterBlock(dsName, p.f, p.members));
   if (filterPairs.length) {
@@ -353,8 +374,12 @@ function worksheetXml(
   x.push("          <aggregation value='true' />\n");
   x.push("        </view>\n");
 
-  // worksheet style: solid mark color + labels (CONFIRMED pattern)
-  x.push(styleBlock(ws));
+  // worksheet style: clean LaDataViz look (hidden axes/gridlines/field labels)
+  // plus solid mark color + data labels. For a bar chart the measure axis (the
+  // numbers) is hidden since the value labels carry the magnitude.
+  x.push(
+    worksheetStyleXml(horizontalBar && meas0Inst ? { measAxisField: meas0Inst, measAxisScope: "cols" } : {})
+  );
 
   // panes — one per measure (stacked); dual axis falls back to stacked safely
   const colorInstance =
@@ -366,19 +391,21 @@ function worksheetXml(
     x.push(`          <pane${idAttr} selection-relaxation-option='selection-relaxation-allow'>\n`);
     x.push("            <view>\n              <breakdown value='auto' />\n            </view>\n");
     x.push(`            <mark class='${ws.mark}' />\n`);
+    // marks-scaling-off + a large mark size = fat marks that FILL the plot area
+    // (the LaDataViz look) instead of thin default bars floating in whitespace.
+    x.push("            <mark-sizing mark-sizing-setting='marks-scaling-off' />\n");
     if (colorInstance) {
       x.push("            <encodings>\n");
       x.push(`              <color column='${colorInstance}' />\n`);
       x.push("            </encodings>\n");
     }
+    x.push(markPaneStyle(ws));
     x.push("          </pane>\n");
   }
   x.push("        </panes>\n");
 
-  const rowsPills = measFields
-    .map((mf) => `[${dsName}].${measInstance(mf.f.base, mf.pfx)}`)
-    .join(" ");
-  const colsPills = dim ? `[${dsName}].${dimInstance(dim.base)}` : "";
+  const rowsPills = horizontalBar ? dimPill : measPills;
+  const colsPills = horizontalBar ? measPills : dimPill;
   x.push(`        <rows>${rowsPills}</rows>\n`);
   x.push(`        <cols>${colsPills}</cols>\n`);
   x.push("      </table>\n");
@@ -444,21 +471,92 @@ function actionGroupsXml(spec: WorkbookSpec): string {
   return out.join("");
 }
 
-function styleBlock(ws: WorksheetSpec): string {
-  const rules: string[] = [];
-  if (ws.markColor && !ws.colorField) {
-    rules.push(`          <format attr='mark-color' value='${ws.markColor}' />\n`);
-  }
+/**
+ * Worksheet <style> — the clean LaDataViz look, ported from the confirmed-
+ * opening Template.twb: transparent table background, hidden axis lines,
+ * gridlines and zero lines, hidden shelf field labels (so a stray "Region"
+ * title doesn't sit over the chart), plus the optional solid mark color and
+ * data labels. `measAxisField` (when given) hides the measure axis header — the
+ * value labels carry the magnitude instead, as in the reference bar charts.
+ */
+function worksheetStyleXml(
+  opts: { measAxisField?: string; measAxisScope?: "rows" | "cols" }
+): string {
+  const o: string[] = ["        <style>\n"];
+
+  // axis: no line; optionally hide the measure axis numbers entirely
+  o.push("          <style-rule element='axis'>\n");
+  o.push("            <format attr='stroke-size' value='0' />\n");
+  o.push("            <format attr='line-visibility' value='off' />\n");
+  if (opts.measAxisField)
+    o.push(
+      `            <format attr='display' class='0' field='${opts.measAxisField}' scope='${
+        opts.measAxisScope ?? "cols"
+      }' value='false' />\n`
+    );
+  o.push("          </style-rule>\n");
+
+  // transparent worksheet background (the dashboard card supplies the white fill)
+  o.push("          <style-rule element='table'>\n");
+  o.push("            <format attr='background-color' value='#00000000' />\n");
+  o.push("          </style-rule>\n");
+
+  // hide the shelf field labels ("Region" / measure name) on both axes
+  o.push("          <style-rule element='worksheet'>\n");
+  o.push("            <format attr='display-field-labels' scope='rows' value='false' />\n");
+  o.push("            <format attr='display-field-labels' scope='cols' value='false' />\n");
+  o.push("          </style-rule>\n");
+
+  // hide gridlines and zero lines
+  o.push("          <style-rule element='gridline'>\n");
+  o.push("            <format attr='line-visibility' value='off' />\n");
+  o.push("            <format attr='stroke-size' value='0' />\n");
+  o.push("          </style-rule>\n");
+  o.push("          <style-rule element='zeroline'>\n");
+  o.push("            <format attr='line-visibility' value='off' />\n");
+  o.push("            <format attr='stroke-size' value='0' />\n");
+  o.push("          </style-rule>\n");
+
+  // NOTE: mark color / size / labels live in the PANE style (markPaneStyle),
+  // exactly like the LaDataViz reference — not here in the worksheet style.
+  o.push("        </style>\n");
+  return o.join("");
+}
+
+/**
+ * Pane <style> — the mark appearance, ported from the LaDataViz reference:
+ *   - a large `size` so marks fill the plot area (fat bars / thick areas)
+ *   - solid neutral `mark-color` (unless a categorical color field is used)
+ *   - bold, color-matched data labels; bars label every mark, line/area only
+ *     the line ends (the single end-of-series value in the reference)
+ *   - line/area get point markers; area gets a translucent fill
+ */
+function markPaneStyle(ws: WorksheetSpec): string {
+  const isBar = ws.mark === "Bar";
+  const isLine = ws.mark === "Line";
+  const isArea = ws.mark === "Area";
+  const size = isBar ? "0.9" : isLine || isArea ? "0.5" : "0.7";
+  const labelMode = isBar ? "all" : "line-ends";
+
+  const o: string[] = ["            <style>\n"];
+  o.push("              <style-rule element='datalabel'>\n");
+  o.push("                <format attr='color-mode' value='match' />\n");
+  o.push("                <format attr='font-weight' value='bold' />\n");
+  o.push("              </style-rule>\n");
+  o.push("              <style-rule element='mark'>\n");
+  o.push(`                <format attr='size' value='${size}' />\n`);
+  if (ws.markColor && !ws.colorField)
+    o.push(`                <format attr='mark-color' value='${ws.markColor}' />\n`);
   if (ws.showLabels) {
-    rules.push("          <format attr='mark-labels-show' value='true' />\n");
-    rules.push("          <format attr='mark-labels-mode' value='all' />\n");
+    o.push("                <format attr='mark-labels-show' value='true' />\n");
+    o.push(`                <format attr='mark-labels-mode' value='${labelMode}' />\n`);
+    o.push("                <format attr='mark-labels-cull' value='false' />\n");
   }
-  if (!rules.length) return "        <style />\n";
-  return (
-    "        <style>\n          <style-rule element='mark'>\n" +
-    rules.join("") +
-    "          </style-rule>\n        </style>\n"
-  );
+  if (isLine || isArea) o.push("                <format attr='mark-markers-mode' value='all' />\n");
+  if (isArea) o.push("                <format attr='mark-transparency' value='27' />\n");
+  o.push("              </style-rule>\n");
+  o.push("            </style>\n");
+  return o.join("");
 }
 
 // --- dashboard ---------------------------------------------------------------
@@ -582,7 +680,9 @@ function dashboardXml(
         // layout-cache Tableau writes for a placed sheet.
         o.push(`        <zone${fn} h='${H}' id='${nid()}' name='${esc(z.worksheet)}' show-title='false' w='${W}' x='${X}' y='${Y}'>\n`);
         o.push("          <layout-cache cell-count-h='1' cell-count-w='1' type-h='cell' type-w='cell' />\n");
-        o.push(zoneStyle(z.bg || "#FFFFFF", "#D7DAEC", "solid", "1", "4", "6"));
+        // White card, no border, small padding so the chart fills the box (the
+        // LaDataViz card look). The fat marks (markPaneStyle) do the filling.
+        o.push(zoneStyle(z.bg || "#FFFFFF", "#000000", "none", "0", "0", "8"));
         o.push("        </zone>\n");
       }
     } else if (z.kind === "image" && z.imageFile) {

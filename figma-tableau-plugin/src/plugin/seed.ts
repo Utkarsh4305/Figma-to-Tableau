@@ -219,16 +219,22 @@ export function faithfulSpec(model: FaithfulModel): WorkbookSpec {
     const base = { x: z.x, y: z.y, w: z.w, h: z.h, friendlyName: z.name };
     if (z.kind === "sheet") {
       const wsName = uniqName(z.sheetName || z.name || "Sheet");
+      const mark = markTypeOf(z.chart);
       // Alternate the measure so adjacent sample charts aren't identical.
       const measure = sheetN++ % 2 === 0 ? "Sales" : "Profit";
       worksheets.push({
         id: nextId("ws"),
         name: wsName,
-        mark: markTypeOf(z.chart),
+        mark,
         dimension: "Region",
         measures: [{ field: measure, agg: "Sum" }],
         dualAxis: false,
-        showLabels: false,
+        // Neutral gray marks, matching the LaDataViz reference (multi.twbx uses
+        // #898989 for every sheet). Value labels are on for all marks; the pane
+        // chooses "all" for bars and "line-ends" for line/area so only the end
+        // value is shown (the single ranked number in the reference).
+        markColor: "#898989",
+        showLabels: true,
       });
       return { id: nextId("z"), kind: "sheet" as const, ...base, worksheet: wsName, bg: "#FFFFFF" };
     }

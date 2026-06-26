@@ -8,7 +8,7 @@ import DataPanel from "./editor/DataPanel";
 import SheetsPanel from "./editor/SheetsPanel";
 import LayoutPanel from "./editor/LayoutPanel";
 
-const BUILD = "sheet-prefix-23";
+const BUILD = "lds-polish-26";
 
 type Tab = "preview" | "data" | "sheets" | "layout" | "export";
 type Status = { kind: "ok" | "err" | "warn"; text: string } | null;

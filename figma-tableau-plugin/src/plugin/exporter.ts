@@ -163,6 +163,12 @@ export function validateTwb(xml: string, worksheetNames: string[]): string[] {
     throw new Error("Generated .twb is missing the required <windows> section.");
   }
 
+  // 2b. <shelf-sorts> is NOT in the 2026.2 <view> content model and triggers
+  // load error D2E8DA72 ("no declaration found for element 'shelf-sorts'").
+  if (/<shelf-sorts[\s>]/.test(xml)) {
+    throw new Error("Generated .twb contains <shelf-sorts>, which Tableau 2026.2 rejects (D2E8DA72).");
+  }
+
   // 3. Every worksheet must have a matching window + at least be referenced.
   for (const n of worksheetNames) {
     const needle = `class='worksheet' name='${n

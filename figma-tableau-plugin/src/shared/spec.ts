@@ -2,8 +2,7 @@
 // spec.ts — the EDITABLE workbook document. This is the UI's source of truth:
 // users add/configure data fields, calculated fields, worksheets (mark type,
 // dimension, measures, dual axis, conditional color, labels), dashboard zones,
-// and actions. `specToTableauModel` (in mapper.ts) lowers this into the
-// generator's TableauModel, which produces the proven load-safe .twb.
+// and actions.
 //
 // Risk policy (we have no Tableau reference for the new constructs yet): the
 // base workbook is always emitted; dual axis and actions are opt-in per item /

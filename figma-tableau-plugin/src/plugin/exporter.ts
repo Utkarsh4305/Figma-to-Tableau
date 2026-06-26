@@ -1,12 +1,9 @@
 // ---------------------------------------------------------------------------
-// exporter.ts — orchestration (UI side). Ties the mapping engine, the Tableau
-// XML generator, and the .twbx packager together, with light validation.
+// exporter.ts — orchestration (UI side). Ties the WorkbookSpec model, the
+// Tableau XML generator, and the .twbx packager together, with validation.
 // ---------------------------------------------------------------------------
 
-import type { DashboardModel, ExportSettings, MappingRow } from "../shared/types";
 import type { WorkbookSpec } from "../shared/spec";
-import { buildTableauModel } from "./mapper";
-import { generateTwb } from "./tableauGenerator";
 import { generateWorkbookXml } from "./workbookGenerator";
 import { rowsToCsv } from "./csv";
 import { buildTwbxBlob, downloadTwbx, DATA_DIR } from "./twbxBuilder";
@@ -24,73 +21,15 @@ export function collectImageAssets(spec: WorkbookSpec): ImageAsset[] {
   return [...byFile.entries()].map(([file, base64]) => ({ file, base64 }));
 }
 
+// --- spec-driven path (the editor) ------------------------------------------
+
 export interface ExportResult {
   twbXml: string;
+  csvFile: string;
+  csvText: string;
   worksheetCount: number;
   zoneCount: number;
   warnings: string[];
-}
-
-/**
- * Generate the .twb XML for a model + settings + mapping overrides, running
- * the cheap structural validations the project relies on. Throws on a hard
- * failure; returns warnings for soft issues.
- */
-export function generateWorkbook(
-  model: DashboardModel,
-  settings: ExportSettings,
-  overrides: MappingRow[]
-): ExportResult & { csvFile: string; csvText: string } {
-  const tModel = buildTableauModel(model, settings, overrides);
-  const twbXml = generateTwb(tModel, DATA_DIR);
-  const warnings = validateTwb(twbXml, tModel.worksheets.map((w) => w.name));
-
-  return {
-    twbXml,
-    csvFile: tModel.csvFile,
-    csvText: tModel.csvText,
-    worksheetCount: tModel.worksheets.length,
-    zoneCount: tModel.dashboard.zones.length,
-    warnings,
-  };
-}
-
-/** Generate + package + download in one call. */
-export async function exportTwbx(
-  model: DashboardModel,
-  settings: ExportSettings,
-  overrides: MappingRow[]
-): Promise<ExportResult> {
-  const res = generateWorkbook(model, settings, overrides);
-  await downloadTwbx({
-    workbookName: settings.workbookName || model.title || "Workbook",
-    twbXml: res.twbXml,
-    csvFile: res.csvFile,
-    csvText: res.csvText,
-  });
-  return res;
-}
-
-/** Build the .twbx Blob without downloading (used by tests). */
-export async function buildBlob(
-  model: DashboardModel,
-  settings: ExportSettings,
-  overrides: MappingRow[]
-): Promise<Blob> {
-  const res = generateWorkbook(model, settings, overrides);
-  return buildTwbxBlob({
-    workbookName: settings.workbookName || model.title || "Workbook",
-    twbXml: res.twbXml,
-    csvFile: res.csvFile,
-    csvText: res.csvText,
-  });
-}
-
-// --- spec-driven path (the editor) ------------------------------------------
-
-export interface SpecExportResult extends ExportResult {
-  csvFile: string;
-  csvText: string;
 }
 
 /**
@@ -143,7 +82,7 @@ export function dedupeWorksheetNames(spec: WorkbookSpec): WorkbookSpec {
 }
 
 /** Generate the .twb XML from the editable WorkbookSpec, with validation. */
-export function generateSpecWorkbook(spec: WorkbookSpec): SpecExportResult {
+export function generateSpecWorkbook(spec: WorkbookSpec): ExportResult {
   spec = dedupeWorksheetNames(spec); // auto-rename any duplicate sheet names
   const twbXml = generateWorkbookXml(spec, DATA_DIR);
   const warnings = validateTwb(
@@ -167,7 +106,7 @@ export function generateSpecWorkbook(spec: WorkbookSpec): SpecExportResult {
 }
 
 /** Generate + package + download a WorkbookSpec. */
-export async function exportSpecTwbx(spec: WorkbookSpec): Promise<SpecExportResult> {
+export async function exportSpecTwbx(spec: WorkbookSpec): Promise<ExportResult> {
   const res = generateSpecWorkbook(spec);
   await downloadTwbx({
     workbookName: spec.workbookName || "Workbook",

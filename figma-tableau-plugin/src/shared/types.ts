@@ -154,25 +154,6 @@ export interface FaithfulModel {
   zones: FaithfulZone[];
 }
 
-/** Export settings collected from the UI ExportPanel. */
-export interface ExportSettings {
-  workbookName: string;
-  dashboardName: string;
-  tableauVersion: string; // e.g. "2026.2"
-  layoutWidth: number; // dashboard px width
-  layoutHeight: number; // dashboard px height
-  embedData: boolean; // bundle CSV into the .twbx
-}
-
-/** A user-editable mapping row shown in the MappingPanel. */
-export interface MappingRow {
-  elementId: string;
-  elementName: string;
-  figmaType: string;
-  role: ElementRole;
-  chartKind?: ChartKind;
-}
-
 // --- Messages between the Figma sandbox and the UI iframe ---------------------
 
 export interface MsgModelReady {

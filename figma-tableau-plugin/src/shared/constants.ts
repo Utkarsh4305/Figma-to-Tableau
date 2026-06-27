@@ -130,4 +130,4 @@ export const DOMAIN_FIELDS: Record<string, { dims: [string, FieldType][]; meas: 
 export const DEFAULT_SIZE = { width: 1280, height: 800 };
 
 /** UI iframe size. */
-export const UI_SIZE = { width: 460, height: 640 };
+export const UI_SIZE = { width: 400, height: 500 };

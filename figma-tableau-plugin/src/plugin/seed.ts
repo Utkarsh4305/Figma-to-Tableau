@@ -226,9 +226,18 @@ function markTypeOf(chart: string | undefined): MarkType {
  * exactly how LaDataViz built the live charts in Template.twbx. Text stays
  * faithful; only the SHEET/-tagged things become interactive sheets.
  */
+/** Map a FILTER/<field> tag to a real string dimension in the sample data. */
+function filterDimFor(label: string | undefined): string {
+  const l = (label || "").toLowerCase();
+  if (/period|time|date|quarter|month|year/.test(l)) return "Period";
+  return "Region";
+}
+
 export function faithfulSpec(model: FaithfulModel): WorkbookSpec {
   const { fields, rows } = sampleData();
+  const dashName = (model.title || "Dashboard").slice(0, 80);
   const worksheets: WorksheetSpec[] = [];
+  const actions: import("../shared/spec").ActionSpec[] = [];
   const used = new Set<string>();
   const uniqName = (base: string): string => {
     let n = (base || "Sheet").slice(0, 60);
@@ -278,11 +287,12 @@ export function faithfulSpec(model: FaithfulModel): WorkbookSpec {
       const measure = sheetN++ % 2 === 0 ? "Sales" : "Profit";
       // Line/area read as a TIME TREND over Period; bars/others compare Regions.
       const isTrend = mark === "Line" || mark === "Area";
+      const dimension = isTrend ? "Period" : "Region";
       worksheets.push({
         id: nextId("ws"),
         name: wsName,
         mark,
-        dimension: isTrend ? "Period" : "Region",
+        dimension,
         measures: [{ field: measure, agg: "Sum" }],
         dualAxis: false,
         // Neutral gray marks, matching the LaDataViz reference (multi.twbx uses
@@ -292,7 +302,30 @@ export function faithfulSpec(model: FaithfulModel): WorkbookSpec {
         markColor: "#898989",
         showLabels: true,
       });
-      return { id: nextId("z"), kind: "sheet" as const, ...base, worksheet: wsName, bg: "#FFFFFF", cornerRadius: z.cornerRadius };
+      // ":filter" / ":highlight" suffix -> a dashboard action sourced from this
+      // sheet (confirmed XML: tsc:tsl-filter / tsc:brush, see Clinical Trials.twb).
+      if (z.actionKind === "filter") {
+        actions.push({ id: nextId("act"), name: `Filter from ${wsName}`, kind: "filter", sourceSheet: wsName, target: dashName, runOn: "select" });
+      } else if (z.actionKind === "highlight") {
+        actions.push({ id: nextId("act"), name: `Highlight from ${wsName}`, kind: "highlight", sourceSheet: wsName, target: wsName, field: dimension, runOn: "select" });
+      }
+      return { id: nextId("z"), kind: "sheet" as const, ...base, worksheet: wsName, bg: "#FFFFFF", cornerRadius: z.cornerRadius, showTitle: z.showTitle || undefined };
+    }
+    if (z.kind === "filter") {
+      // Real Tableau quick-filter card. Bound to a worksheet (set in the
+      // post-pass below) on a string dimension from the sample data.
+      return {
+        id: nextId("z"),
+        kind: "filter" as const,
+        ...base,
+        field: filterDimFor(z.filterField),
+        bg: "#FFFFFF",
+        fg: "#D7DAEC",
+      };
+    }
+    if (z.kind === "web") {
+      // Real Tableau web page object (type-v2='web').
+      return { id: nextId("z"), kind: "web" as const, ...base, url: z.url };
     }
     if (z.kind === "text") {
       return {
@@ -344,9 +377,14 @@ export function faithfulSpec(model: FaithfulModel): WorkbookSpec {
     });
   }
 
+  // Bind every FILTER/ card to a worksheet (a quick-filter card needs a host
+  // sheet). Use the first real chart sheet so the card actually filters a view.
+  const hostSheet = worksheets[0].name;
+  for (const zn of zones) if (zn.kind === "filter" && !zn.worksheet) zn.worksheet = hostSheet;
+
   const dash: DashboardSpec = {
     id: nextId("db"),
-    name: (model.title || "Dashboard").slice(0, 80),
+    name: dashName,
     widthPx: Math.round(model.width),
     heightPx: Math.round(model.height),
     bg: model.background || "#FFFFFF",
@@ -360,8 +398,8 @@ export function faithfulSpec(model: FaithfulModel): WorkbookSpec {
     data: { fileName: "data.csv", fields, calcs: [], rows },
     worksheets,
     dashboards: [dash],
-    actions: [],
-    includeActions: false,
+    actions,
+    includeActions: actions.length > 0,
   };
 }
 

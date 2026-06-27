@@ -173,6 +173,91 @@ body {
   letter-spacing: 0.5px;
 }
 
+.import-hint {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+.import-hint code,
+.import-list code {
+  font-size: 10.5px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+}
+
+.import-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.import-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent, #2563eb);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.import-items {
+  display: flex;
+  flex-direction: column;
+  max-height: 168px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-3);
+}
+
+.import-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.import-item + .import-item {
+  border-top: 1px solid var(--border);
+}
+
+.import-item input {
+  margin: 0;
+}
+
+.btn-secondary {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-3);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 input[type="text"],
 input[type="number"],
 select {

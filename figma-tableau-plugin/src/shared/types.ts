@@ -34,6 +34,7 @@ export type ElementRole =
   | "button" // nav button -> styled button zone
   | "container" // auto-layout / rectangle -> layout container
   | "image" // raster / logo -> Tableau image (bitmap) zone
+  | "web" // URL/ layer -> Tableau web page object (type-v2='web')
   | "ignore";
 
 /** Normalized rectangle in Figma pixel space. */
@@ -117,7 +118,8 @@ export interface FaithfulZone {
   // "sheet" is a layer the designer tagged "SHEET/Name[type]" — it becomes a
   // REAL Tableau worksheet bound to sample data (the LaDataViz convention seen
   // in Template.twbx), instead of being recreated as static text/rect/image.
-  kind: "text" | "rect" | "image" | "sheet";
+  // "filter" is a layer tagged "FILTER/Field" — a real Tableau quick-filter card.
+  kind: "text" | "rect" | "image" | "sheet" | "filter" | "web";
   x: number;
   y: number;
   w: number;
@@ -125,6 +127,15 @@ export interface FaithfulZone {
   // sheet (SHEET/-tagged layer)
   sheetName?: string; // clean worksheet name (prefix + [type] tag stripped)
   chart?: string; // Tableau mark class from the [type] tag: Bar/Line/Area/Pie/Circle
+  // LaDataViz-style `:option` suffixes on a SHEET/ layer name (e.g.
+  // "SHEET/Trend[line]:showTitle:filter"). Confirmed-safe options only:
+  showTitle?: boolean; // ":showTitle" — render the worksheet's title in its zone
+  actionKind?: "filter" | "highlight"; // ":filter" / ":highlight" — clicking this
+  // sheet filters / highlights the rest of the dashboard (confirmed action XML)
+  // filter (FILTER/-tagged layer): the dimension the quick-filter card is on
+  filterField?: string;
+  // web (URL/-tagged layer): the page URL the web object loads
+  url?: string;
   // rect
   fill?: string; // hex background
   cornerRadius?: number;
@@ -187,6 +198,16 @@ export interface MsgRequestFaithful {
   type: "request-faithful";
 }
 
+/**
+ * Ask the sandbox to drop `SHEET/<name>` placeholder frames into the selected
+ * dashboard frame (one per imported worksheet the user checked), so they appear
+ * in the Figma design and get swapped for the real sheet on export.
+ */
+export interface MsgAddSheets {
+  type: "add-sheets";
+  names: string[];
+}
+
 export interface MsgFaithfulReady {
   type: "faithful-ready";
   model: FaithfulModel | null;
@@ -199,4 +220,5 @@ export type UiToPlugin =
   | MsgResize
   | MsgNotify
   | MsgApplyTags
-  | MsgRequestFaithful;
+  | MsgRequestFaithful
+  | MsgAddSheets;

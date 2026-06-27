@@ -27,12 +27,19 @@ export interface ImageAsset {
   base64: string; // PNG bytes, base64-encoded (no data: prefix)
 }
 
+/** A raw binary file lifted from an imported .twbx, stored at its exact path. */
+export interface RawAsset {
+  path: string; // package-relative, e.g. "Data/DM/file.xlsx" — preserved verbatim
+  bytes: Uint8Array;
+}
+
 export interface TwbxParts {
   workbookName: string; // without extension
   twbXml: string;
   csvFile: string; // e.g. "figma_sample.csv"
   csvText: string;
   images?: ImageAsset[]; // bitmap zones referenced by the .twb
+  rawAssets?: RawAsset[]; // imported Data/Image files (the worksheet-swap feature)
 }
 
 /** Build the .twbx as a Blob (no download) — useful for tests/inspection. */
@@ -44,6 +51,12 @@ export async function buildTwbxBlob(parts: TwbxParts): Promise<Blob> {
   if (parts.images && parts.images.length) {
     const img = zip.folder(IMAGE_DIR)!;
     for (const a of parts.images) img.file(a.file, a.base64, { base64: true });
+  }
+  // Imported data/image files keep their EXACT package path so the imported
+  // datasource connections (filename='Data/…') resolve. Our own sample CSV lives
+  // at Data/<csvFile>, a different path, so they never collide.
+  if (parts.rawAssets && parts.rawAssets.length) {
+    for (const a of parts.rawAssets) zip.file(a.path, a.bytes);
   }
   // DEFLATE keeps the package small; Tableau accepts both stored and deflated.
   return zip.generateAsync({

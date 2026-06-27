@@ -7,7 +7,7 @@ import type { WorkbookSpec } from "../shared/spec";
 import { generateWorkbookXml } from "./workbookGenerator";
 import { rowsToCsv } from "./csv";
 import { buildTwbxBlob, downloadTwbx, DATA_DIR } from "./twbxBuilder";
-import type { ImageAsset } from "./twbxBuilder";
+import type { ImageAsset, RawAsset } from "./twbxBuilder";
 
 /** Gather every PNG referenced by the spec (logo zones + dashboard backgrounds). */
 export function collectImageAssets(spec: WorkbookSpec): ImageAsset[] {
@@ -83,6 +83,14 @@ export function dedupeWorksheetNames(spec: WorkbookSpec): WorkbookSpec {
 
 /** Generate the .twb XML from the editable WorkbookSpec, with validation. */
 export function generateSpecWorkbook(spec: WorkbookSpec): ExportResult {
+  // Worksheet swap: when an imported (real) worksheet replaces a SHEET/ name,
+  // drop the generated demo worksheet of that name so the two don't collide on
+  // the windows mapping. The dashboard zone keeps the name → now resolves to the
+  // imported sheet (its XML is spliced in by the generator).
+  if (spec.imports && spec.imports.worksheetXml.size) {
+    const imported = spec.imports.worksheetXml;
+    spec = { ...spec, worksheets: spec.worksheets.filter((w) => !imported.has(w.name)) };
+  }
   spec = dedupeWorksheetNames(spec); // auto-rename any duplicate sheet names
   const twbXml = generateWorkbookXml(spec, DATA_DIR);
   const warnings = validateTwb(
@@ -105,6 +113,11 @@ export function generateSpecWorkbook(spec: WorkbookSpec): ExportResult {
   };
 }
 
+/** Imported Data/Image files (the worksheet-swap feature), if any. */
+function importedRawAssets(spec: WorkbookSpec): RawAsset[] {
+  return spec.imports ? spec.imports.assets.map((a) => ({ path: a.path, bytes: a.bytes })) : [];
+}
+
 /** Generate + package + download a WorkbookSpec. */
 export async function exportSpecTwbx(spec: WorkbookSpec): Promise<ExportResult> {
   const res = generateSpecWorkbook(spec);
@@ -114,6 +127,7 @@ export async function exportSpecTwbx(spec: WorkbookSpec): Promise<ExportResult> 
     csvFile: res.csvFile,
     csvText: res.csvText,
     images: collectImageAssets(spec),
+    rawAssets: importedRawAssets(spec),
   });
   return res;
 }
@@ -127,6 +141,7 @@ export async function buildSpecBlob(spec: WorkbookSpec): Promise<Blob> {
     csvFile: res.csvFile,
     csvText: res.csvText,
     images: collectImageAssets(spec),
+    rawAssets: importedRawAssets(spec),
   });
 }
 

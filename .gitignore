@@ -1,0 +1,16 @@
+# Dependencies / build output (match anywhere in the tree)
+node_modules/
+dist/
+test-out/
+
+# Logs / OS cruft
+*.log
+.DS_Store
+
+# Reference Tableau workbooks (large, local-only) — repo-root folder
+/examples/
+
+# Generated / local assets and scripts
+*.png
+*.csv
+*.py

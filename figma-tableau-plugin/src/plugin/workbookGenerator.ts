@@ -60,10 +60,21 @@ function esc(s: unknown): string {
     .replace(/"/g, "&quot;");
 }
 
-const MANIFEST =
-  "  <document-format-change-manifest>\n" +
-  MANIFEST_ENTRIES.map((e) => `    <${e} />\n`).join("") +
-  "  </document-format-change-manifest>\n";
+/**
+ * The document-format-change-manifest. Imported worksheets/datasources can need
+ * format-feature entries ours doesn't emit (e.g. an Excel/hyper connection), so
+ * we UNION any entries the import carries into our base set — a missing entry
+ * can break the imported datasource's object graph on load.
+ */
+function manifestXml(spec: WorkbookSpec): string {
+  const entries = new Set<string>(MANIFEST_ENTRIES);
+  if (spec.imports) for (const e of spec.imports.manifestEntries) entries.add(e);
+  return (
+    "  <document-format-change-manifest>\n" +
+    [...entries].map((e) => `    <${e} />\n`).join("") +
+    "  </document-format-change-manifest>\n"
+  );
+}
 
 /** Resolved field used during generation. */
 interface GenField {
@@ -692,17 +703,19 @@ function dashboardXml(
 
     if (z.kind === "sheet" && z.worksheet) {
       sheetNames.push(z.worksheet);
+      // ":showTitle" (LaDataViz) -> render the worksheet's own title bar; default
+      // hidden, since the design usually supplies its own heading text.
+      const showTitle = z.showTitle ? "true" : "false";
       if (tiled) {
-        o.push(`        <zone${fn}${fix} h='${H}' id='${nid()}' name='${esc(z.worksheet)}' show-title='false' w='${W}' x='${X}' y='${Y}'>\n`);
+        o.push(`        <zone${fn}${fix} h='${H}' id='${nid()}' name='${esc(z.worksheet)}' show-title='${showTitle}' w='${W}' x='${X}' y='${Y}'>\n`);
         o.push("          <layout-cache cell-count-h='1' cell-count-w='1' type-h='cell' type-w='cell' />\n");
         o.push(cardStyle(z.bg || "#FFFFFF"));
         o.push("        </zone>\n");
       } else {
         // Floating worksheet zone — mirrors the LaDataViz Template.twbx SHEET/
-        // zones: keep the Figma layer name as friendly-name, hide the worksheet
-        // title (the design supplies its own heading text), and carry the
-        // layout-cache Tableau writes for a placed sheet.
-        o.push(`        <zone${fn} h='${H}' id='${nid()}' name='${esc(z.worksheet)}' show-title='false' w='${W}' x='${X}' y='${Y}'>\n`);
+        // zones: keep the Figma layer name as friendly-name, honor :showTitle,
+        // and carry the layout-cache Tableau writes for a placed sheet.
+        o.push(`        <zone${fn} h='${H}' id='${nid()}' name='${esc(z.worksheet)}' show-title='${showTitle}' w='${W}' x='${X}' y='${Y}'>\n`);
         o.push("          <layout-cache cell-count-h='1' cell-count-w='1' type-h='cell' type-w='cell' />\n");
         // White ROUNDED card, no border, small padding so the chart fills the box
         // (the LaDataViz card look). The fat marks (markPaneStyle) do the filling.
@@ -725,6 +738,15 @@ function dashboardXml(
         `        <zone${fn}${fix} h='${H}' id='${nid()}' mode='checkdropdown' name='${esc(z.worksheet)}' param='${param}' type-v2='filter' w='${W}' x='${X}' y='${Y}'>\n`
       );
       o.push(zoneStyle(z.bg || "#FFFFFF", z.fg || "#D7DAEC", "solid", "1", "3", "6"));
+      o.push("        </zone>\n");
+    } else if (z.kind === "web" && z.url) {
+      // Web page object — confirmed schema from "Using Web Page Object in
+      // Tableau.twb": forceUpdate='' + param='<URL>' + type-v2='web', with a
+      // borderless zone-style. The URL is XML-escaped (it can carry & and =).
+      o.push(
+        `        <zone${fn}${fix} forceUpdate='' h='${H}' id='${nid()}' param='${esc(z.url)}' type-v2='web' w='${W}' x='${X}' y='${Y}'>\n`
+      );
+      o.push(zoneStyle(undefined, "#000000", "none", "0", "4"));
       o.push("        </zone>\n");
     } else if (z.kind === "rect") {
       // Faithful transpile of a Figma shape/card/bar: a colored `empty` zone
@@ -986,7 +1008,11 @@ export function generateWorkbookXml(spec: WorkbookSpec, dataDirectory: string): 
       }
 
   const dashOut = spec.dashboards.map((d) => dashboardXml(d, ds.dsName, reg));
-  const wsNames = spec.worksheets.map((w) => w.name);
+  // Imported (real) worksheets are spliced verbatim; their names join the window
+  // list so each gets a standard worksheet <window> (load-safe) and shows up in
+  // the dashboard viewpoints alongside our generated sheets.
+  const importedWsNames = spec.imports ? [...spec.imports.worksheetXml.keys()] : [];
+  const wsNames = [...spec.worksheets.map((w) => w.name), ...importedWsNames];
 
   const out: string[] = [];
   out.push("<?xml version='1.0' encoding='utf-8' ?>\n");
@@ -995,16 +1021,21 @@ export function generateWorkbookXml(spec: WorkbookSpec, dataDirectory: string): 
       `source-platform='${TABLEAU.sourcePlatform}' version='${TABLEAU.version}' ` +
       `xmlns:user='http://www.tableausoftware.com/xml/user'>\n`
   );
-  out.push(MANIFEST);
+  out.push(manifestXml(spec));
   out.push(
     "  <preferences>\n    <preference name='ui.encoding.shelf.height' value='24' />\n    <preference name='ui.shelf.height' value='26' />\n  </preferences>\n"
   );
   out.push("  <datasources>\n");
   out.push(ds.xml);
+  // Splice the imported datasources verbatim (their connections point at the
+  // repackaged Data/ files; their names are referenced by the imported sheets).
+  if (spec.imports) for (const dx of spec.imports.datasourceXml.values()) out.push(dx + "\n");
   out.push("  </datasources>\n");
   out.push("  <worksheets>\n");
   for (const ws of spec.worksheets)
     out.push(worksheetXml(ws, spec, ds.dsName, dsCaption, [...(filtersByWs.get(ws.name) ?? [])]));
+  // Splice the user's real worksheets verbatim (never regenerated).
+  if (spec.imports) for (const wx of spec.imports.worksheetXml.values()) out.push(wx + "\n");
   out.push("  </worksheets>\n");
   out.push("  <dashboards>\n");
   for (const d of dashOut) out.push(d.xml);

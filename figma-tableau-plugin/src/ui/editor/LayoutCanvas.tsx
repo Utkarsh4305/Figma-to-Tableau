@@ -16,6 +16,7 @@ const KIND_BG: Record<ZoneSpec["kind"], string> = {
   button: "rgba(16, 185, 129, 0.18)",
   image: "rgba(168, 85, 247, 0.16)",
   rect: "rgba(100, 116, 139, 0.14)",
+  web: "rgba(14, 165, 233, 0.16)",
 };
 const KIND_BORDER: Record<ZoneSpec["kind"], string> = {
   sheet: "#2563eb",
@@ -24,6 +25,7 @@ const KIND_BORDER: Record<ZoneSpec["kind"], string> = {
   button: "#059669",
   image: "#9333ea",
   rect: "#64748b",
+  web: "#0ea5e9",
 };
 
 type Drag =

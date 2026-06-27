@@ -59,6 +59,108 @@ async function sendFaithful(): Promise<void> {
   }
 }
 
+/** The dashboard frame in play: the selection resolved up to its outermost
+ * frame, else the first frame on the page, else null. */
+function findDashboardFrame(): SceneNode | null {
+  const sel = figma.currentPage.selection[0];
+  const isFrameLike = (n: BaseNode) =>
+    n.type === "FRAME" || n.type === "COMPONENT" || n.type === "INSTANCE" || n.type === "COMPONENT_SET";
+  if (sel) {
+    let p: BaseNode | null = sel;
+    let outer: SceneNode | null = null;
+    while (p && p.type !== "PAGE" && p.type !== "DOCUMENT") {
+      if (isFrameLike(p)) outer = p as SceneNode;
+      p = p.parent;
+    }
+    if (outer) return outer;
+  }
+  return (figma.currentPage.children.find((n) => n.type === "FRAME") as SceneNode) || null;
+}
+
+/** Best-effort: load a usable font for the placeholder labels. */
+async function loadLabelFont(): Promise<FontName | null> {
+  for (const f of [
+    { family: "Inter", style: "Regular" },
+    { family: "Roboto", style: "Regular" },
+    { family: "Arial", style: "Regular" },
+  ]) {
+    try {
+      await figma.loadFontAsync(f);
+      return f;
+    } catch {
+      /* try next */
+    }
+  }
+  return null;
+}
+
+/**
+ * Create one `SHEET/<name>` placeholder frame per chosen imported worksheet, in
+ * an EMPTY STAGING AREA to the RIGHT of the dashboard frame (NOT inside it — so
+ * they never overlap the design). They're added as siblings of the dashboard
+ * (same parent); the user then drags each onto the dashboard where they want it.
+ * Skips any `SHEET/<name>` already staged so re-clicking is safe.
+ */
+async function addSheets(names: string[]): Promise<void> {
+  const frame = findDashboardFrame();
+  const parent: BaseNode & ChildrenMixin =
+    frame && frame.parent && "appendChild" in frame.parent
+      ? (frame.parent as BaseNode & ChildrenMixin)
+      : figma.currentPage;
+
+  // Skip names already staged among the parent's direct SHEET/ children.
+  const existing = new Set(
+    ("children" in parent ? parent.children : [])
+      .map((c) => c.name)
+      .filter((n) => /^\s*sheet\s*\//i.test(n))
+      .map((n) => n.replace(/^\s*sheet\s*\/\s*/i, "").trim().toLowerCase())
+  );
+  const todo = names.filter((n) => !existing.has(n.trim().toLowerCase()));
+  if (todo.length === 0) {
+    figma.notify("Those sheets are already staged next to your dashboard.");
+    return;
+  }
+
+  const font = await loadLabelFont();
+  const SW = 360, SH = 240, GAP = 24, COLS = 2;
+  // Anchor the grid in empty space just right of the dashboard frame (in the
+  // parent's coordinate space, so siblings line up beside it).
+  const originX = frame ? frame.x + frame.width + 80 : 0;
+  const originY = frame ? frame.y : 0;
+  const created: SceneNode[] = [];
+  todo.forEach((name, i) => {
+    const col = i % COLS;
+    const row = Math.floor(i / COLS);
+    const f = figma.createFrame();
+    f.name = `SHEET/${name}`;
+    f.resize(SW, SH);
+    f.x = originX + col * (SW + GAP);
+    f.y = originY + row * (SH + GAP);
+    f.cornerRadius = 10;
+    f.fills = [{ type: "SOLID", color: { r: 0.93, g: 0.94, b: 0.98 } }];
+    f.strokes = [{ type: "SOLID", color: { r: 0.78, g: 0.8, b: 0.9 } }];
+    f.strokeWeight = 1;
+    if (font) {
+      const t = figma.createText();
+      t.fontName = font;
+      t.characters = name;
+      t.fontSize = 16;
+      t.fills = [{ type: "SOLID", color: { r: 0.25, g: 0.28, b: 0.42 } }];
+      f.appendChild(t);
+      t.x = 16;
+      t.y = 16;
+    }
+    parent.appendChild(f);
+    created.push(f);
+  });
+
+  if (created.length) {
+    figma.currentPage.selection = created;
+    figma.viewport.scrollAndZoomIntoView(created);
+  }
+  figma.notify(`Staged ${created.length} sheet(s) beside your dashboard — drag them onto your design, then export.`);
+}
+
 // Re-parse whenever the user changes their selection.
 figma.on("selectionchange", () => void parseAndSend());
 
@@ -72,6 +174,9 @@ figma.ui.onmessage = (msg: UiToPlugin) => {
       break;
     case "request-faithful":
       void sendFaithful();
+      break;
+    case "add-sheets":
+      void addSheets(msg.names);
       break;
     case "resize":
       figma.ui.resize(Math.max(360, msg.width), Math.max(420, msg.height));

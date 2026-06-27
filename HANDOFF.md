@@ -3,8 +3,8 @@
 > Self-contained context for any AI/engineer picking this up, **including on a
 > device without the local Claude memory**. It folds in the essential facts from
 > the private memory files (the Tableau 2026.2 recipe, the reference-export
-> workflow, and project state). Last updated: **2026-06-26**, build
-> `dedupe-names-30`.
+> workflow, and project state). Last updated: **2026-06-27**, build
+> `import-staging-36`.
 
 ---
 
@@ -117,6 +117,23 @@ Defined in `shared/constants.ts` (`LAYER_PREFIXES` + `matchLayerPrefix`):
 | `SHEET/Sales by Region[bar-hor]` | worksheet "Sales by Region", **Bar** mark |
 | `SHEET/Trend[line]` / `[area]` / `[pie]` / `[scatter]` | worksheet with that mark |
 | `KPI/…`, `IMAGE/`/`IMG/`/`LOGO/`, `BUTTON/`, `FILTER/`, `TEXT/`, `CONTAINER/`/`GROUP/` | corresponding role |
+
+**LaDataViz-style options on a SHEET/ name** (build `filter-action-show-title-32`,
+all lowered to CONFIRMED Tableau XML — verified against `DM_Dashboards.twb` /
+`Clinical Trials.twb`). Append `:option` suffixes (order-independent):
+
+| Layer name | Effect |
+|---|---|
+| `FILTER/Region` | a **real quick-filter card** (`type-v2='filter'`, `mode='checkdropdown'`) bound to the first chart sheet, on a sample string dimension (`Region`, or `Period` if the name hints time) |
+| `URL/en.wikipedia.org/...` or `WEB/https://...` | a **real web page object** (`type-v2='web'` + `forceUpdate='' param='<URL>'`); a bare host gets an `https://` scheme. Confirmed from `Using Web Page Object in Tableau.twb` |
+| `SHEET/Sales[bar]:showTitle` | the worksheet zone shows its **title bar** (`show-title='true'`); default stays `false` |
+| `SHEET/Sales[bar]:filter` | clicking that sheet runs a **dashboard filter action** (`tsc:tsl-filter`, `special-fields='all'`) |
+| `SHEET/Trend[line]:highlight` | clicking that sheet runs a **highlight action** (`tsc:brush` on its dimension) |
+
+Parsing lives in `faithful.ts parseLayerOptions()`; only these confirmed-safe
+options are recognised (an unknown `:foo` is left attached, never silently
+dropped). The faithful walk now also special-cases `FILTER/` (like `SHEET/`):
+it emits one filter zone and does **not** recurse.
 
 - `faithful.ts markFromTag()` maps the `[type]` tag → Tableau mark class
   (default Bar). `parseSheetTag()` strips the `[type]` from the worksheet **name**
@@ -316,7 +333,7 @@ It sends `request-faithful`; the `faithful-ready` handler builds `faithfulSpec` 
 (`exportRealComponents`, `handleExport`) were **removed**, along with the
 background-image export mode and all its plumbing. The Export tab still has:
 workbook name, Tableau version, a re-read/auto-tag source card, and a summary
-table. Build tag is in `App.tsx` `const BUILD` (currently `entire-view-29`).
+table. Build tag is in `App.tsx` `const BUILD` (currently `filter-action-show-title-32`).
 
 ---
 
@@ -345,6 +362,72 @@ table. Build tag is in `App.tsx` `const BUILD` (currently `entire-view-29`).
   byte-identical; remaps sheet/filter zone refs positionally).
 - `.twb` well-formed, `<windows>` present, no `<shelf-sorts>`/`NaN`, images
   packaged under `Image/`.
+- **NEW (`filter-web-action-33`) — LaDataViz layer conventions, all on CONFIRMED
+  XML**: `FILTER/Field` → real quick-filter card; `URL/`·`WEB/` → real web page
+  object (`type-v2='web'`, confirmed from the new `Using Web Page Object in
+  Tableau.twb` / `Background Image Map with Web Object.twb` references);
+  `:showTitle` → worksheet title shown; `:filter`/`:highlight` on a SHEET → real
+  dashboard filter/highlight actions (`tsc:tsl-filter` / `tsc:brush`,
+  reference-confirmed in `Clinical Trials.twb`). Covered by
+  `test/faithful_features_smoke.ts`.
+
+**Navigation — schema now known, but needs multi-dashboard support first.** The
+new `Navigation Menu Example.twb` reveals the mechanism: navigation is a
+**`<nav-action>`** sourced from a *worksheet zone* acting as a button, with
+`<params><param name='sheet' value='<target dashboard>' /></params>` (NOT a
+native `type-v2='navigation'` object — that appears nowhere). It only makes sense
+once an export contains **>1 dashboard** to move between; today one Figma frame →
+one dashboard, so `BUTTON/`→navigation and nav-actions are deferred until
+multi-frame export exists. (BUTTON/ still renders faithfully as its styled
+text/rect today.)
+
+**Worksheet swap = import the user's REAL sheets — BUILT (`import-swap-34`).**
+"Swap" means: import worksheets the user already built (in an existing `.twbx`)
+and substitute them for the demo SHEET/ placeholders, so the export carries their
+real sheets + data instead of the Region/Sales sample. How it works:
+- `src/plugin/twbImport.ts` (UI) `parseImport(buf, fileName)` unzips the upload
+  (JSZip), then **string-slices** (never re-serializes — keeps the namespaced XML
+  byte-exact) the `<worksheet>` blocks, the `<datasource>` blocks they depend on,
+  the `document-format-change-manifest` entries those need, and every `Data/` +
+  `Image/` asset. Returns `worksheetNames` + a `payloadFor(names)` that builds an
+  `ImportPayload` (in `spec.ts`) for a chosen subset. Extraction anchors on
+  Tableau's stable 4-space indentation (`\n    <tag …>…\n    </tag>`).
+- `spec.ts`: `WorkbookSpec.imports?: ImportPayload` (worksheetXml/datasourceXml
+  maps, manifestEntries, assets).
+- `workbookGenerator.ts`: `manifestXml(spec)` UNIONS imported manifest entries;
+  imported `<datasource>`/`<worksheet>` blocks are spliced verbatim into their
+  sections; imported worksheet names join `wsNames` so each gets a standard
+  worksheet `<window>` and shows in dashboard viewpoints.
+- `exporter.generateSpecWorkbook`: DROPS any generated demo worksheet whose name
+  an import replaces (so the windows mapping doesn't collide); the SHEET/ zone
+  keeps the name → now resolves to the imported sheet.
+- `twbxBuilder` + `exporter`: imported `Data/`/`Image/` files are repackaged at
+  their EXACT paths (so `filename='Data/…'` connections resolve); our sample CSV
+  stays at `Data/data.csv` — no collision.
+- UI (`App.tsx`): a file input under Export uploads the `.twbx`, then shows a
+  **checklist** of its worksheets (all pre-checked). **"Add N sheet(s) to Figma"**
+  sends `add-sheets` → sandbox `code.ts addSheets()` creates a `SHEET/<name>`
+  placeholder frame (labelled card) for each checked sheet in an **empty staging
+  area to the RIGHT of the dashboard frame** (as a SIBLING, `frame.parent`, at
+  `frame.x+frame.width+80` — NOT inside the frame, so it never overlaps the
+  design); skips already-staged names. The user then **drags each card onto the
+  dashboard** where they want it; once it's inside the frame it's exported and
+  name-matched to its real sheet. So no hand-naming — check the list, the layers
+  are created, drag into place (`import-staging-36`).
+- Test `test/twb_import_smoke.ts`: imports from `examples/DM_Dashboards.twbx`,
+  swaps `Sheet 15` (Excel-backed federated ds), asserts the foreign
+  datasource/worksheet/window are spliced, the `.xlsx` is packaged, the demo of
+  that name is dropped, and the 192 KB merged `.twb` is well-formed (minidom).
+
+⚠️ Generated + well-formed + minidom-clean, but **merging foreign XML is the
+highest load-risk thing in the project** — NOT yet opened in the user's Tableau.
+First real test: upload a real `.twbx`, name a layer `SHEET/<exact sheet name>`,
+export, open in 2026.2. If a swapped sheet errors, decompile and compare the
+spliced datasource block against a known-good standalone export of that sheet.
+Known gaps for a future pass: extract/`.hyper` connection-path edge cases;
+imported sheet that references a parameter/extract our manifest union misses;
+collision if a generated sheet and an imported sheet share a name with different
+data (today the import wins).
 
 **Unconfirmed (needs the user to open in Tableau after a manifest re-import):**
 - Whether `entire-view-29` visually matches `multi.twbx`/their `Our.twb` in

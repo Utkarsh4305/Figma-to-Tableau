@@ -60,6 +60,7 @@ export const LAYER_PREFIXES: Array<{ re: RegExp; role: ElementRole }> = [
   { re: /^\s*(?:image|img|logo)\s*\/\s*/i, role: "image" },
   { re: /^\s*button\s*\/\s*/i, role: "button" },
   { re: /^\s*filter\s*\/\s*/i, role: "filter" },
+  { re: /^\s*(?:url|web)\s*\/\s*/i, role: "web" },
   { re: /^\s*text\s*\/\s*/i, role: "text" },
   { re: /^\s*(?:container|group)\s*\/\s*/i, role: "container" },
 ];

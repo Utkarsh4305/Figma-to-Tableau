@@ -86,7 +86,7 @@ export interface ActionSpec {
   runOn: ActionRunOn;
 }
 
-export type ZoneKind = "sheet" | "text" | "button" | "filter" | "image" | "rect";
+export type ZoneKind = "sheet" | "text" | "button" | "filter" | "image" | "rect" | "web";
 
 export interface ZoneSpec {
   id: string;
@@ -101,6 +101,9 @@ export interface ZoneSpec {
   h: number;
   // sheet / filter (bound worksheet)
   worksheet?: string;
+  // sheet: render the worksheet's title inside its zone (LaDataViz ":showTitle").
+  // Default false (the design supplies its own heading text).
+  showTitle?: boolean;
   // A KPI "big number" sheet. In tiled mode KPIs are pinned (fixed-size) like
   // text/headers so a KPI row stays short instead of flexing like a chart.
   isKpi?: boolean;
@@ -124,6 +127,8 @@ export interface ZoneSpec {
   strokeWidth?: number;
   // button
   targetDashboard?: string;
+  // web object (URL/ layer): the page URL loaded by the type-v2='web' zone
+  url?: string;
   // image zone: base64 PNG payload + the in-package filename it's stored under
   image?: string; // base64 (no data: prefix)
   imageFile?: string; // e.g. "logo.png" (packaged under Image/ in the .twbx)
@@ -175,6 +180,29 @@ export interface DataSpec {
   rows: string[][]; // values aligned to fields order
 }
 
+/** A binary asset (data extract / image) lifted from an imported .twbx. */
+export interface ImportAsset {
+  path: string; // package-relative path, e.g. "Data/DM/file.xlsx" — preserved verbatim
+  bytes: Uint8Array;
+}
+
+/**
+ * Worksheets the user already built in Tableau, lifted whole from an uploaded
+ * .twbx and spliced into our export so a SHEET/ placeholder renders THEIR real
+ * sheet on THEIR real data instead of a demo sample-data chart. The XML blocks
+ * are carried byte-for-byte (never regenerated) — only positioned/referenced.
+ */
+export interface ImportPayload {
+  // worksheet name -> its full <worksheet>…</worksheet> XML (verbatim)
+  worksheetXml: Map<string, string>;
+  // datasource name -> its full <datasource>…</datasource> XML (verbatim, deduped)
+  datasourceXml: Map<string, string>;
+  // document-format-change-manifest child element names the imports need
+  manifestEntries: string[];
+  // Data/ + Image/ files to repackage (paths preserved so connections resolve)
+  assets: ImportAsset[];
+}
+
 export interface WorkbookSpec {
   workbookName: string;
   tableauVersion: string;
@@ -183,6 +211,9 @@ export interface WorkbookSpec {
   dashboards: DashboardSpec[];
   actions: ActionSpec[];
   includeActions: boolean; // export toggle (actions are experimental)
+  // Imported real worksheets (the "swap" feature). Their names appear as zone
+  // `worksheet` refs and in the windows section; their XML is spliced verbatim.
+  imports?: ImportPayload;
 }
 
 // --- small helpers shared by UI + generator ---------------------------------

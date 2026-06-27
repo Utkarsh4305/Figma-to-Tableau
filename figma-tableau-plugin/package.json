@@ -9,7 +9,7 @@
     "build:code": "esbuild src/plugin/code.ts --bundle --target=es2017 --format=iife --outfile=dist/code.js",
     "build": "npm run build:ui && npm run build:code",
     "typecheck": "tsc --noEmit",
-    "test": "tsx test/spec_smoke.ts && tsx test/lds_smoke.ts && tsx test/faithful_smoke.ts && tsx test/faithful_capture_smoke.ts"
+    "test": "tsx test/spec_smoke.ts && tsx test/lds_smoke.ts && tsx test/faithful_smoke.ts && tsx test/faithful_capture_smoke.ts && tsx test/faithful_features_smoke.ts && tsx test/twb_import_smoke.ts"
   },
   "dependencies": {
     "file-saver": "^2.0.5",

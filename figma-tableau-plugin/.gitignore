@@ -3,3 +3,7 @@ dist/
 test-out/
 *.log
 .DS_Store
+/examples/
+*.png
+*.csv
+*.py

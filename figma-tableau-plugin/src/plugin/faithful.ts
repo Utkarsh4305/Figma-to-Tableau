@@ -35,6 +35,33 @@ function markFromTag(tag: string | undefined): string {
   }
 }
 
+/**
+ * Strip trailing LaDataViz-style ":option" suffixes off a layer name and report
+ * which were present. e.g. "Trend[line]:showTitle:filter" -> name "Trend[line]"
+ * with { showTitle, action:'filter' }. Only the confirmed-safe options are
+ * recognised; an unknown ":foo" is left attached so it can't silently vanish.
+ */
+function parseLayerOptions(clean: string): {
+  name: string;
+  showTitle: boolean;
+  action?: "filter" | "highlight";
+} {
+  let showTitle = false;
+  let action: "filter" | "highlight" | undefined;
+  let name = clean;
+  const known = /:(showtitle|filter|highlight)\b/i;
+  // Peel known suffixes off the end, one at a time (order-independent).
+  let m: RegExpMatchArray | null;
+  while ((m = name.match(new RegExp(known.source + "\\s*$", "i")))) {
+    const opt = m[1].toLowerCase();
+    if (opt === "showtitle") showTitle = true;
+    else if (opt === "filter") action = "filter";
+    else if (opt === "highlight") action = "highlight";
+    name = name.slice(0, m.index).trim();
+  }
+  return { name: name || clean, showTitle, action };
+}
+
 /** Split a cleaned SHEET name ("Sheet 1[bar-hor]") into its name + mark class. */
 function parseSheetTag(clean: string): { sheetName: string; chart: string } {
   const m = clean.match(/\[([^\]]*)\]/);
@@ -228,8 +255,40 @@ function walk(node: SceneNode, origin: { x: number; y: number }, zones: Faithful
   // exactly how LaDataViz produced the live charts in Template.twbx.
   const pfx = matchLayerPrefix(node.name || "");
   if (pfx && pfx.role === "worksheet") {
-    const { sheetName, chart } = parseSheetTag(pfx.clean);
-    zones.push({ id: node.id, name: node.name || sheetName, kind: "sheet", ...rect, sheetName, chart });
+    const opts = parseLayerOptions(pfx.clean);
+    const { sheetName, chart } = parseSheetTag(opts.name);
+    zones.push({
+      id: node.id,
+      name: node.name || sheetName,
+      kind: "sheet",
+      ...rect,
+      sheetName,
+      chart,
+      showTitle: opts.showTitle || undefined,
+      actionKind: opts.action,
+    });
+    return;
+  }
+  // FILTER/Field -> a real Tableau quick-filter card on that dimension (the
+  // LaDataViz convention). Confirmed schema (type-v2='filter' in DM_Dashboards).
+  // We don't recurse: the card replaces whatever placeholder the designer drew.
+  if (pfx && pfx.role === "filter") {
+    zones.push({
+      id: node.id,
+      name: node.name || "Filter",
+      kind: "filter",
+      ...rect,
+      filterField: parseLayerOptions(pfx.clean).name || pfx.clean,
+    });
+    return;
+  }
+  // URL/<page> -> a real Tableau web page object (type-v2='web'). Confirmed
+  // schema (see "Using Web Page Object in Tableau.twb"). The text after URL/ is
+  // the page address; bare hosts get an https:// scheme. We don't recurse.
+  if (pfx && pfx.role === "web") {
+    const raw = pfx.clean.trim();
+    const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    zones.push({ id: node.id, name: node.name || "Web", kind: "web", ...rect, url });
     return;
   }
 

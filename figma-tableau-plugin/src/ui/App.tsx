@@ -3,9 +3,10 @@ import type { DashboardModel, PluginToUi, UiToPlugin } from "../shared/types";
 import type { WorkbookSpec } from "../shared/spec";
 import { seedSpecFromModel, blankSpec, faithfulSpec } from "../plugin/seed";
 import { exportSpecTwbx } from "../plugin/exporter";
+import { parseImport, type ParsedImport } from "../plugin/twbImport";
 import DashboardPreview from "./DashboardPreview";
 
-const BUILD = "ui-minimal-31";
+const BUILD = "import-staging-36";
 
 type Status = { kind: "ok" | "err" | "warn"; text: string } | null;
 
@@ -57,7 +58,12 @@ export default function App() {
   const [spec,       setSpec]       = useState<WorkbookSpec | null>(null);
   const [status,     setStatus]     = useState<Status>(null);
   const [busy,       setBusy]       = useState(false);
+  const [importedNames, setImportedNames] = useState<string[]>([]);
+  const [checkedSheets, setCheckedSheets] = useState<Record<string, boolean>>({});
 
+  // Imported real worksheets (the swap feature) — held in a ref so the once-
+  // registered faithful-ready handler reads the latest upload.
+  const importedRef        = useRef<ParsedImport | null>(null);
   const seededFrameRef     = useRef<string | null>(null);
   const manualRef          = useRef(false);
   const forceReseedRef     = useRef(false);
@@ -80,12 +86,32 @@ export default function App() {
         }
         void (async () => {
           try {
-            const fSpec  = faithfulSpec(msg.model!);
-            const res    = await exportSpecTwbx(fSpec);
-            const sheets = msg.model!.zones.filter((z) => z.kind === "sheet").length;
+            const fSpec   = faithfulSpec(msg.model!);
+            // Worksheet swap: if the user uploaded their real .twbx, replace any
+            // SHEET/ placeholder whose name matches an imported worksheet with
+            // that real sheet (on its real data) instead of a demo sample chart.
+            let swapped = 0;
+            const imp = importedRef.current;
+            if (imp) {
+              const wsNames = new Set(fSpec.worksheets.map((w) => w.name));
+              const matches = imp.worksheetNames.filter((n) => wsNames.has(n));
+              if (matches.length) {
+                fSpec.imports = imp.payloadFor(matches);
+                swapped = matches.length;
+              }
+            }
+            const res     = await exportSpecTwbx(fSpec);
+            const sheets  = msg.model!.zones.filter((z) => z.kind === "sheet").length;
+            const filters = msg.model!.zones.filter((z) => z.kind === "filter").length;
+            const webs    = msg.model!.zones.filter((z) => z.kind === "web").length;
+            const extra =
+              (filters ? `, ${filters} filter(s)` : "") +
+              (webs ? `, ${webs} web object(s)` : "") +
+              (swapped ? `, ${swapped} real sheet(s) swapped in` : "") +
+              (fSpec.actions.length ? `, ${fSpec.actions.length} action(s)` : "");
             setStatus({
               kind: res.warnings.length ? "warn" : "ok",
-              text: `Exported — ${res.zoneCount} zones, ${sheets} worksheet(s). Download started.`,
+              text: `Exported — ${res.zoneCount} zones, ${sheets} worksheet(s)${extra}. Download started.`,
             });
             toPlugin({ type: "notify", message: ".twbx downloaded — check your downloads." });
           } catch (e) {
@@ -146,6 +172,49 @@ export default function App() {
     setBusy(true);
     setStatus({ kind: "warn", text: "Transpiling design…" });
     toPlugin({ type: "request-faithful" });
+  };
+
+  // Upload an existing Tableau workbook to swap its REAL worksheets in for the
+  // demo sample-data sheets. We only parse here; the actual substitution happens
+  // at export, name-matching each imported sheet to a SHEET/<name> layer.
+  const onImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const parsed = await parseImport(await file.arrayBuffer(), file.name);
+      importedRef.current = parsed;
+      setImportedNames(parsed.worksheetNames);
+      // Pre-check every sheet so the user can add them all in one click.
+      setCheckedSheets(Object.fromEntries(parsed.worksheetNames.map((n) => [n, true])));
+      setStatus({
+        kind: parsed.worksheetNames.length ? "ok" : "warn",
+        text: parsed.worksheetNames.length
+          ? `Loaded ${parsed.worksheetNames.length} sheet(s) from ${file.name}.`
+          : `No worksheets found in ${file.name}.`,
+      });
+    } catch (err) {
+      importedRef.current = null;
+      setImportedNames([]);
+      setCheckedSheets({});
+      setStatus({ kind: "err", text: `Couldn't read ${file.name}: ${(err as Error).message}` });
+    }
+  };
+
+  const toggleSheet = (name: string) =>
+    setCheckedSheets((c) => ({ ...c, [name]: !c[name] }));
+  const allChecked = importedNames.length > 0 && importedNames.every((n) => checkedSheets[n]);
+  const toggleAllSheets = () =>
+    setCheckedSheets(Object.fromEntries(importedNames.map((n) => [n, !allChecked])));
+  const checkedSheetNames = importedNames.filter((n) => checkedSheets[n]);
+
+  // Drop the checked sheets into the Figma frame as SHEET/<name> placeholders.
+  const addSheetsToFigma = () => {
+    if (!checkedSheetNames.length) return;
+    toPlugin({ type: "add-sheets", names: checkedSheetNames });
+    setStatus({
+      kind: "ok",
+      text: `Staging ${checkedSheetNames.length} sheet(s) beside your dashboard — drag them onto your design, then export.`,
+    });
   };
 
   // ── No frame selected ──────────────────────────────────────────────────────
@@ -220,6 +289,46 @@ export default function App() {
                   <div className="stat-key">{label}</div>
                 </div>
               ))}
+            </div>
+
+            <div className="export-row">
+              <div className="field-label">Use my real Tableau sheets (optional)</div>
+              <input type="file" accept=".twbx,.twb" onChange={onImportFile} />
+              {importedNames.length > 0 && (
+                <div className="import-list">
+                  <div className="import-list-head">
+                    <span>{importedNames.length} sheet(s) found</span>
+                    <button type="button" className="link-btn" onClick={toggleAllSheets}>
+                      {allChecked ? "Clear all" : "Select all"}
+                    </button>
+                  </div>
+                  <div className="import-items">
+                    {importedNames.map((n) => (
+                      <label key={n} className="import-item">
+                        <input
+                          type="checkbox"
+                          checked={!!checkedSheets[n]}
+                          onChange={() => toggleSheet(n)}
+                        />
+                        <span>{n}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    disabled={checkedSheetNames.length === 0}
+                    onClick={addSheetsToFigma}
+                  >
+                    Add {checkedSheetNames.length} sheet(s) to Figma
+                  </button>
+                  <div className="import-hint">
+                    Drops them as <code>SHEET/</code> cards in an empty area beside your
+                    dashboard. Drag each onto your design, then export — each swaps in its
+                    real sheet &amp; data.
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

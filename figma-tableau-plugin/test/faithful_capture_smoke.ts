@@ -56,11 +56,39 @@ const rotBar = {
   fills: [solid(0.14, 0.45, 0.96)],
   absoluteBoundingBox: bbox(880, 1000, 8, 200), width: 200, height: 8, x: 880, y: 1000,
 };
+// A SHEET/ layer whose designer drew a vivid blue bar inside a white card. The
+// design-color route should sample the blue (#2166DB) as the worksheet's mark
+// color, NOT the white card background and NOT the LaDataViz gray.
+const blueBar = {
+  id: "bb", name: "bar", type: "RECTANGLE", visible: true,
+  fills: [solid(0.13, 0.4, 0.86)],
+  absoluteBoundingBox: bbox(120, 520, 40, 120), width: 40, height: 120, x: 120, y: 520,
+};
+const sheet = {
+  id: "sh", name: "SHEET/Revenue[bar]", type: "FRAME", visible: true,
+  fills: [solid(1, 1, 1)], // white card — must be ignored by the color sampler
+  absoluteBoundingBox: bbox(100, 480, 400, 240), width: 400, height: 240, x: 100, y: 480,
+  children: [blueBar],
+};
+// A BUTTON/ layer: caption should come from the INNER text ("Open Report"), not
+// the layer name; the target ("Details") still comes from the name.
+const btnLabel = {
+  id: "btx", name: "lbl", type: "TEXT", visible: true,
+  characters: "Open Report", fontName: { family: "Inter", style: "Bold" }, fontSize: 16,
+  textAlignHorizontal: "CENTER", fills: [solid(1, 1, 1)],
+  absoluteBoundingBox: bbox(110, 772, 140, 24),
+};
+const navBtn = {
+  id: "nb", name: "BUTTON/ignored-name > Details", type: "FRAME", visible: true,
+  fills: [solid(0.15, 0.4, 0.9)],
+  absoluteBoundingBox: bbox(100, 760, 160, 48), width: 160, height: 48, x: 100, y: 760,
+  children: [btnLabel],
+};
 const frame = {
   id: "F", name: "Overview", type: "FRAME", visible: true,
   fills: [solid(1, 1, 1)], absoluteBoundingBox: bbox(0, 0, 1523, 1422),
   width: 1523, height: 1422, x: 0, y: 0,
-  children: [title, track, gradBar, kpiVal, rotBar],
+  children: [title, track, gradBar, kpiVal, rotBar, sheet, navBtn],
 };
 (globalThis as unknown as { figma: { currentPage: { selection: unknown[] } } }).figma.currentPage.selection = [frame];
 
@@ -102,7 +130,19 @@ async function main() {
   assert(/^#[0-9A-F]{8}$/.test(grd.fill || ""), "gradient -> 8-digit color, got " + grd.fill);
   assert(!/^#000000/.test(grd.fill || ""), "gradient resolves to its real color, not black, got " + grd.fill);
 
-  console.log("OK  faithful capture:", { titlePt: t.fontSize, titleH: t.h, track: trk.fill, grad: grd.fill });
+  // design-color route: the SHEET/ worksheet's mark color is sampled from the
+  // vivid blue bar inside it, not the white card and not the gray default.
+  const sh = model.zones.find((z) => z.kind === "sheet")!;
+  assert(!!sh, "SHEET/ zone captured");
+  assert((sh.markColor || "").toUpperCase() === "#2166DB", "design chart color sampled from the blue bar, got " + sh.markColor);
+
+  // button caption comes from the inner Figma text, target from the layer name.
+  const btn = model.zones.find((z) => z.kind === "button")!;
+  assert(!!btn, "BUTTON/ zone captured");
+  assert(btn.label === "Open Report", "button caption = inner text, got " + btn.label);
+  assert(btn.target === "Details", "button target = layer-name '> Details', got " + btn.target);
+
+  console.log("OK  faithful capture:", { titlePt: t.fontSize, titleH: t.h, track: trk.fill, grad: grd.fill, markColor: sh.markColor, btn: btn.label + "->" + btn.target });
 }
 
 main().catch((e) => {

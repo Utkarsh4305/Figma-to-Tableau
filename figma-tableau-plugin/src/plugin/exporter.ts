@@ -173,6 +173,26 @@ export function validateTwb(xml: string, worksheetNames: string[]): string[] {
     throw new Error("Generated .twb contains <shelf-sorts>, which Tableau 2026.2 rejects (D2E8DA72).");
   }
 
+  // 2c. The <windows> section enforces a UNIQUE-identity constraint: duplicate
+  // window names OR duplicate <simple-id> uuids inside it trigger D2E8DA72
+  // ("element 'windows' declares duplicate identity constraint unique values").
+  // This bites when several selected Figma frames share a name (e.g. multiple
+  // "Data Metrics" dashboards). Catch it here rather than ship an unloadable file.
+  const winsMatch = xml.match(/<windows[\s\S]*?<\/windows>/);
+  if (winsMatch) {
+    const wins = winsMatch[0];
+    const winNames = [...wins.matchAll(/<window class='(?:worksheet|dashboard)'[^>]*name='([^']*)'/g)].map((m) => m[1]);
+    const dupName = winNames.find((n, i) => winNames.indexOf(n) !== i);
+    if (dupName != null) {
+      throw new Error(`Duplicate window name "${dupName}" — two dashboards/worksheets share a name; Tableau rejects this (D2E8DA72). Rename the colliding frame(s).`);
+    }
+    const winUuids = [...wins.matchAll(/<simple-id uuid='([^']+)'/g)].map((m) => m[1]);
+    const dupUuid = winUuids.find((u, i) => winUuids.indexOf(u) !== i);
+    if (dupUuid != null) {
+      throw new Error(`Duplicate window simple-id ${dupUuid} — Tableau rejects this (D2E8DA72).`);
+    }
+  }
+
   // 3. Every worksheet must have a matching window + at least be referenced.
   for (const n of worksheetNames) {
     const needle = `class='worksheet' name='${n

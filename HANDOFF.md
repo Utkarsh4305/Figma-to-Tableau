@@ -4,7 +4,7 @@
 > device without the local Claude memory**. It folds in the essential facts from
 > the private memory files (the Tableau 2026.2 recipe, the reference-export
 > workflow, and project state). Last updated: **2026-06-28**, build
-> `multi-dashboard-37`.
+> `floating-only-42`.
 
 ---
 
@@ -136,6 +136,7 @@ all lowered to CONFIRMED Tableau XML — verified against `DM_Dashboards.twb` /
 |---|---|
 | `FILTER/Region` | a **real quick-filter card** (`type-v2='filter'`, `mode='checkdropdown'`) bound to the first chart sheet, on a sample string dimension (`Region`, or `Period` if the name hints time) |
 | `URL/en.wikipedia.org/...` or `WEB/https://...` | a **real web page object** (`type-v2='web'` + `forceUpdate='' param='<URL>'`); a bare host gets an `https://` scheme. Confirmed from `Using Web Page Object in Tableau.twb` |
+| `BUTTON/Go to Sales > Sales` (or `->`) | a **native navigation button** (`type-v2='dashboard-object'` + `<button action='tabdoc:goto-sheet'>`) that switches to the named dashboard frame; no target / 2 frames → toggles to the other. Confirmed from LaDataViz `multi.twbx`. See §10 |
 | `SHEET/Sales[bar]:showTitle` | the worksheet zone shows its **title bar** (`show-title='true'`); default stays `false` |
 | `SHEET/Sales[bar]:filter` | clicking that sheet runs a **dashboard filter action** (`tsc:tsl-filter`, `special-fields='all'`) |
 | `SHEET/Trend[line]:highlight` | clicking that sheet runs a **highlight action** (`tsc:brush` on its dimension) |
@@ -269,6 +270,16 @@ from the proven Python generator and confirmed against the example workbooks.)
    Confirmed schema-valid (declared in `multi.twbx`; only `shelf-sorts` was
    rejected there).
 
+9. **Unique `<windows>` identity** — every `<window>` name AND every `<simple-id
+   uuid>` inside `<windows>` must be UNIQUE, or load fails with **D2E8DA72**
+   ("element 'windows' declares duplicate identity constraint unique values").
+   Hit when several selected frames share a name (e.g. 5 "Data Metrics"): they'd
+   make duplicate dashboard-window names, and — because the nav feature keys the
+   per-dashboard window uuid by NAME — duplicate uuids too. Fixed in
+   `seed.uniqueDashNames()` (dashboard names deduped up front: "X", "X 2", …,
+   flowing into the spec/actions/nav-targets/window-uuid consistently). Belt-and-
+   braces: `exporter.validateTwb` now THROWS on any duplicate window name/uuid.
+
 ### Known LOAD-KILLERS (do not emit)
 - **`<shelf-sorts>`** → **error D2E8DA72** (`no declaration found for element
   'shelf-sorts'`). It is NOT in the 2026.2 `<view>` content model
@@ -326,6 +337,10 @@ current tag. Many "it's still broken" reports were just a stale build.
   dashboards, worksheet names + image filenames unique across dashboards, two
   dashboard windows with the right per-window viewpoints, `:filter` action scoped
   to its own dashboard, load-safe (windows/no-shelf-sorts/no-NaN).
+- `faithful_flow_smoke.ts` — `faithfulSpec(model, 'flow')`: tiled root + nested
+  `layout-flow`, all content zones placed, enclosing card/bg rects dropped, NO
+  container background (confirmed-XML discipline), load-safe; and the default
+  (no layout arg) stays floating with no layout-flow.
 
 Floating `.twb` output was historically kept **byte-identical** across refactors,
 but the byte counts have since shifted intentionally as features landed (the
@@ -347,9 +362,18 @@ It sends `request-faithful`; the `faithful-ready` handler builds `faithfulSpec` 
 (`exportRealComponents`, `handleExport`) were **removed**, along with the
 background-image export mode and all its plumbing. The Export tab still has:
 workbook name, Tableau version, a re-read/auto-tag source card, and a summary
-table. Build tag is in `App.tsx` `const BUILD` (currently `multi-dashboard-37`).
-The export now covers **all selected frames** (one dashboard each); the status
-line reports the dashboard count.
+table. Build tag is in `App.tsx` `const BUILD` (currently `layout-flow-38`).
+The export covers **all selected frames** (one dashboard each), **always
+pixel-exact floating**. The **"Responsive layout (flow containers)"** checkbox was
+**REMOVED from the UI** (`floating-only-42`): flow mode reflows the design via the
+guillotine engine so it can NEVER match Figma pixel-for-pixel, and the user kept
+hitting it by accident and seeing a "messed" layout. The export now hard-codes
+`faithfulSpecMulti(models)` (floating). The flow code path (`applyFlowLayout`,
+`faithfulSpec(model,'flow')`, the tiled generator) still EXISTS and is still
+tested by `faithful_flow_smoke.ts` — it's just not reachable from the UI, so it
+can be re-exposed later if a real responsive use-case appears. Build tag is now
+`floating-only-42` (native nav buttons + design-color marks + dup-name fix +
+flow toggle removed — see §10 and §7.9).
 
 ---
 
@@ -401,15 +425,87 @@ per-window viewpoints). ✅ **TABLEAU-CONFIRMED (2026-06-28):** the user selecte
 2+ frames, exported, and both dashboards opened correctly in Tableau 2026.2 with
 their own sheets. This is a load-confirmed feature, not just well-formed.
 
-**Navigation — schema known, NOW UNBLOCKED by multi-dashboard, next up.** The
-`Navigation Menu Example.twb` reveals the mechanism: navigation is a
-**`<nav-action>`** sourced from a *worksheet zone* acting as a button, with
-`<params><param name='sheet' value='<target dashboard>' /></params>` (NOT a
-native `type-v2='navigation'` object — that appears nowhere). Now that an export
-can contain **>1 dashboard** to move between, `BUTTON/`→navigation is the natural
-next feature: emit a `<nav-action>` per `BUTTON/` layer whose label/target names
-another dashboard frame. (BUTTON/ still renders faithfully as its styled
-text/rect today — no nav-action yet.)
+**Responsive layout-flow — BUILT but REMOVED FROM THE UI (`floating-only-42`).**
+⚠️ The checkbox is GONE — flow reflows the design and can't match Figma exactly,
+and the user kept hitting it accidentally (two "messed layout" reports were just
+this toggle being on). The code below still exists and is tested, but the export
+always uses floating now. (Re-expose only with a real responsive use-case + a
+clearer UX.) A **"Responsive layout (flow containers)"** checkbox (Export card,
+default OFF) used to map
+the faithful export onto nested Tableau `layout-flow` containers — the LaDataViz
+structure (its `multi.twbx` nests 31). `seed.applyFlowLayout(dash)` reuses the
+PROVEN guillotine engine (`inferLayoutTree`) + the generator's existing tiled path
+(both already shipped on the heuristic `seedSpecFromModel` path), so no new
+load-risky XML. Because flow containers TILE and — **confirmed from EVERY
+reference (0 hits)** — a `layout-flow` zone may NOT carry a background (in
+`multi.twb` every background lives on a LEAF zone: worksheet card, `empty` rect,
+or button — never on a flow/basic container), enclosing card rects are dropped
+but their **colour is PRESERVED** (`flow-cards-40`): `applyFlowLayout` now
+**propagates** each enclosing panel card's `bg`+`cornerRadius` onto the content
+tiles it encloses (a leaf tile DOES render a bg in tiled mode), instead of letting
+the card go transparent. The full-frame **page** background (a rect ≥80% of the
+dashboard area) is skipped — the page colour stays via the dashboard's outer
+zone-style; smaller inner cards are applied last so they win; image tiles are
+left alone (bitmaps draw their own pixels); a tile that already has its own
+distinct colour is not overwritten. Pure-leaf decorative rects (dividers/chips
+that enclose nothing) stay as `empty` tiles. **Default stays floating** (the
+Tableau-confirmed pixel-exact path) and `applyFlowLayout` falls back to floating
+on any failure, so flow mode can never regress exact mode. Covered by
+`test/faithful_flow_smoke.ts` (tiled root, nested layout-flow, all content zones
+placed, NO container background, **a colored KPI panel's colour propagated to its
+tile**, load-safe; floating default unchanged). The toggle is wired through a
+`flowRef` in `App.tsx` (the once-registered handler reads the latest choice).
+⚠️ **Generated + well-formed + DOMParser-clean, NOT yet opened in the user's
+Tableau** — first real test: tick the box, export an Auto-Layout design, open in
+2026.2, compare reflow vs the floating export. The remaining flow imperfection vs
+floating: a panel colour is reproduced per-tile (the gaps BETWEEN tiles aren't
+coloured), and tiles don't move with the panel on manual window-resize. v2 for
+exact panels would wrap a card region in a nested `layout-basic` (confirmed
+nestable inside `layout-flow` in `Navigation Menu Example.twb`) carrying the bg as
+a filling leaf `empty` zone + the content as absolute children.
+
+**Navigation — BUILT (`nav-button-39`), via the NATIVE button object.** The
+authoritative mechanism is **LaDataViz's own `multi.twbx`**, NOT the older
+`Navigation Menu Example.twb`: LaDataViz uses a **native Tableau navigation
+button** — a `<zone type-v2='dashboard-object'>` whose child is
+`<button action='tabdoc:goto-sheet window-id=&quot;{UUID}&quot;' button-type='text'>`
++ `<button-visual-state>` (caption / `button-caption-font-style` / background-
+color) + a borderless margin-only `<zone-style>`. The `window-id` is the TARGET
+dashboard window's `<simple-id uuid>`. (The `nav-action` worksheet-as-button
+approach in `Navigation Menu Example.twb` is the OLD technique and was NOT used.)
+
+How our build works:
+- `faithful.ts walk()` now has a `BUTTON/` branch (like SHEET//FILTER/): a layer
+  named **`BUTTON/anything > TargetDashboard`** (or `->`) emits a `button`
+  FaithfulZone and does NOT recurse. **The caption is the text the designer drew
+  INSIDE the button** (`firstTextStyle()` reads the child TEXT's characters +
+  color + size), falling back to the layer-name label only when there's no inner
+  text; the **target** comes from the layer name's `> Target` part
+  (`parseButtonName()`). The button's own fill is the background.
+- `seed.ts buildFaithfulDashboard` maps it to a `button` ZoneSpec; a post-pass in
+  `assembleFaithfulWorkbook` **resolves the target** once all dashboards exist:
+  explicit `> Target` honored only on a real (case-insensitive) dashboard match;
+  no explicit target + exactly 2 dashboards → the OTHER one (A↔B toggle); >2 →
+  next with wrap. A button never targets its own dashboard. Unresolvable → target
+  cleared → renders as a **styled text zone** (load-safe, just non-navigating).
+- `workbookGenerator.ts`: `generateWorkbookXml` assigns each dashboard a **STABLE
+  window uuid** (`dashUuid`) up front, threaded into BOTH the button
+  (`window-id`) and the dashboard window's `<simple-id>` (`windowsXml`).
+  `emitZone` emits the native `dashboard-object` button **only when the target
+  resolves**; `manifestXml` adds **`BasicButtonObject` + `BasicButtonObjectText
+  Support`** (required feature flags, confirmed in `multi.twbx`) only when a nav
+  button is present (button-free workbooks stay byte-identical).
+- Covered by `test/faithful_nav_smoke.ts`: 2 frames, a button targets the other
+  dashboard, the `goto-sheet window-id` matches that dashboard window's
+  `simple-id` exactly, the manifest flags are present, an unresolvable target
+  falls back to a text zone, load-safe (windows / no shelf-sorts / no NaN).
+
+⚠️ **Generated + well-formed + structurally byte-identical to LaDataViz's
+confirmed `multi.twbx` button, but NOT YET opened in the user's Tableau.** First
+real test: make a button frame whose inner text is the caption, name the frame
+`BUTTON/x > <other frame name>` (or just `BUTTON/x` with 2 frames selected),
+export both frames, open in 2026.2, click the button — it should switch
+dashboards.
 
 **Worksheet swap = import the user's REAL sheets — BUILT (`import-swap-34`).**
 "Swap" means: import worksheets the user already built (in an existing `.twbx`)
@@ -469,9 +565,16 @@ data (today the import wins).
   Profit dataset, not the user's real data (Tableau needs a data source; bind via
   the Data tab or a future feature). This is inherent to the approach.
 - **No descending bar sort** (shelf-sorts is a load-killer; see §7).
-- **Mark color is uniform gray** to match `multi.twbx`. An open offer to the user:
-  pull the *actual fill color from each Figma layer* so a blue chart exports blue
-  (design-color route) instead of LaDataViz's gray. Not yet done.
+- **Mark color: design-color route is BUILT (`nav-button-39`).** `faithful.ts
+  dominantChartColor()` samples the most vivid solid/gradient fill the designer
+  drew INSIDE each `SHEET/` layer (skipping the card's white/near-black/low-sat
+  background) and passes it as `FaithfulZone.markColor`; `seed.ts` uses it as the
+  worksheet mark color, **falling back to the LaDataViz gray `#898989` only when
+  no confident colored fill is found**. So a blue mock now exports a blue chart.
+  Covered by an assertion in `test/faithful_capture_smoke.ts` (a blue bar inside
+  a `SHEET/` → mark color `#2166DB`, not gray). ⚠️ Generated/well-formed; the
+  visual result still wants a Tableau eyeball, but it's load-identical to the gray
+  path (only the `mark-color` hex differs).
 - Floating layout (absolute Figma px) won't perfectly match LaDataViz's nested
   `layout-flow` spacing; minor cosmetic quirks remain (e.g. detached area-axis
   label strip). Routing faithful zones through the container/geometric-layout

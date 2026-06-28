@@ -66,9 +66,21 @@ function esc(s: unknown): string {
  * we UNION any entries the import carries into our base set — a missing entry
  * can break the imported datasource's object graph on load.
  */
+/** True when any dashboard carries a navigation button with a resolved target. */
+function hasNavButton(spec: WorkbookSpec): boolean {
+  return spec.dashboards.some((d) => d.zones.some((z) => z.kind === "button" && !!z.targetDashboard));
+}
+
 function manifestXml(spec: WorkbookSpec): string {
   const entries = new Set<string>(MANIFEST_ENTRIES);
   if (spec.imports) for (const e of spec.imports.manifestEntries) entries.add(e);
+  // Native navigation buttons (type-v2='dashboard-object' + <button>) require
+  // these feature flags — confirmed from LaDataViz's multi.twbx. Added only when
+  // a button is actually emitted, so button-free workbooks stay byte-identical.
+  if (hasNavButton(spec)) {
+    entries.add("BasicButtonObject");
+    entries.add("BasicButtonObjectTextSupport");
+  }
   return (
     "  <document-format-change-manifest>\n" +
     [...entries].map((e) => `    <${e} />\n`).join("") +
@@ -662,7 +674,8 @@ function cardStyle(bg = "#FFFFFF"): string {
 function dashboardXml(
   dash: DashboardSpec,
   dsName: string,
-  reg: Map<string, GenField>
+  reg: Map<string, GenField>,
+  dashUuid: Map<string, string>
 ): { xml: string; sheetNames: string[] } {
   const fw = dash.widthPx || 1280;
   const fh = dash.heightPx || 800;
@@ -766,8 +779,44 @@ function dashboardXml(
         )
       );
       o.push("        </zone>\n");
+    } else if (z.kind === "button" && z.targetDashboard && dashUuid.get(z.targetDashboard)) {
+      // Native Tableau navigation button — copied VERBATIM from LaDataViz's
+      // multi.twbx: a type-v2='dashboard-object' zone whose <button> action is
+      // `tabdoc:goto-sheet window-id="{UUID}"`, where the UUID is the TARGET
+      // dashboard window's <simple-id> (see windowsXml). button-type='text' shows
+      // the caption; the visual state carries caption/font/background.
+      const targetUuid = dashUuid.get(z.targetDashboard)!;
+      const caption = z.text || z.targetDashboard;
+      const fontcolor = z.fg || "#FFFFFF";
+      const bg = z.bg || "#2563EB";
+      const fontsize = Math.max(7, Math.round(z.fontSize || 12));
+      o.push(
+        `        <zone${fn}${fix} h='${H}' id='${nid()}' type-v2='dashboard-object' w='${W}' x='${X}' y='${Y}'>\n`
+      );
+      o.push(
+        `          <button action='tabdoc:goto-sheet window-id=&quot;${esc(targetUuid)}&quot;' button-type='text'>\n`
+      );
+      o.push("            <button-visual-state>\n");
+      o.push(`              <caption>${esc(caption)}</caption>\n`);
+      o.push(
+        `              <button-caption-font-style fontcolor='${fontcolor}' fontname='${esc(
+          safeFont(z.fontFamily)
+        )}' fontsize='${fontsize}' />\n`
+      );
+      o.push(`              <format attr='background-color' value='${bg}' />\n`);
+      o.push("            </button-visual-state>\n");
+      o.push("          </button>\n");
+      // Borderless margin-only zone-style, exactly as in the reference.
+      o.push("          <zone-style>\n");
+      o.push("            <format attr='border-color' value='#000000' />\n");
+      o.push("            <format attr='border-style' value='none' />\n");
+      o.push("            <format attr='border-width' value='0' />\n");
+      o.push("            <format attr='margin' value='4' />\n");
+      o.push("          </zone-style>\n");
+      o.push("        </zone>\n");
     } else {
-      // text and button (button rendered as a styled text zone — load-safe)
+      // text and button (a button with no resolvable target renders as a styled
+      // text zone — load-safe, just non-navigating)
       const isButton = z.kind === "button";
       o.push(`        <zone${fn}${fix} h='${H}' id='${nid()}' type-v2='text' w='${W}' x='${X}' y='${Y}'>\n`);
       o.push("          <formatted-text>\n");
@@ -922,7 +971,10 @@ function dashboardXml(
 const WS_CARDS =
   "      <cards>\n        <edge name='left'>\n          <strip size='160'>\n            <card type='pages' />\n            <card type='filters' />\n            <card type='marks' />\n          </strip>\n        </edge>\n        <edge name='top'>\n          <strip size='2147483647'>\n            <card type='columns' />\n          </strip>\n          <strip size='2147483647'>\n            <card type='rows' />\n          </strip>\n          <strip size='30'>\n            <card type='title' />\n          </strip>\n        </edge>\n      </cards>\n";
 
-function windowsXml(wsNames: string[], dashboards: { name: string; sheets: string[] }[]): string {
+function windowsXml(
+  wsNames: string[],
+  dashboards: { name: string; sheets: string[]; uuid: string }[]
+): string {
   const x: string[] = ["  <windows source-height='44'>\n"];
   for (const nm of wsNames) {
     x.push(`    <window class='worksheet' name='${esc(nm)}'>\n`);
@@ -948,7 +1000,10 @@ function windowsXml(wsNames: string[], dashboards: { name: string; sheets: strin
       );
     x.push("      </viewpoints>\n");
     x.push("      <active id='-1' />\n");
-    x.push(`      <simple-id uuid='${uid()}' />\n`);
+    // STABLE uuid (not a fresh uid()) so a navigation button's
+    // `window-id` can target this dashboard window. See dashUuid in
+    // generateWorkbookXml.
+    x.push(`      <simple-id uuid='${d.uuid}' />\n`);
     x.push("    </window>\n");
   }
   x.push("  </windows>\n");
@@ -1018,7 +1073,14 @@ export function generateWorkbookXml(spec: WorkbookSpec, dataDirectory: string): 
         filtersByWs.set(z.worksheet, s);
       }
 
-  const dashOut = spec.dashboards.map((d) => dashboardXml(d, ds.dsName, reg));
+  // Assign each dashboard a STABLE window uuid up front: a navigation button's
+  // `window-id` must reference its target dashboard window's <simple-id>, so the
+  // same uuid has to flow into both the button (dashboardXml) and the dashboard
+  // window (windowsXml).
+  const dashUuid = new Map<string, string>();
+  for (const d of spec.dashboards) dashUuid.set(d.name, uid());
+
+  const dashOut = spec.dashboards.map((d) => dashboardXml(d, ds.dsName, reg, dashUuid));
   // Imported (real) worksheets are spliced verbatim; their names join the window
   // list so each gets a standard worksheet <window> (load-safe) and shows up in
   // the dashboard viewpoints alongside our generated sheets.
@@ -1054,7 +1116,11 @@ export function generateWorkbookXml(spec: WorkbookSpec, dataDirectory: string): 
   out.push(
     windowsXml(
       wsNames,
-      spec.dashboards.map((d, i) => ({ name: d.name, sheets: dashOut[i].sheetNames }))
+      spec.dashboards.map((d, i) => ({
+        name: d.name,
+        sheets: dashOut[i].sheetNames,
+        uuid: dashUuid.get(d.name)!,
+      }))
     )
   );
   out.push(actionsXml(spec));

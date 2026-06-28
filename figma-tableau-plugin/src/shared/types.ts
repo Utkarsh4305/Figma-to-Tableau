@@ -119,7 +119,10 @@ export interface FaithfulZone {
   // REAL Tableau worksheet bound to sample data (the LaDataViz convention seen
   // in Template.twbx), instead of being recreated as static text/rect/image.
   // "filter" is a layer tagged "FILTER/Field" — a real Tableau quick-filter card.
-  kind: "text" | "rect" | "image" | "sheet" | "filter" | "web";
+  // "button" is a layer tagged "BUTTON/Label[ > TargetDashboard]" — a native
+  // Tableau navigation button (type-v2='dashboard-object'), the LaDataViz move
+  // confirmed in multi.twbx.
+  kind: "text" | "rect" | "image" | "sheet" | "filter" | "web" | "button";
   x: number;
   y: number;
   w: number;
@@ -130,12 +133,22 @@ export interface FaithfulZone {
   // LaDataViz-style `:option` suffixes on a SHEET/ layer name (e.g.
   // "SHEET/Trend[line]:showTitle:filter"). Confirmed-safe options only:
   showTitle?: boolean; // ":showTitle" — render the worksheet's title in its zone
+  // The design's own chart color, sampled from the most vivid fill the designer
+  // drew INSIDE the SHEET/ layer (bars / line / slice). Used as the worksheet's
+  // mark color so a blue mock exports a blue chart, instead of LaDataViz's
+  // uniform gray. Undefined when no confident colored fill is found (→ gray).
+  markColor?: string;
   actionKind?: "filter" | "highlight"; // ":filter" / ":highlight" — clicking this
   // sheet filters / highlights the rest of the dashboard (confirmed action XML)
   // filter (FILTER/-tagged layer): the dimension the quick-filter card is on
   filterField?: string;
   // web (URL/-tagged layer): the page URL the web object loads
   url?: string;
+  // button (BUTTON/-tagged layer): the caption shown on the navigation button
+  // and the raw target name (the dashboard/frame to navigate to, parsed from the
+  // part after ">"/"->"; resolved to a real dashboard name in seed.ts).
+  label?: string;
+  target?: string;
   // rect
   fill?: string; // hex background
   cornerRadius?: number;

@@ -6,7 +6,7 @@ import { exportSpecTwbx } from "../plugin/exporter";
 import { parseImport, type ParsedImport } from "../plugin/twbImport";
 import DashboardPreview from "./DashboardPreview";
 
-const BUILD = "multi-dashboard-37";
+const BUILD = "floating-only-42";
 
 type Status = { kind: "ok" | "err" | "warn"; text: string } | null;
 
@@ -70,7 +70,6 @@ export default function App() {
   const pendingFaithfulRef = useRef(false);
   const modelRef           = useRef<DashboardModel | null>(null);
   modelRef.current = model;
-
   useEffect(() => {
     const handler = (event: MessageEvent) => {
       const msg = event.data.pluginMessage as PluginToUi | undefined;
@@ -87,7 +86,11 @@ export default function App() {
         const models = msg.models;
         void (async () => {
           try {
-            // One dashboard per selected frame (multi-dashboard export).
+            // One dashboard per selected frame (multi-dashboard export). Always
+            // pixel-exact FLOATING — the layout that matches the Figma design
+            // exactly. (Responsive layout-flow reflows/reshapes the design, so it
+            // was removed from the UI; faithfulSpecMulti still supports 'flow' for
+            // tests, but the export never requests it.)
             const fSpec   = faithfulSpecMulti(models);
             // Worksheet swap: if the user uploaded their real .twbx, replace any
             // SHEET/ placeholder whose name matches an imported worksheet with

@@ -257,6 +257,19 @@ function uniqNameIn(ctx: FaithfulCtx, base: string): string {
   return n;
 }
 
+/** Resolve a list of dashboard titles to UNIQUE names ("X", "X 2", "X 3", …). */
+function uniqueDashNames(titles: string[]): string[] {
+  const seen = new Set<string>();
+  return titles.map((raw) => {
+    const base = (raw || "Dashboard").slice(0, 80) || "Dashboard";
+    let n = base;
+    let i = 2;
+    while (seen.has(n)) n = `${base.slice(0, 76)} ${i++}`;
+    seen.add(n);
+    return n;
+  });
+}
+
 /**
  * Build ONE dashboard from a faithful model, pushing its worksheets/actions into
  * the shared `ctx`. text -> text zones, shapes -> colored `empty` zones, icons ->
@@ -264,8 +277,7 @@ function uniqNameIn(ctx: FaithfulCtx, base: string): string {
  * sample data (mark from the [type] tag). FILTER/ cards are bound to a host sheet
  * by the caller (it needs the whole dashboard's sheets resolved first).
  */
-function buildFaithfulDashboard(model: FaithfulModel, ctx: FaithfulCtx): DashboardSpec {
-  const dashName = (model.title || "Dashboard").slice(0, 80);
+function buildFaithfulDashboard(model: FaithfulModel, ctx: FaithfulCtx, dashName: string): DashboardSpec {
 
   // Make each chart cover the CONTAINER it sits in: if a rect (a Figma card
   // frame) snugly contains a SHEET zone, grow the sheet to that card's bounds,
@@ -313,11 +325,13 @@ function buildFaithfulDashboard(model: FaithfulModel, ctx: FaithfulCtx): Dashboa
         dimension,
         measures: [{ field: measure, agg: "Sum" }],
         dualAxis: false,
-        // Neutral gray marks, matching the LaDataViz reference (multi.twbx uses
-        // #898989 for every sheet). Value labels are on for all marks; the pane
-        // chooses "all" for bars and "line-ends" for line/area so only the end
-        // value is shown (the single ranked number in the reference).
-        markColor: "#898989",
+        // Mark color: prefer the DESIGN's own chart color (sampled from the most
+        // vivid fill inside the SHEET/ layer) so a blue mock exports a blue chart;
+        // fall back to the LaDataViz neutral gray (#898989, used for every sheet
+        // in multi.twbx) when the design had no confident colored fill. Value
+        // labels are on for all marks; the pane chooses "all" for bars and
+        // "line-ends" for line/area so only the end value shows.
+        markColor: z.markColor || "#898989",
         showLabels: true,
       });
       // ":filter" / ":highlight" suffix -> a dashboard action sourced from this
@@ -346,6 +360,26 @@ function buildFaithfulDashboard(model: FaithfulModel, ctx: FaithfulCtx): Dashboa
     if (z.kind === "web") {
       // Real Tableau web page object (type-v2='web').
       return { id: nextId("z"), kind: "web" as const, ...base, url: z.url };
+    }
+    if (z.kind === "button") {
+      // Native Tableau navigation button. `targetDashboard` holds the RAW target
+      // string parsed from the layer name; assembleFaithfulWorkbook resolves it to
+      // a real dashboard name once every dashboard is known. Until then it may be
+      // undefined (a button with no resolvable target falls back to a styled text
+      // zone in the generator — still load-safe).
+      return {
+        id: nextId("z"),
+        kind: "button" as const,
+        ...base,
+        text: z.label || z.name || "Button",
+        targetDashboard: z.target,
+        bg: z.fill || "#2563EB",
+        fg: z.fontColor || "#FFFFFF",
+        fontSize: z.fontSize ? Math.round(z.fontSize) : 13,
+        cornerRadius: z.cornerRadius,
+        bold: true,
+        align: 1,
+      };
     }
     if (z.kind === "text") {
       return {
@@ -394,11 +428,90 @@ function buildFaithfulDashboard(model: FaithfulModel, ctx: FaithfulCtx): Dashboa
   };
 }
 
+/** A content zone (vs. a purely decorative rect / background). */
+function isContentZone(z: ZoneSpec): boolean {
+  return z.kind === "sheet" || z.kind === "text" || z.kind === "image" || z.kind === "filter" || z.kind === "web";
+}
+
+/**
+ * Convert a FLOATING faithful dashboard into a RESPONSIVE one built from nested
+ * Tableau `layout-flow` containers (the LaDataViz structure — its multi.twbx
+ * nests 31 flow containers). We reuse the proven guillotine engine
+ * (`inferLayoutTree`) + the generator's tiled path, both already shipping on the
+ * heuristic path.
+ *
+ * Two faithful-specific cleanups first, because flow containers TILE (they can't
+ * overlap) and — confirmed from every reference — a `layout-flow` zone may NOT
+ * carry a background:
+ *   1. Drop the full-frame background + any rect that ENCLOSES another content
+ *      zone (a card/panel background). Otherwise it would overlap its contents in the
+ *      flow, and we can't represent it as a container background. The page colour
+ *      still comes from the dashboard's own outer zone-style; each chart keeps its
+ *      white card via the tiled sheet `cardStyle`.
+ *   2. Keep pure-leaf decorative rects (dividers / chips that enclose nothing) —
+ *      they tile cleanly as `empty` zones.
+ *
+ * Mutates the dashboard in place. On any failure (or too few zones to tile) it
+ * leaves the dashboard FLOATING — the Tableau-confirmed default — so flow mode
+ * can never produce a worse result than exact mode.
+ */
+function applyFlowLayout(dash: DashboardSpec): void {
+  const encloses = (r: ZoneSpec, o: ZoneSpec) =>
+    r.x <= o.x + 2 && r.y <= o.y + 2 && r.x + r.w >= o.x + o.w - 2 && r.y + r.h >= o.y + o.h - 2;
+
+  // A `layout-flow` container can't carry a background (confirmed: 0 references
+  // do), so an enclosing card/panel rect is dropped. But rather than LOSE its
+  // colour, PROPAGATE the card's background + corner onto the content tiles it
+  // encloses — a leaf tile (sheet/text/kpi/filter) DOES render a background in
+  // tiled mode, so the cards visually survive instead of going transparent. The
+  // full-frame page background (a rect covering most of the dashboard) is skipped
+  // (the page colour comes from the dashboard's own outer zone-style); only real
+  // panel cards propagate. Smaller (inner) cards are applied last so they win.
+  const dashArea = Math.max(1, dash.widthPx * dash.heightPx);
+  const enclosingCards = dash.zones
+    .filter((z) => z.kind === "rect" && dash.zones.some((o) => o !== z && isContentZone(o) && encloses(z, o)))
+    .sort((a, b) => b.w * b.h - a.w * a.h); // largest first
+  for (const card of enclosingCards) {
+    if (!card.bg || card.w * card.h >= dashArea * 0.8) continue; // skip the page bg
+    for (const o of dash.zones) {
+      if (o === card || !isContentZone(o) || o.kind === "image" || !encloses(card, o)) continue;
+      // Only fill a tile that has no distinct colour of its own (default white).
+      if (!o.bg || o.bg === "#FFFFFF" || o.bg === "#FFFFFFFF") o.bg = card.bg;
+      if (o.cornerRadius == null) o.cornerRadius = card.cornerRadius;
+    }
+  }
+  const dropIds = new Set(enclosingCards.map((c) => c.id));
+  const kept = dash.zones.filter((z) => !dropIds.has(z.id));
+  // Need at least two tiles and at least one real content zone to bother tiling.
+  if (kept.length < 2 || !kept.some(isContentZone)) return;
+  let root: ContainerSpec | undefined;
+  try {
+    root = inferLayoutTree(kept);
+  } catch {
+    root = undefined;
+  }
+  if (!root) return;
+  dash.zones = kept; // dropped rects must NOT linger (they'd float on top)
+  dash.layoutMode = "tiled";
+  dash.root = root;
+}
+
 /** Assemble a faithful workbook from one OR MORE models (one dashboard each). */
-function assembleFaithfulWorkbook(models: FaithfulModel[]): WorkbookSpec {
+function assembleFaithfulWorkbook(
+  models: FaithfulModel[],
+  opts?: { layout?: "flow" | "floating" }
+): WorkbookSpec {
   const { fields, rows } = sampleData();
   const ctx: FaithfulCtx = { worksheets: [], actions: [], used: new Set(), imgN: 0, sheetN: 0 };
-  const dashboards = models.map((m) => buildFaithfulDashboard(m, ctx));
+  // Dashboard names must be UNIQUE across the workbook: Tableau's <windows>
+  // section enforces a unique-name (and unique simple-id) identity constraint, so
+  // two frames named the same (e.g. several "Data Metrics") would otherwise fail
+  // to load with D2E8DA72 "duplicate identity constraint". Resolve to unique names
+  // up front so dashName flows consistently into the spec, actions, nav targets,
+  // and the per-dashboard window uuid.
+  const resolvedDashNames = uniqueDashNames(models.map((m) => m.title || "Dashboard"));
+  const dashboards = models.map((m, i) => buildFaithfulDashboard(m, ctx, resolvedDashNames[i]));
+  if (opts?.layout === "flow") for (const d of dashboards) applyFlowLayout(d);
 
   // A workbook needs >=1 worksheet. If NO design had a SHEET/-tagged layer, keep
   // one unplaced dummy so the faithful (text/shape) export still opens.
@@ -423,6 +536,39 @@ function assembleFaithfulWorkbook(models: FaithfulModel[]): WorkbookSpec {
     for (const zn of dash.zones) if (zn.kind === "filter" && !zn.worksheet) zn.worksheet = host;
   }
 
+  // Resolve each navigation button's target to a REAL dashboard name now that all
+  // dashboards exist. Match priority: (1) an explicit target (after ">"/"->" in
+  // the layer name) that names another dashboard, case-insensitively; (2) when
+  // there are exactly two dashboards, the OTHER one (the obvious A↔B toggle);
+  // (3) the next dashboard in order (wrap-around). A button never targets its own
+  // dashboard. If nothing resolves, targetDashboard is cleared and the generator
+  // renders the button as a styled text zone (no navigation) — still load-safe.
+  const dashNames = dashboards.map((d) => d.name);
+  const findDash = (raw: string | undefined): string | undefined => {
+    if (!raw) return undefined;
+    const t = raw.trim().toLowerCase();
+    return dashNames.find((n) => n.toLowerCase() === t) ?? dashNames.find((n) => n.toLowerCase().includes(t));
+  };
+  for (let di = 0; di < dashboards.length; di++) {
+    const dash = dashboards[di];
+    for (const zn of dash.zones) {
+      if (zn.kind !== "button") continue;
+      const raw = zn.targetDashboard;
+      let target: string | undefined;
+      if (raw) {
+        // Explicit "> Target": only honor a real dashboard match. A typo / a
+        // target that doesn't exist is left UNresolved (plain button) rather than
+        // silently navigating somewhere unexpected.
+        target = findDash(raw);
+      } else if (dashboards.length === 2) {
+        target = dashNames[(di + 1) % 2]; // the obvious A↔B toggle
+      } else if (dashboards.length > 2) {
+        target = dashNames[(di + 1) % dashNames.length]; // next, wrap around
+      }
+      zn.targetDashboard = target && target !== dash.name ? target : undefined;
+    }
+  }
+
   const first = models[0];
   return {
     workbookName: (first?.title || "Workbook").replace(/[\\/:*?"<>|]+/g, " ").trim() || "Workbook",
@@ -435,18 +581,23 @@ function assembleFaithfulWorkbook(models: FaithfulModel[]): WorkbookSpec {
   };
 }
 
+/** Layout strategy for a faithful export. */
+export type FaithfulLayout = "flow" | "floating";
+
 /** Single-frame faithful workbook (one dashboard). */
-export function faithfulSpec(model: FaithfulModel): WorkbookSpec {
-  return assembleFaithfulWorkbook([model]);
+export function faithfulSpec(model: FaithfulModel, layout: FaithfulLayout = "floating"): WorkbookSpec {
+  return assembleFaithfulWorkbook([model], { layout });
 }
 
 /**
  * Multi-frame faithful workbook: each selected Figma frame becomes its own
  * Tableau dashboard, all sharing the one sample dataset, with worksheet names and
- * image filenames kept unique across every dashboard.
+ * image filenames kept unique across every dashboard. `layout='flow'` builds
+ * responsive nested layout-flow containers; the default `'floating'` keeps the
+ * Tableau-confirmed pixel-exact absolute layout.
  */
-export function faithfulSpecMulti(models: FaithfulModel[]): WorkbookSpec {
-  return assembleFaithfulWorkbook(models);
+export function faithfulSpecMulti(models: FaithfulModel[], layout: FaithfulLayout = "floating"): WorkbookSpec {
+  return assembleFaithfulWorkbook(models, { layout });
 }
 
 export function seedSpecFromModel(model: DashboardModel): WorkbookSpec {

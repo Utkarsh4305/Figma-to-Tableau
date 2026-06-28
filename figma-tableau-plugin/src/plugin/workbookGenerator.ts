@@ -959,10 +959,20 @@ function windowsXml(wsNames: string[], dashboards: { name: string; sheets: strin
 // highlight = tsc:brush (no group, safest); filter = tsc:tsl-filter (its hidden
 // sheet_link group is emitted in the datasource by actionGroupsXml).
 
-function actionsXml(spec: WorkbookSpec, dashboardName: string): string {
+function actionsXml(spec: WorkbookSpec): string {
   if (!spec.includeActions || spec.actions.length === 0) return "";
   const runType = (a: { runOn: string }) =>
     a.runOn === "hover" ? "on-hover" : a.runOn === "menu" ? "on-menu" : "on-select";
+  // Map each worksheet to the dashboard it is placed on, so a filter action's
+  // `<source dashboard=...>` names the dashboard its source sheet actually lives
+  // on (critical once an export carries MULTIPLE dashboards). Falls back to the
+  // first dashboard for any sheet not placed on one.
+  const fallback = spec.dashboards[0]?.name ?? "Dashboard";
+  const sheetDash = new Map<string, string>();
+  for (const d of spec.dashboards)
+    for (const z of d.zones)
+      if (z.kind === "sheet" && z.worksheet && !sheetDash.has(z.worksheet)) sheetDash.set(z.worksheet, d.name);
+  const dashOf = (sheet: string) => sheetDash.get(sheet) ?? fallback;
   const x: string[] = ["  <actions>\n"];
   let n = 0;
   for (const a of spec.actions) {
@@ -977,11 +987,12 @@ function actionsXml(spec: WorkbookSpec, dashboardName: string): string {
       x.push(`        <param name='target' value='${esc(a.target || a.sourceSheet)}' />\n`);
       x.push("      </command>\n");
     } else {
-      // filter
-      x.push(`      <source dashboard='${esc(dashboardName)}' type='sheet' worksheet='${esc(a.sourceSheet)}' />\n`);
+      // filter — sourced from the dashboard holding the source sheet
+      const srcDash = dashOf(a.sourceSheet);
+      x.push(`      <source dashboard='${esc(srcDash)}' type='sheet' worksheet='${esc(a.sourceSheet)}' />\n`);
       x.push("      <command command='tsc:tsl-filter'>\n");
       x.push("        <param name='special-fields' value='all' />\n");
-      x.push(`        <param name='target' value='${esc(a.target || dashboardName)}' />\n`);
+      x.push(`        <param name='target' value='${esc(a.target || srcDash)}' />\n`);
       x.push("      </command>\n");
     }
     x.push("    </action>\n");
@@ -1046,7 +1057,7 @@ export function generateWorkbookXml(spec: WorkbookSpec, dataDirectory: string): 
       spec.dashboards.map((d, i) => ({ name: d.name, sheets: dashOut[i].sheetNames }))
     )
   );
-  out.push(actionsXml(spec, spec.dashboards[0]?.name ?? "Dashboard"));
+  out.push(actionsXml(spec));
   out.push("</workbook>\n");
   return out.join("");
 }

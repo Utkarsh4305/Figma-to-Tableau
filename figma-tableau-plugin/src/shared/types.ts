@@ -210,7 +210,9 @@ export interface MsgAddSheets {
 
 export interface MsgFaithfulReady {
   type: "faithful-ready";
-  model: FaithfulModel | null;
+  // One model per selected frame — each becomes its own Tableau dashboard in the
+  // exported workbook (multi-dashboard export). Null on error.
+  models: FaithfulModel[] | null;
   error?: string;
 }
 

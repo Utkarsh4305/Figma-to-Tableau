@@ -403,9 +403,8 @@ function findFrame(): SceneNode | undefined {
     | undefined;
 }
 
-export function parseFaithful(): FaithfulModel {
-  const frame = findFrame();
-  if (!frame) throw new Error("Select a frame (or have at least one frame on the page) to convert.");
+/** Faithfully transpile ONE frame into a FaithfulModel (one dashboard). */
+function buildModelForFrame(frame: SceneNode): FaithfulModel {
   const bb =
     (frame as SceneNode & { absoluteBoundingBox?: Rect | null }).absoluteBoundingBox ?? {
       x: frame.x,
@@ -433,6 +432,72 @@ export function parseFaithful(): FaithfulModel {
     background: bg?.hex,
     zones,
   };
+}
+
+export function parseFaithful(): FaithfulModel {
+  const frame = findFrame();
+  if (!frame) throw new Error("Select a frame (or have at least one frame on the page) to convert.");
+  return buildModelForFrame(frame);
+}
+
+/** Resolve a selected node to the outermost frame-like ancestor (or itself). */
+function resolveFrame(node: SceneNode): SceneNode | undefined {
+  if (isFrameLike(node)) return node;
+  let p: BaseNode | null = node.parent;
+  let outer: SceneNode | undefined;
+  while (p && p.type !== "PAGE" && p.type !== "DOCUMENT") {
+    if (isFrameLike(p)) outer = p as SceneNode;
+    p = p.parent;
+  }
+  if (outer) return outer;
+  // A bare group selection with no frame ancestor: transpile it as-is.
+  return "children" in node ? node : undefined;
+}
+
+function bbTopLeft(n: SceneNode): { x: number; y: number } {
+  const bb = (n as SceneNode & { absoluteBoundingBox?: Rect | null }).absoluteBoundingBox;
+  return bb ? { x: bb.x, y: bb.y } : { x: n.x, y: n.y };
+}
+
+/**
+ * Every distinct frame the export should cover — one Tableau dashboard each.
+ * The user's SELECTION drives it: select N frames → N dashboards (LaDataViz's
+ * multi-dashboard workflow). Children of the same frame collapse to that frame;
+ * results are de-duplicated and ordered top-to-bottom, left-to-right (reading
+ * order) so dashboards come out in a predictable sequence. With nothing usable
+ * selected we fall back to the single-frame behaviour (first frame on the page).
+ */
+function collectFrames(): SceneNode[] {
+  const out: SceneNode[] = [];
+  const seen = new Set<string>();
+  for (const n of figma.currentPage.selection) {
+    const f = resolveFrame(n as SceneNode);
+    if (f && !seen.has(f.id)) {
+      seen.add(f.id);
+      out.push(f);
+    }
+  }
+  if (out.length === 0) {
+    const f = findFrame();
+    if (f) out.push(f);
+  }
+  out.sort((a, b) => {
+    const pa = bbTopLeft(a);
+    const pb = bbTopLeft(b);
+    return pa.y - pb.y || pa.x - pb.x;
+  });
+  return out;
+}
+
+/**
+ * Transpile EVERY selected frame — one FaithfulModel (→ one Tableau dashboard)
+ * per frame. This is the multi-dashboard entry point; `parseFaithful()` stays as
+ * the single-frame transpile used by the capture tests.
+ */
+export function parseFaithfulAll(): FaithfulModel[] {
+  const frames = collectFrames();
+  if (!frames.length) throw new Error("Select one or more frames to convert.");
+  return frames.map(buildModelForFrame);
 }
 
 // --- image rasterization (sandbox) ------------------------------------------

@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import { parseSelection, attachImages, applyAutoTags } from "./parser";
-import { parseFaithful, attachFaithfulImages } from "./faithful";
+import { parseFaithfulAll, attachFaithfulImages } from "./faithful";
 import type { UiToPlugin, PluginToUi } from "../shared/types";
 import { UI_SIZE } from "../shared/constants";
 
@@ -43,19 +43,22 @@ async function applyTagsAndResend(): Promise<void> {
   }
 }
 
-// Faithful transpile: recreate the whole frame as native zones, rasterizing
-// icons/vectors. Best-effort images must not block the model.
+// Faithful transpile: recreate every SELECTED frame as native zones (one Tableau
+// dashboard each), rasterizing icons/vectors. Best-effort images must not block
+// the models.
 async function sendFaithful(): Promise<void> {
   try {
-    const model = parseFaithful();
-    try {
-      await attachFaithfulImages(model);
-    } catch {
-      /* some images just won't render */
+    const models = parseFaithfulAll();
+    for (const m of models) {
+      try {
+        await attachFaithfulImages(m);
+      } catch {
+        /* some images just won't render */
+      }
     }
-    post({ type: "faithful-ready", model });
+    post({ type: "faithful-ready", models });
   } catch (e) {
-    post({ type: "faithful-ready", model: null, error: (e as Error).message });
+    post({ type: "faithful-ready", models: null, error: (e as Error).message });
   }
 }
 

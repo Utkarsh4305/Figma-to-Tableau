@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { DashboardModel, PluginToUi, UiToPlugin } from "../shared/types";
 import type { WorkbookSpec } from "../shared/spec";
-import { seedSpecFromModel, blankSpec, faithfulSpec } from "../plugin/seed";
+import { seedSpecFromModel, blankSpec, faithfulSpecMulti } from "../plugin/seed";
 import { exportSpecTwbx } from "../plugin/exporter";
 import { parseImport, type ParsedImport } from "../plugin/twbImport";
 import DashboardPreview from "./DashboardPreview";
 
-const BUILD = "import-staging-36";
+const BUILD = "multi-dashboard-37";
 
 type Status = { kind: "ok" | "err" | "warn"; text: string } | null;
 
@@ -79,14 +79,16 @@ export default function App() {
       if (msg.type === "faithful-ready") {
         if (!pendingFaithfulRef.current) return;
         pendingFaithfulRef.current = false;
-        if (msg.error || !msg.model) {
-          setStatus({ kind: "err", text: msg.error || "Couldn't transpile this frame." });
+        if (msg.error || !msg.models || msg.models.length === 0) {
+          setStatus({ kind: "err", text: msg.error || "Couldn't transpile the selected frame(s)." });
           setBusy(false);
           return;
         }
+        const models = msg.models;
         void (async () => {
           try {
-            const fSpec   = faithfulSpec(msg.model!);
+            // One dashboard per selected frame (multi-dashboard export).
+            const fSpec   = faithfulSpecMulti(models);
             // Worksheet swap: if the user uploaded their real .twbx, replace any
             // SHEET/ placeholder whose name matches an imported worksheet with
             // that real sheet (on its real data) instead of a demo sample chart.
@@ -101,9 +103,11 @@ export default function App() {
               }
             }
             const res     = await exportSpecTwbx(fSpec);
-            const sheets  = msg.model!.zones.filter((z) => z.kind === "sheet").length;
-            const filters = msg.model!.zones.filter((z) => z.kind === "filter").length;
-            const webs    = msg.model!.zones.filter((z) => z.kind === "web").length;
+            const allZones = models.flatMap((m) => m.zones);
+            const sheets  = allZones.filter((z) => z.kind === "sheet").length;
+            const filters = allZones.filter((z) => z.kind === "filter").length;
+            const webs    = allZones.filter((z) => z.kind === "web").length;
+            const dashes  = fSpec.dashboards.length;
             const extra =
               (filters ? `, ${filters} filter(s)` : "") +
               (webs ? `, ${webs} web object(s)` : "") +
@@ -111,7 +115,7 @@ export default function App() {
               (fSpec.actions.length ? `, ${fSpec.actions.length} action(s)` : "");
             setStatus({
               kind: res.warnings.length ? "warn" : "ok",
-              text: `Exported — ${res.zoneCount} zones, ${sheets} worksheet(s)${extra}. Download started.`,
+              text: `Exported — ${dashes} dashboard(s), ${res.zoneCount} zones, ${sheets} worksheet(s)${extra}. Download started.`,
             });
             toPlugin({ type: "notify", message: ".twbx downloaded — check your downloads." });
           } catch (e) {

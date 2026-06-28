@@ -3,8 +3,8 @@
 > Self-contained context for any AI/engineer picking this up, **including on a
 > device without the local Claude memory**. It folds in the essential facts from
 > the private memory files (the Tableau 2026.2 recipe, the reference-export
-> workflow, and project state). Last updated: **2026-06-27**, build
-> `import-staging-36`.
+> workflow, and project state). Last updated: **2026-06-28**, build
+> `multi-dashboard-37`.
 
 ---
 
@@ -92,7 +92,17 @@ This path makes real worksheets from *detected* charts. It still exists but is
 
 ### B. Faithful transpile → `FaithfulModel` (`faithful.ts` → `seed.faithfulSpec`) — THE PRIMARY PATH
 `parseFaithful()` walks every visible node back-to-front and emits a flat
-`FaithfulZone[]` at absolute Figma px:
+`FaithfulZone[]` at absolute Figma px. **Multi-dashboard (`multi-dashboard-37`):**
+`parseFaithfulAll()` resolves **every selected frame** (children collapse to their
+frame, deduped, reading-order sorted) and returns one `FaithfulModel` PER frame;
+the `faithful-ready` message now carries `models: FaithfulModel[]`, and
+`seed.faithfulSpecMulti(models)` builds ONE `WorkbookSpec` with **one dashboard
+per frame** (shared sample dataset; worksheet names + image filenames kept unique
+across all dashboards). Select N frames → N Tableau dashboards. `parseFaithful()`
+/ `faithfulSpec(model)` remain as the single-frame path (byte-identical output;
+still used by the capture/feature tests).
+
+Per-frame `FaithfulZone[]`:
 - `TEXT` → `text` zone (real content, per-style `runs[]`, px→pt fonts).
 - shape/card/bar with a fill → `rect` zone (`type-v2='empty'` + 8-digit
   `#RRGGBBAA` bg).
@@ -312,6 +322,10 @@ current tag. Many "it's still broken" reports were just a stale build.
 - `faithful_capture_smoke.ts` — mocks a `figma` global, runs `parseFaithful()`,
   asserts px→pt fonts, grown short titles, 8-digit alpha fills, gradient
   resolution, rotated-bar fix, SemiBold-not-bold.
+- `faithful_multi_smoke.ts` — `faithfulSpecMulti([m1,m2])`: 2 frames → 2
+  dashboards, worksheet names + image filenames unique across dashboards, two
+  dashboard windows with the right per-window viewpoints, `:filter` action scoped
+  to its own dashboard, load-safe (windows/no-shelf-sorts/no-NaN).
 
 Floating `.twb` output was historically kept **byte-identical** across refactors,
 but the byte counts have since shifted intentionally as features landed (the
@@ -333,7 +347,9 @@ It sends `request-faithful`; the `faithful-ready` handler builds `faithfulSpec` 
 (`exportRealComponents`, `handleExport`) were **removed**, along with the
 background-image export mode and all its plumbing. The Export tab still has:
 workbook name, Tableau version, a re-read/auto-tag source card, and a summary
-table. Build tag is in `App.tsx` `const BUILD` (currently `filter-action-show-title-32`).
+table. Build tag is in `App.tsx` `const BUILD` (currently `multi-dashboard-37`).
+The export now covers **all selected frames** (one dashboard each); the status
+line reports the dashboard count.
 
 ---
 
@@ -371,15 +387,29 @@ table. Build tag is in `App.tsx` `const BUILD` (currently `filter-action-show-ti
   reference-confirmed in `Clinical Trials.twb`). Covered by
   `test/faithful_features_smoke.ts`.
 
-**Navigation — schema now known, but needs multi-dashboard support first.** The
-new `Navigation Menu Example.twb` reveals the mechanism: navigation is a
+**Multi-dashboard export — BUILT (`multi-dashboard-37`).** One Tableau dashboard
+per SELECTED Figma frame, all in one `.twbx` on the shared sample dataset.
+`faithful.ts parseFaithfulAll()` → `models: FaithfulModel[]` → `seed.faithfulSpecMulti`
+→ a `WorkbookSpec` with `dashboards[]` (the generator + `windowsXml` already
+emitted a `<dashboard>` + dashboard `<window>`/viewpoints per spec, so downstream
+needed no change). Worksheet names and `Image/` filenames are deduped GLOBALLY
+across dashboards; each dashboard's FILTER/ cards bind to a sheet on its OWN
+dashboard; `:filter` actions are scoped to the dashboard their source sheet lives
+on (`actionsXml` now resolves the source dashboard per action). Covered by
+`test/faithful_multi_smoke.ts` (2 frames → 2 dashboards, unique names, correct
+per-window viewpoints). ✅ **TABLEAU-CONFIRMED (2026-06-28):** the user selected
+2+ frames, exported, and both dashboards opened correctly in Tableau 2026.2 with
+their own sheets. This is a load-confirmed feature, not just well-formed.
+
+**Navigation — schema known, NOW UNBLOCKED by multi-dashboard, next up.** The
+`Navigation Menu Example.twb` reveals the mechanism: navigation is a
 **`<nav-action>`** sourced from a *worksheet zone* acting as a button, with
 `<params><param name='sheet' value='<target dashboard>' /></params>` (NOT a
-native `type-v2='navigation'` object — that appears nowhere). It only makes sense
-once an export contains **>1 dashboard** to move between; today one Figma frame →
-one dashboard, so `BUTTON/`→navigation and nav-actions are deferred until
-multi-frame export exists. (BUTTON/ still renders faithfully as its styled
-text/rect today.)
+native `type-v2='navigation'` object — that appears nowhere). Now that an export
+can contain **>1 dashboard** to move between, `BUTTON/`→navigation is the natural
+next feature: emit a `<nav-action>` per `BUTTON/` layer whose label/target names
+another dashboard frame. (BUTTON/ still renders faithfully as its styled
+text/rect today — no nav-action yet.)
 
 **Worksheet swap = import the user's REAL sheets — BUILT (`import-swap-34`).**
 "Swap" means: import worksheets the user already built (in an existing `.twbx`)

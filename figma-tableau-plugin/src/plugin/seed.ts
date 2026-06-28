@@ -14,6 +14,7 @@ import type {
   MarkType,
   ContainerSpec,
   LayoutNode,
+  ActionSpec,
 } from "../shared/spec";
 import { nextId, isContainer } from "../shared/spec";
 import { DOMAIN_KEYWORDS, DOMAIN_FIELDS } from "../shared/constants";
@@ -233,19 +234,38 @@ function filterDimFor(label: string | undefined): string {
   return "Region";
 }
 
-export function faithfulSpec(model: FaithfulModel): WorkbookSpec {
-  const { fields, rows } = sampleData();
+/**
+ * Shared mutable state while assembling a faithful workbook. Worksheet names and
+ * image filenames are WORKBOOK-global (Tableau maps windows/viewpoints + packaged
+ * Image/ files by name), so when several frames each become a dashboard their
+ * sheets/images must stay unique across ALL of them — this carries the running
+ * dedupe set + counters across every dashboard.
+ */
+interface FaithfulCtx {
+  worksheets: WorksheetSpec[];
+  actions: ActionSpec[];
+  used: Set<string>; // assigned worksheet names so far (dedupe across dashboards)
+  imgN: number; // running image counter → unique Image/<name>_<n>.png
+  sheetN: number; // running sheet counter → alternates the sample measure
+}
+
+function uniqNameIn(ctx: FaithfulCtx, base: string): string {
+  let n = (base || "Sheet").slice(0, 60);
+  let i = 2;
+  while (ctx.used.has(n)) n = `${(base || "Sheet").slice(0, 55)} ${i++}`;
+  ctx.used.add(n);
+  return n;
+}
+
+/**
+ * Build ONE dashboard from a faithful model, pushing its worksheets/actions into
+ * the shared `ctx`. text -> text zones, shapes -> colored `empty` zones, icons ->
+ * bitmaps; any "SHEET/Name[type]" layer becomes a REAL worksheet bound to the
+ * sample data (mark from the [type] tag). FILTER/ cards are bound to a host sheet
+ * by the caller (it needs the whole dashboard's sheets resolved first).
+ */
+function buildFaithfulDashboard(model: FaithfulModel, ctx: FaithfulCtx): DashboardSpec {
   const dashName = (model.title || "Dashboard").slice(0, 80);
-  const worksheets: WorksheetSpec[] = [];
-  const actions: import("../shared/spec").ActionSpec[] = [];
-  const used = new Set<string>();
-  const uniqName = (base: string): string => {
-    let n = (base || "Sheet").slice(0, 60);
-    let i = 2;
-    while (used.has(n)) n = `${(base || "Sheet").slice(0, 55)} ${i++}`;
-    used.add(n);
-    return n;
-  };
 
   // Make each chart cover the CONTAINER it sits in: if a rect (a Figma card
   // frame) snugly contains a SHEET zone, grow the sheet to that card's bounds,
@@ -276,19 +296,17 @@ export function faithfulSpec(model: FaithfulModel): WorkbookSpec {
   }
   const srcZones = model.zones.filter((z) => !dropped.has(z.id));
 
-  let imgN = 0;
-  let sheetN = 0;
   const zones: ZoneSpec[] = srcZones.map((z) => {
     const base = { x: z.x, y: z.y, w: z.w, h: z.h, friendlyName: z.name };
     if (z.kind === "sheet") {
-      const wsName = uniqName(z.sheetName || z.name || "Sheet");
+      const wsName = uniqNameIn(ctx, z.sheetName || z.name || "Sheet");
       const mark = markTypeOf(z.chart);
       // Alternate the measure so adjacent sample charts aren't identical.
-      const measure = sheetN++ % 2 === 0 ? "Sales" : "Profit";
+      const measure = ctx.sheetN++ % 2 === 0 ? "Sales" : "Profit";
       // Line/area read as a TIME TREND over Period; bars/others compare Regions.
       const isTrend = mark === "Line" || mark === "Area";
       const dimension = isTrend ? "Period" : "Region";
-      worksheets.push({
+      ctx.worksheets.push({
         id: nextId("ws"),
         name: wsName,
         mark,
@@ -304,10 +322,12 @@ export function faithfulSpec(model: FaithfulModel): WorkbookSpec {
       });
       // ":filter" / ":highlight" suffix -> a dashboard action sourced from this
       // sheet (confirmed XML: tsc:tsl-filter / tsc:brush, see Clinical Trials.twb).
+      // The action targets THIS dashboard (its own name) so multi-dashboard
+      // exports scope each action to the dashboard the source sheet lives on.
       if (z.actionKind === "filter") {
-        actions.push({ id: nextId("act"), name: `Filter from ${wsName}`, kind: "filter", sourceSheet: wsName, target: dashName, runOn: "select" });
+        ctx.actions.push({ id: nextId("act"), name: `Filter from ${wsName}`, kind: "filter", sourceSheet: wsName, target: dashName, runOn: "select" });
       } else if (z.actionKind === "highlight") {
-        actions.push({ id: nextId("act"), name: `Highlight from ${wsName}`, kind: "highlight", sourceSheet: wsName, target: wsName, field: dimension, runOn: "select" });
+        ctx.actions.push({ id: nextId("act"), name: `Highlight from ${wsName}`, kind: "highlight", sourceSheet: wsName, target: wsName, field: dimension, runOn: "select" });
       }
       return { id: nextId("z"), kind: "sheet" as const, ...base, worksheet: wsName, bg: "#FFFFFF", cornerRadius: z.cornerRadius, showTitle: z.showTitle || undefined };
     }
@@ -342,13 +362,13 @@ export function faithfulSpec(model: FaithfulModel): WorkbookSpec {
       };
     }
     if (z.kind === "image") {
-      imgN++;
+      ctx.imgN++;
       return {
         id: nextId("z"),
         kind: "image" as const,
         ...base,
         image: z.imagePng,
-        imageFile: `${slugFile(z.name || "img")}_${imgN}.png`,
+        imageFile: `${slugFile(z.name || "img")}_${ctx.imgN}.png`,
         scaled: true,
       };
     }
@@ -363,10 +383,27 @@ export function faithfulSpec(model: FaithfulModel): WorkbookSpec {
     };
   });
 
-  // A workbook needs >=1 worksheet. If the design had no SHEET/-tagged layers,
-  // keep one unplaced dummy so the faithful (text/shape) export still opens.
-  if (worksheets.length === 0) {
-    worksheets.push({
+  return {
+    id: nextId("db"),
+    name: dashName,
+    widthPx: Math.round(model.width),
+    heightPx: Math.round(model.height),
+    bg: model.background || "#FFFFFF",
+    zones,
+    layoutMode: "floating",
+  };
+}
+
+/** Assemble a faithful workbook from one OR MORE models (one dashboard each). */
+function assembleFaithfulWorkbook(models: FaithfulModel[]): WorkbookSpec {
+  const { fields, rows } = sampleData();
+  const ctx: FaithfulCtx = { worksheets: [], actions: [], used: new Set(), imgN: 0, sheetN: 0 };
+  const dashboards = models.map((m) => buildFaithfulDashboard(m, ctx));
+
+  // A workbook needs >=1 worksheet. If NO design had a SHEET/-tagged layer, keep
+  // one unplaced dummy so the faithful (text/shape) export still opens.
+  if (ctx.worksheets.length === 0) {
+    ctx.worksheets.push({
       id: nextId("ws"),
       name: "Sheet 1",
       mark: "Bar",
@@ -377,30 +414,39 @@ export function faithfulSpec(model: FaithfulModel): WorkbookSpec {
     });
   }
 
-  // Bind every FILTER/ card to a worksheet (a quick-filter card needs a host
-  // sheet). Use the first real chart sheet so the card actually filters a view.
-  const hostSheet = worksheets[0].name;
-  for (const zn of zones) if (zn.kind === "filter" && !zn.worksheet) zn.worksheet = hostSheet;
+  // Bind every FILTER/ card to a host worksheet (a quick-filter card needs one).
+  // Prefer the first real chart sheet ON THE CARD'S OWN DASHBOARD so the card
+  // filters a view it sits beside; fall back to the first worksheet overall.
+  for (const dash of dashboards) {
+    const localHost = dash.zones.find((z) => z.kind === "sheet" && z.worksheet)?.worksheet;
+    const host = localHost ?? ctx.worksheets[0].name;
+    for (const zn of dash.zones) if (zn.kind === "filter" && !zn.worksheet) zn.worksheet = host;
+  }
 
-  const dash: DashboardSpec = {
-    id: nextId("db"),
-    name: dashName,
-    widthPx: Math.round(model.width),
-    heightPx: Math.round(model.height),
-    bg: model.background || "#FFFFFF",
-    zones,
-    layoutMode: "floating",
-  };
-
+  const first = models[0];
   return {
-    workbookName: (model.title || "Workbook").replace(/[\\/:*?"<>|]+/g, " ").trim() || "Workbook",
+    workbookName: (first?.title || "Workbook").replace(/[\\/:*?"<>|]+/g, " ").trim() || "Workbook",
     tableauVersion: "2026.2",
     data: { fileName: "data.csv", fields, calcs: [], rows },
-    worksheets,
-    dashboards: [dash],
-    actions,
-    includeActions: actions.length > 0,
+    worksheets: ctx.worksheets,
+    dashboards,
+    actions: ctx.actions,
+    includeActions: ctx.actions.length > 0,
   };
+}
+
+/** Single-frame faithful workbook (one dashboard). */
+export function faithfulSpec(model: FaithfulModel): WorkbookSpec {
+  return assembleFaithfulWorkbook([model]);
+}
+
+/**
+ * Multi-frame faithful workbook: each selected Figma frame becomes its own
+ * Tableau dashboard, all sharing the one sample dataset, with worksheet names and
+ * image filenames kept unique across every dashboard.
+ */
+export function faithfulSpecMulti(models: FaithfulModel[]): WorkbookSpec {
+  return assembleFaithfulWorkbook(models);
 }
 
 export function seedSpecFromModel(model: DashboardModel): WorkbookSpec {

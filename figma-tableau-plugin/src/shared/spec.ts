@@ -67,13 +67,24 @@ export interface WorksheetSpec {
   kpi?: boolean; // UI-only: a "big number" sheet (Text mark, one measure, no dim).
   // The generator ignores this flag — a KPI lowers to a normal Text-mark
   // worksheet, so KPIs are real sheets you can drag onto the dashboard.
+  // A NAVIGATION button rendered as a worksheet (the only nav mechanism the
+  // user's Tableau accepts — the native <button> dashboard-object is rejected in
+  // floating dashboards). It's a Text-mark sheet showing `caption` on a colored
+  // background; a <nav-action> sourced from it navigates on click. When set, the
+  // generator emits a dedicated button-worksheet and ignores mark/dimension/measures.
+  navButton?: { caption: string; bg: string; fg: string; fontSize: number };
 }
 
 // Confirmed action kinds (Tableau 2026.2 references): highlight = tsc:brush
 // (no link group, safest), filter = tsc:tsl-filter (also emits a hidden
 // sheet_link group). URL/navigation actions are NOT in any reference workbook,
 // so they are intentionally not offered.
-export type ActionKind = "highlight" | "filter";
+// navigate = a <nav-action> (manifest flag NavigationAction): clicking the source
+// button-worksheet jumps to another dashboard or worksheet. Confirmed schema from
+// examples/Navigation Menu Example.twb. Always emitted (not gated by includeActions),
+// since navigation is a core feature; the native <button> object is NOT used (the
+// user's Tableau rejects element 'button' — D2E8DA72 — in floating dashboards).
+export type ActionKind = "highlight" | "filter" | "navigate";
 export type ActionRunOn = "select" | "hover" | "menu";
 
 export interface ActionSpec {
@@ -101,6 +112,11 @@ export interface ZoneSpec {
   h: number;
   // sheet / filter (bound worksheet)
   worksheet?: string;
+  // sheet: the ORIGINAL (pre-dedupe) sheet name from the SHEET/ layer. Two of the
+  // same SHEET/ across dashboards dedupe to "X"/"X 2" in `worksheet`; this keeps
+  // the shared base "X" so the worksheet-swap can repoint EVERY copy at the one
+  // imported sheet (otherwise only the first copy swaps to the user's real data).
+  baseSheetName?: string;
   // sheet: render the worksheet's title inside its zone (LaDataViz ":showTitle").
   // Default false (the design supplies its own heading text).
   showTitle?: boolean;

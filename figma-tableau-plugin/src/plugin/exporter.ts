@@ -3,11 +3,156 @@
 // Tableau XML generator, and the .twbx packager together, with validation.
 // ---------------------------------------------------------------------------
 
-import type { WorkbookSpec } from "../shared/spec";
+import type { WorkbookSpec, ImportPayload, ImportedFilter } from "../shared/spec";
+import { nextId } from "../shared/spec";
 import { generateWorkbookXml } from "./workbookGenerator";
 import { rowsToCsv } from "./csv";
 import { buildTwbxBlob, downloadTwbx, DATA_DIR } from "./twbxBuilder";
 import type { ImageAsset, RawAsset } from "./twbxBuilder";
+
+/** The slice of a parsed import the swap needs (matches twbImport's ParsedImport). */
+export interface SwapSource {
+  worksheetNames: string[];
+  payloadFor: (names: string[]) => ImportPayload;
+  filtersFor: (names: string[]) => ImportedFilter[];
+}
+
+export interface SwapResult {
+  swapped: number; // how many imported worksheets were spliced in
+  importedFilters: number; // how many quick-filter cards were dropped on dashboards
+  unmatched: string[]; // SHEET/ placeholder names that matched no imported worksheet
+}
+
+/** Normalize a worksheet/placeholder name for tolerant matching: trimmed,
+ * case-folded, and inner whitespace collapsed. So a Figma layer "SHEET/ Query
+ * Aging " matches an imported worksheet "Query Aging" (and "query aging"). */
+function normName(s: string): string {
+  return s.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+/** Rename a spliced `<worksheet name='from'>` block to `name='to'` (opening tag
+ * only — a worksheet never references its own name elsewhere in its XML). Both
+ * names are the REAL (decoded) worksheet names; inside the XML the name is stored
+ * XML-escaped, so we escape `from` to match the opening tag and escape `to` so the
+ * result stays consistent with how the generator escapes the zone/window refs. */
+function xmlEscapeName(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/'/g, "&apos;");
+}
+function renameWorksheetXml(xml: string, from: string, to: string): string {
+  const escFrom = xmlEscapeName(from).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return xml.replace(new RegExp(`(<worksheet\\b[^>]*\\bname=')${escFrom}(')`), `$1${xmlEscapeName(to)}$2`);
+}
+
+/**
+ * Worksheet swap: replace placed SHEET/ demo charts with the user's REAL imported
+ * worksheets, matched by BASE name. Mutates `spec` in place (sets `spec.imports`,
+ * repoints zones, prunes orphaned demo worksheets, drops imported filter cards).
+ *
+ * Matching by base name is the fix for "the same sheet placed on several
+ * dashboards shows different sheets": seed dedupes repeats to "X"/"X 2", so only
+ * "X" matched the import before — every other copy stayed a demo. Here we repoint
+ * EVERY copy at the imported sheet:
+ *   - the FIRST copy on each dashboard points at the one imported worksheet "X";
+ *   - a REPEAT on the SAME dashboard can't reuse that name (Tableau won't load two
+ *     dashboard zones bound to one worksheet — duplicate viewpoint identity), so
+ *     it gets a renamed CLONE of the imported worksheet ("X (copy)", sharing the
+ *     imported datasource) — real data on every copy instead of a leftover demo.
+ */
+export function applyImportedSwap(spec: WorkbookSpec, imp: SwapSource): SwapResult {
+  // Tolerant lookup: normalized placeholder name -> the REAL imported worksheet
+  // name (case/whitespace differences must not silently fall back to a demo).
+  const importedByNorm = new Map<string, string>();
+  for (const n of imp.worksheetNames) if (!importedByNorm.has(normName(n))) importedByNorm.set(normName(n), n);
+  // Nav button-worksheets are also `sheet` zones — never treat them as swap targets.
+  const navWs = new Set(spec.worksheets.filter((w) => w.navButton).map((w) => w.name));
+
+  const swappedSet = new Set<string>(); // REAL imported names matched
+  const unmatched = new Set<string>();
+  // Repeats on the SAME dashboard that need a renamed clone of the imported sheet.
+  const cloneNeeds: Array<{ z: { worksheet?: string; showTitle?: boolean }; realName: string }> = [];
+  for (const d of spec.dashboards) {
+    const usedOnDash = new Set<string>(); // real imported names already placed here
+    for (const z of d.zones) {
+      if (z.kind !== "sheet" || !z.worksheet || navWs.has(z.worksheet)) continue;
+      const baseName = z.baseSheetName ?? z.worksheet;
+      const real = importedByNorm.get(normName(baseName));
+      if (!real) {
+        unmatched.add(baseName);
+        continue;
+      }
+      swappedSet.add(real);
+      if (usedOnDash.has(real)) {
+        // a second+ placement of the same imported sheet on this dashboard
+        cloneNeeds.push({ z, realName: real });
+        continue;
+      }
+      z.worksheet = real; // point this copy at the one imported sheet (REAL name)
+      z.showTitle = true; // show the imported sheet's real title bar
+      usedOnDash.add(real);
+    }
+  }
+  const matches = [...swappedSet];
+  if (matches.length === 0) return { swapped: 0, importedFilters: 0, unmatched: [...unmatched] };
+
+  spec.imports = imp.payloadFor(matches);
+
+  // Materialize a renamed clone of the imported worksheet for each same-dashboard
+  // repeat, so every placement shows the user's REAL sheet (not a demo). Clones
+  // are spliced verbatim (with the name changed) and bound to the same imported
+  // datasource the original references.
+  const wsXml = spec.imports.worksheetXml;
+  const usedNames = new Set<string>([...wsXml.keys(), ...spec.worksheets.map((w) => w.name)]);
+  for (const { z, realName } of cloneNeeds) {
+    const src = wsXml.get(realName);
+    if (!src) continue; // shouldn't happen — leave the demo in place
+    let copyName = `${realName} (copy)`;
+    for (let i = 2; usedNames.has(copyName); i++) copyName = `${realName} (copy ${i})`;
+    usedNames.add(copyName);
+    wsXml.set(copyName, renameWorksheetXml(src, realName, copyName));
+    z.worksheet = copyName;
+    z.showTitle = true;
+  }
+
+  // Drop demo worksheets no longer referenced by any zone (the deduped "X 2"
+  // copies we just repointed away). Keep button-worksheets; the generator itself
+  // replaces the base-name demo with the imported XML.
+  const referenced = new Set<string>();
+  for (const d of spec.dashboards)
+    for (const z of d.zones)
+      if ((z.kind === "sheet" || z.kind === "filter") && z.worksheet) referenced.add(z.worksheet);
+  spec.worksheets = spec.worksheets.filter((w) => w.navButton || referenced.has(w.name));
+
+  // Lift each swapped sheet's own quick filters onto the dashboard as real filter
+  // cards (bound to the imported data via their verbatim param), above the sheet.
+  let importedFilters = 0;
+  const FW = 200, FH = 32, FGAP = 8;
+  const perSheet = new Map<string, number>();
+  for (const f of imp.filtersFor(matches)) {
+    const dash = spec.dashboards.find((d) =>
+      d.zones.some((z) => z.kind === "sheet" && z.worksheet === f.worksheet)
+    );
+    if (!dash) continue;
+    const sheet = dash.zones.find((z) => z.kind === "sheet" && z.worksheet === f.worksheet)!;
+    const idx = perSheet.get(f.worksheet) ?? 0;
+    perSheet.set(f.worksheet, idx + 1);
+    dash.zones.push({
+      id: nextId("z"),
+      kind: "filter",
+      friendlyName: `Filter ${f.field}`,
+      x: sheet.x + idx * (FW + FGAP),
+      y: Math.max(0, sheet.y - FH - 4),
+      w: Math.min(FW, Math.round(sheet.w)),
+      h: FH,
+      worksheet: f.worksheet,
+      field: f.field,
+      filterParam: f.param,
+      bg: "#FFFFFF",
+      fg: "#D7DAEC",
+    });
+    importedFilters++;
+  }
+  return { swapped: matches.length, importedFilters, unmatched: [...unmatched] };
+}
 
 /** Gather every PNG referenced by the spec (logo zones + dashboard backgrounds). */
 export function collectImageAssets(spec: WorkbookSpec): ImageAsset[] {
@@ -107,7 +252,8 @@ export function generateSpecWorkbook(spec: WorkbookSpec): ExportResult {
     spec.worksheets.map((w) => w.name)
   );
   // soft checks specific to the editor
-  if (spec.worksheets.length === 0) warnings.push("No worksheets defined.");
+  if (spec.worksheets.length === 0 && !(spec.imports && spec.imports.worksheetXml.size))
+    warnings.push("No worksheets defined.");
   if (spec.includeActions && spec.actions.some((a) => a.kind === "filter"))
     warnings.push("Filter actions write a sheet_link group — confirm the workbook opens in Tableau.");
 
@@ -180,6 +326,14 @@ export function validateTwb(xml: string, worksheetNames: string[]): string[] {
   // load error D2E8DA72 ("no declaration found for element 'shelf-sorts'").
   if (/<shelf-sorts[\s>]/.test(xml)) {
     throw new Error("Generated .twb contains <shelf-sorts>, which Tableau 2026.2 rejects (D2E8DA72).");
+  }
+
+  // 2c. The native <button> dashboard-object is rejected by the user's Tableau
+  // ("no declaration found for element 'button'", D2E8DA72) in a floating
+  // dashboard. Navigation is done with <nav-action> + button-worksheets instead;
+  // guard so an accidental native button never ships an unloadable file again.
+  if (/<button[\s>]/.test(xml)) {
+    throw new Error("Generated .twb contains a native <button> object, which this Tableau rejects (D2E8DA72). Navigation must use <nav-action>.");
   }
 
   // 2c. The <windows> section enforces a UNIQUE-identity constraint: duplicate

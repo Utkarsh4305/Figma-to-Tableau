@@ -150,6 +150,10 @@ export interface FaithfulZone {
   // to auto-include) and `navTargetIsSheet` is true when the destination is itself
   // a SHEET/ node (→ navigate to that worksheet's window instead of a dashboard).
   // The latter two are filled in by the async expandNavTargets pass.
+  // `isNav` marks the button as a Nav/ (interaction-driven) button so seed never
+  // applies the BUTTON/ name-convention toggle to it — an unreadable interaction
+  // leaves it a plain button, never a wrong A↔B dashboard jump.
+  isNav?: boolean;
   navTargetId?: string;
   navTargetFrameId?: string;
   navTargetIsSheet?: boolean;
@@ -180,6 +184,12 @@ export interface FaithfulModel {
   height: number;
   background?: string;
   zones: FaithfulZone[];
+  // True for a model pulled in ONLY to materialize a worksheet a Nav/ button
+  // navigates to (its SHEET/ destination wasn't selected for export). Its sheet
+  // zones become real worksheets so the nav has somewhere to land, but it does
+  // NOT produce a dashboard — the user asked for "only the sheet added, not its
+  // whole dashboard". Set by expandNavTargets; honored by assembleFaithfulWorkbook.
+  sheetOnly?: boolean;
 }
 
 // --- Messages between the Figma sandbox and the UI iframe ---------------------

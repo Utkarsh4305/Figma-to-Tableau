@@ -66,21 +66,18 @@ function esc(s: unknown): string {
  * we UNION any entries the import carries into our base set — a missing entry
  * can break the imported datasource's object graph on load.
  */
-/** True when any dashboard carries a navigation button with a resolved target. */
-function hasNavButton(spec: WorkbookSpec): boolean {
-  return spec.dashboards.some((d) => d.zones.some((z) => z.kind === "button" && !!z.targetDashboard));
+/** True when the workbook has any navigation (a <nav-action>). */
+function hasNavAction(spec: WorkbookSpec): boolean {
+  return spec.actions.some((a) => a.kind === "navigate");
 }
 
 function manifestXml(spec: WorkbookSpec): string {
   const entries = new Set<string>(MANIFEST_ENTRIES);
   if (spec.imports) for (const e of spec.imports.manifestEntries) entries.add(e);
-  // Native navigation buttons (type-v2='dashboard-object' + <button>) require
-  // these feature flags — confirmed from LaDataViz's multi.twbx. Added only when
-  // a button is actually emitted, so button-free workbooks stay byte-identical.
-  if (hasNavButton(spec)) {
-    entries.add("BasicButtonObject");
-    entries.add("BasicButtonObjectTextSupport");
-  }
+  // Navigation uses <nav-action> (worksheet-as-button), enabled by NavigationAction.
+  // The native <button> dashboard-object (BasicButtonObject) is NOT used — the
+  // user's Tableau rejects element 'button' (D2E8DA72) in a floating dashboard.
+  if (hasNavAction(spec)) entries.add("NavigationAction");
   return (
     "  <document-format-change-manifest>\n" +
     [...entries].map((e) => `    <${e} />\n`).join("") +
@@ -298,6 +295,54 @@ function tableauType(t: FieldType): string {
 
 // --- worksheet ---------------------------------------------------------------
 
+/**
+ * A NAVIGATION BUTTON rendered as a worksheet — a Text-mark sheet showing a
+ * static caption (a string-literal calc) centered on a colored background. A
+ * <nav-action> sourced from this sheet does the navigating. Structure ported
+ * VERBATIM from examples/Navigation Menu Example.twb (the "base" button sheets),
+ * the one navigation mechanism the user's Tableau accepts (the native <button>
+ * dashboard-object is rejected — D2E8DA72 — in a floating dashboard).
+ */
+function buttonWorksheetXml(ws: WorksheetSpec, dsName: string, dsCaption: string): string {
+  const b = ws.navButton!;
+  const cn = `Calculation_BTN_${ws.name.replace(/[^A-Za-z0-9]/g, "") || "x"}`;
+  const colName = `[${cn}]`;
+  const instName = `[none:${cn}:nk]`;
+  const ref = `[${dsName}].${instName}`;
+  const size = Math.max(7, Math.round(b.fontSize || 12));
+  const x: string[] = [];
+  x.push(`    <worksheet name='${esc(ws.name)}'>\n`);
+  x.push("      <table>\n        <view>\n          <datasources>\n");
+  x.push(`            <datasource caption='${esc(dsCaption)}' name='${dsName}' />\n`);
+  x.push("          </datasources>\n");
+  x.push(`          <datasource-dependencies datasource='${dsName}'>\n`);
+  x.push(`            <column caption='${esc(b.caption)}' datatype='string' name='${colName}' role='dimension' type='nominal'>\n`);
+  x.push(`              <calculation class='tableau' formula='&quot;${esc(b.caption)}&quot;' />\n`);
+  x.push("            </column>\n");
+  x.push(`            <column-instance column='${colName}' derivation='None' name='${instName}' pivot='key' type='nominal' />\n`);
+  x.push("          </datasource-dependencies>\n");
+  x.push("          <aggregation value='true' />\n        </view>\n");
+  x.push("        <style>\n");
+  x.push("          <style-rule element='cell'>\n            <format attr='text-align' value='center' />\n          </style-rule>\n");
+  x.push(`          <style-rule element='table'>\n            <format attr='background-color' value='${b.bg}' />\n          </style-rule>\n`);
+  x.push("        </style>\n");
+  x.push("        <panes>\n          <pane selection-relaxation-option='selection-relaxation-allow'>\n");
+  x.push("            <view>\n              <breakdown value='auto' />\n            </view>\n");
+  x.push("            <mark class='Automatic' />\n");
+  x.push(`            <encodings>\n              <text column='${ref}' />\n            </encodings>\n`);
+  x.push("            <customized-label>\n              <formatted-text>\n");
+  x.push(`                <run bold='true' fontcolor='${b.fg}' fontsize='${size}'>&lt;</run>\n`);
+  x.push(`                <run bold='true' fontcolor='${b.fg}' fontsize='${size}'>${ref}</run>\n`);
+  x.push(`                <run bold='true' fontcolor='${b.fg}' fontsize='${size}'>&gt;</run>\n`);
+  x.push("              </formatted-text>\n            </customized-label>\n");
+  x.push("            <style>\n              <style-rule element='mark'>\n                <format attr='mark-labels-show' value='true' />\n                <format attr='mark-labels-cull' value='true' />\n              </style-rule>\n            </style>\n");
+  x.push("          </pane>\n        </panes>\n");
+  x.push("        <rows />\n        <cols />\n      </table>\n");
+  x.push(`      <simple-id uuid='${uid()}' />\n`);
+  x.push("    </worksheet>\n");
+  return x.join("");
+}
+
 function worksheetXml(
   ws: WorksheetSpec,
   spec: WorkbookSpec,
@@ -305,6 +350,7 @@ function worksheetXml(
   dsCaption: string,
   filterFieldNames: string[] = []
 ): string {
+  if (ws.navButton) return buttonWorksheetXml(ws, dsName, dsCaption);
   const reg = buildRegistry(spec);
 
   // resolve fields
@@ -674,9 +720,7 @@ function cardStyle(bg = "#FFFFFF"): string {
 function dashboardXml(
   dash: DashboardSpec,
   dsName: string,
-  reg: Map<string, GenField>,
-  dashUuid: Map<string, string>,
-  wsUuid: Map<string, string>
+  reg: Map<string, GenField>
 ): { xml: string; sheetNames: string[] } {
   const fw = dash.widthPx || 1280;
   const fh = dash.heightPx || 800;
@@ -786,51 +830,11 @@ function dashboardXml(
         )
       );
       o.push("        </zone>\n");
-    } else if (
-      z.kind === "button" &&
-      ((z.targetWorksheet && wsUuid.get(z.targetWorksheet)) ||
-        (z.targetDashboard && dashUuid.get(z.targetDashboard)))
-    ) {
-      // Native Tableau navigation button — copied VERBATIM from LaDataViz's
-      // multi.twbx: a type-v2='dashboard-object' zone whose <button> action is
-      // `tabdoc:goto-sheet window-id="{UUID}"`, where the UUID is the TARGET
-      // window's <simple-id> (see windowsXml). The target is a worksheet window
-      // (Nav/ → SHEET destination) or a dashboard window; button-type='text' shows
-      // the caption; the visual state carries caption/font/background.
-      const targetUuid = z.targetWorksheet
-        ? wsUuid.get(z.targetWorksheet)!
-        : dashUuid.get(z.targetDashboard!)!;
-      const caption = z.text || z.targetWorksheet || z.targetDashboard;
-      const fontcolor = z.fg || "#FFFFFF";
-      const bg = z.bg || "#2563EB";
-      const fontsize = Math.max(7, Math.round(z.fontSize || 12));
-      o.push(
-        `        <zone${fn}${fix} h='${H}' id='${nid()}' type-v2='dashboard-object' w='${W}' x='${X}' y='${Y}'>\n`
-      );
-      o.push(
-        `          <button action='tabdoc:goto-sheet window-id=&quot;${esc(targetUuid)}&quot;' button-type='text'>\n`
-      );
-      o.push("            <button-visual-state>\n");
-      o.push(`              <caption>${esc(caption)}</caption>\n`);
-      o.push(
-        `              <button-caption-font-style fontcolor='${fontcolor}' fontname='${esc(
-          safeFont(z.fontFamily)
-        )}' fontsize='${fontsize}' />\n`
-      );
-      o.push(`              <format attr='background-color' value='${bg}' />\n`);
-      o.push("            </button-visual-state>\n");
-      o.push("          </button>\n");
-      // Borderless margin-only zone-style, exactly as in the reference.
-      o.push("          <zone-style>\n");
-      o.push("            <format attr='border-color' value='#000000' />\n");
-      o.push("            <format attr='border-style' value='none' />\n");
-      o.push("            <format attr='border-width' value='0' />\n");
-      o.push("            <format attr='margin' value='4' />\n");
-      o.push("          </zone-style>\n");
-      o.push("        </zone>\n");
     } else {
-      // text and button (a button with no resolvable target renders as a styled
-      // text zone — load-safe, just non-navigating)
+      // text and button. Navigation buttons are emitted as button-WORKSHEETS (sheet
+      // zones) elsewhere — the native <button> dashboard-object is NOT used (the
+      // user's Tableau rejects element 'button', D2E8DA72). Any leftover button
+      // zone (e.g. from the heuristic path) renders as a styled text label.
       const isButton = z.kind === "button";
       o.push(`        <zone${fn}${fix} h='${H}' id='${nid()}' type-v2='text' w='${W}' x='${X}' y='${Y}'>\n`);
       o.push("          <formatted-text>\n");
@@ -1028,27 +1032,57 @@ function windowsXml(
   return x.join("");
 }
 
-// --- actions (CONFIRMED patterns; emitted only if includeActions) ------------
-// highlight = tsc:brush (no group, safest); filter = tsc:tsl-filter (its hidden
-// sheet_link group is emitted in the datasource by actionGroupsXml).
+// --- actions -----------------------------------------------------------------
+// navigate = <nav-action> (always emitted; the worksheet-as-button navigation
+//   confirmed from Navigation Menu Example.twb — the only nav the user's Tableau
+//   accepts). highlight = tsc:brush, filter = tsc:tsl-filter (both opt-in via
+//   includeActions; the filter's hidden sheet_link group comes from actionGroupsXml).
 
 function actionsXml(spec: WorkbookSpec): string {
-  if (!spec.includeActions || spec.actions.length === 0) return "";
+  const navActions = spec.actions.filter((a) => a.kind === "navigate");
+  const tscActions = spec.includeActions ? spec.actions.filter((a) => a.kind !== "navigate") : [];
+  if (navActions.length === 0 && tscActions.length === 0) return "";
+
   const runType = (a: { runOn: string }) =>
     a.runOn === "hover" ? "on-hover" : a.runOn === "menu" ? "on-menu" : "on-select";
-  // Map each worksheet to the dashboard it is placed on, so a filter action's
-  // `<source dashboard=...>` names the dashboard its source sheet actually lives
-  // on (critical once an export carries MULTIPLE dashboards). Falls back to the
-  // first dashboard for any sheet not placed on one.
+  // Map each worksheet to the dashboard it is placed on (so an action's source
+  // names the right dashboard once an export carries MULTIPLE dashboards), plus
+  // the full sheet list per dashboard (for a nav-action's exclude list).
   const fallback = spec.dashboards[0]?.name ?? "Dashboard";
   const sheetDash = new Map<string, string>();
-  for (const d of spec.dashboards)
+  const sheetsByDash = new Map<string, string[]>();
+  for (const d of spec.dashboards) {
+    const sheets: string[] = [];
     for (const z of d.zones)
-      if (z.kind === "sheet" && z.worksheet && !sheetDash.has(z.worksheet)) sheetDash.set(z.worksheet, d.name);
+      if (z.kind === "sheet" && z.worksheet) {
+        if (!sheetDash.has(z.worksheet)) sheetDash.set(z.worksheet, d.name);
+        sheets.push(z.worksheet);
+      }
+    sheetsByDash.set(d.name, sheets);
+  }
   const dashOf = (sheet: string) => sheetDash.get(sheet) ?? fallback;
+
   const x: string[] = ["  <actions>\n"];
   let n = 0;
-  for (const a of spec.actions) {
+
+  // Navigation: clicking the source button-worksheet jumps to the target sheet/
+  // dashboard. The source is the button's own dashboard with EVERY OTHER sheet
+  // excluded, so only that button triggers it (the Navigation Menu Example trick).
+  for (const a of navActions) {
+    n++;
+    const srcDash = dashOf(a.sourceSheet);
+    const others = (sheetsByDash.get(srcDash) ?? []).filter((s) => s !== a.sourceSheet);
+    x.push(`    <nav-action caption='${esc(a.name)}' name='[Action${n}]'>\n`);
+    x.push("      <activation type='on-select' />\n");
+    x.push(`      <source dashboard='${esc(srcDash)}' type='sheet'>\n`);
+    for (const s of others) x.push(`        <exclude-sheet name='${esc(s)}' />\n`);
+    x.push("      </source>\n");
+    x.push(`      <params>\n        <param name='sheet' value='${esc(a.target)}' />\n      </params>\n`);
+    x.push("    </nav-action>\n");
+  }
+
+  // Highlight / filter (opt-in).
+  for (const a of tscActions) {
     n++;
     const name = `[Action${n}]`;
     x.push(`    <action caption='${esc(a.name)}' name='${name}'>\n`);
@@ -1111,7 +1145,7 @@ export function generateWorkbookXml(spec: WorkbookSpec, dataDirectory: string): 
   const wsUuid = new Map<string, string>();
   for (const n of wsNames) wsUuid.set(n, uid());
 
-  const dashOut = spec.dashboards.map((d) => dashboardXml(d, ds.dsName, reg, dashUuid, wsUuid));
+  const dashOut = spec.dashboards.map((d) => dashboardXml(d, ds.dsName, reg));
 
   const out: string[] = [];
   out.push("<?xml version='1.0' encoding='utf-8' ?>\n");
@@ -1130,6 +1164,10 @@ export function generateWorkbookXml(spec: WorkbookSpec, dataDirectory: string): 
   // repackaged Data/ files; their names are referenced by the imported sheets).
   if (spec.imports) for (const dx of spec.imports.datasourceXml.values()) out.push(dx + "\n");
   out.push("  </datasources>\n");
+  // <actions> MUST precede <worksheets> in the workbook content model
+  // (…datasources?, …, shared-views?, actions?, worksheets?, dashboards?, windows…);
+  // emitting it at the end triggers D2E8DA72 "element 'actions' is not allowed".
+  out.push(actionsXml(spec));
   out.push("  <worksheets>\n");
   for (const ws of spec.worksheets)
     out.push(worksheetXml(ws, spec, ds.dsName, dsCaption, [...(filtersByWs.get(ws.name) ?? [])]));
@@ -1150,7 +1188,6 @@ export function generateWorkbookXml(spec: WorkbookSpec, dataDirectory: string): 
       wsUuid
     )
   );
-  out.push(actionsXml(spec));
   out.push("</workbook>\n");
   return out.join("");
 }

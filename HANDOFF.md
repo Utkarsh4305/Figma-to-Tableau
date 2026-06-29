@@ -4,7 +4,12 @@
 > device without the local Claude memory**. It folds in the essential facts from
 > the private memory files (the Tableau 2026.2 recipe, the reference-export
 > workflow, and project state). Last updated: **2026-06-29**, build
-> `nav-interactions-tabs-43`.
+> `swap-share-navsheet-47`. **nav-action navigation is now TABLEAU-CONFIRMED
+> working by the user.** Build 47 fixed three reported swap/nav bugs (see §
+> below): worksheet-swap now shares ONE imported sheet across every copy of a
+> placed `SHEET/` (match by `baseSheetName`, via `applyImportedSwap` in
+> `exporter.ts`), and a Nav/ link to a SHEET adds ONLY that worksheet — not its
+> whole enclosing dashboard (`FaithfulModel.sheetOnly` + `materializeSheetOnly`).
 
 ---
 
@@ -137,8 +142,8 @@ all lowered to CONFIRMED Tableau XML — verified against `DM_Dashboards.twb` /
 |---|---|
 | `FILTER/Region` | a **real quick-filter card** (`type-v2='filter'`, `mode='checkdropdown'`) bound to the first chart sheet, on a sample string dimension (`Region`, or `Period` if the name hints time) |
 | `URL/en.wikipedia.org/...` or `WEB/https://...` | a **real web page object** (`type-v2='web'` + `forceUpdate='' param='<URL>'`); a bare host gets an `https://` scheme. Confirmed from `Using Web Page Object in Tableau.twb` |
-| `BUTTON/Go to Sales > Sales` (or `->`) | a **native navigation button** (`type-v2='dashboard-object'` + `<button action='tabdoc:goto-sheet'>`) that switches to the named dashboard frame; no target / 2 frames → toggles to the other. Confirmed from LaDataViz `multi.twbx`. See §10 |
-| `Nav/Open Details` | a **native nav button whose target = the layer's Figma PROTOTYPE INTERACTION** (its "Navigate to" reaction), not the layer name. If the destination is a `SHEET/` node → navigates to that **worksheet** window; else → its **dashboard** window. A destination frame you didn't select is **auto-included** in the export. Build 43; see §10 |
+| `BUTTON/Go to Sales > Sales` (or `->`) | a **navigation button** that switches to the named dashboard; no target / 2 frames → toggles to the other. Emitted as a **button-worksheet + `<nav-action>`** (NOT the native `<button>` object — that's rejected in floating dashboards). See §10 |
+| `Nav/Open Details` | a navigation button whose target = the layer's Figma PROTOTYPE INTERACTION (its "Navigate to" reaction), not the layer name. Destination is a `SHEET/` node → navigates to that **worksheet**; else → its **dashboard** (auto-included in the export if unselected). Also a button-worksheet + `<nav-action>`. Build 43/45; see §10 |
 | `SHEET/Sales[bar]:showTitle` | the worksheet zone shows its **title bar** (`show-title='true'`); default stays `false` |
 | `SHEET/Sales[bar]:filter` | clicking that sheet runs a **dashboard filter action** (`tsc:tsl-filter`, `special-fields='all'`) |
 | `SHEET/Trend[line]:highlight` | clicking that sheet runs a **highlight action** (`tsc:brush` on its dimension) |
@@ -294,6 +299,22 @@ from the proven Python generator and confirmed against the example workbooks.)
   known-good export first.
 - **`enable-sort-zone-taborder` on `<dashboard>`** → also D2E8DA72 (attribute not
   declared), even though Tableau's own exports include it. We omit it.
+- **The native `<button>` dashboard-object** (`type-v2='dashboard-object'` + a
+  `<button action='tabdoc:goto-sheet'>` child) → **D2E8DA72** "no declaration found
+  for element 'button'" in a FLOATING dashboard (`nav-action-buttons-45`,
+  Tableau-confirmed by the user). multi.twbx uses this element but only as a TILED
+  object inside a `layout-flow`; a floating zone's content model
+  `(formatted-text,layout-cache?,zone,flipboard,zone-style?)` doesn't permit it.
+  We DON'T use it — navigation is `<nav-action>` + button-worksheets (see §10).
+  `exporter.validateTwb` now THROWS if a `<button` element ever reappears.
+- **`<actions>` in the wrong position** → D2E8DA72 "element 'actions' is not
+  allowed". The `<workbook>` content model fixes child ORDER: `…datasources?,
+  datasource-relationships?, mapsources?, shared-views?, **actions?**, worksheets?,
+  dashboards?, windows…`. So `<actions>` MUST be emitted AFTER `</datasources>`
+  and BEFORE `<worksheets>` — NOT at the end (`nav-action-order-46`). (The old
+  filter/highlight actions had this latent bug but it never fired because they
+  were opt-in + off; nav-actions always emit, so it surfaced.) Locked by an order
+  assertion in `faithful_nav_smoke.ts`.
 - **NaN coords** → `value 'NaN' does not match … facet '[+\-]?[0-9]+'`. Guarded.
 
 > **Validation ≠ loading.** `minidom`/DOMParser only catch well-formedness. A
@@ -348,8 +369,14 @@ current tag. Many "it's still broken" reports were just a stale build.
 - `faithful_navlink_smoke.ts` — `Nav/` interaction nav (`nav-interactions-tabs-43`):
   a Nav→frame resolves to a dashboard window, a Nav→SHEET node resolves to a
   worksheet window, an unresolvable destination falls back to a plain button.
+- `faithful_navsheet_smoke.ts` — (build 47) a Nav→SHEET whose frame wasn't
+  selected adds ONLY the worksheet (a `sheetOnly` model) — NO extra dashboard;
+  the nav-action targets that worksheet.
 - `twb_import_smoke.ts` — worksheet swap from `examples/DM_Dashboards.twbx`; also
   (build 43) asserts the verbatim imported filter param + swapped-sheet title.
+- `twb_import_share_smoke.ts` — (build 47) the SAME imported sheet on TWO
+  dashboards swaps to ONE worksheet on both (match by `baseSheetName`); the
+  deduped demo copy is pruned and both dashboard windows show the imported sheet.
 
 Floating `.twb` output was historically kept **byte-identical** across refactors,
 but the byte counts have since shifted intentionally as features landed (the
@@ -371,7 +398,7 @@ It sends `request-faithful`; the `faithful-ready` handler builds `faithfulSpec` 
 (`exportRealComponents`, `handleExport`) were **removed**, along with the
 background-image export mode and all its plumbing. The Export tab still has:
 workbook name, Tableau version, a re-read/auto-tag source card, and a summary
-table. Build tag is in `App.tsx` `const BUILD` (currently `layout-flow-38`).
+table. Build tag is in `App.tsx` `const BUILD` (currently `swap-share-navsheet-47`).
 The export covers **all selected frames** (one dashboard each), **always
 pixel-exact floating**. The **"Responsive layout (flow containers)"** checkbox was
 **REMOVED from the UI** (`floating-only-42`): flow mode reflows the design via the
@@ -567,6 +594,73 @@ post-resolution fields directly). First real test: name a layer `Nav/…`, wire 
 prototype "Navigate to" link from it to another frame (or a `SHEET/` layer),
 export, open in 2026.2, click it.
 
+**Navigation REWRITTEN to `<nav-action>` (`nav-action-buttons-45`, 2026-06-29).**
+⚠️ The native `<button>` dashboard-object (above, builds 39–44) **does NOT load in
+the user's Tableau** — confirmed: `D2E8DA72` "no declaration found for element
+'button'". multi.twbx uses that element but only as a TILED object inside a
+`layout-flow`; in our FLOATING dashboard the button zone's content model
+`(formatted-text,layout-cache?,zone,flipboard,zone-style?)` forbids it (the user
+confirmed multi.twbx itself opens, so it's a tiled-vs-floating limitation). Fix:
+navigation now uses the **`<nav-action>` worksheet-as-button** mechanism, ported
+from `examples/Navigation Menu Example.twb` (manifest flag `NavigationAction`):
+- Each `Nav/`/`BUTTON/` layer becomes a **button-WORKSHEET** (`WorksheetSpec.navButton`):
+  a Text-mark sheet showing the caption via a string-literal calc
+  (`<calculation class='tableau' formula='&quot;Caption&quot;'/>`) on the text
+  encoding + a `<customized-label>`, with the button colour as the table
+  background. Generated by `workbookGenerator.buttonWorksheetXml` (verbatim from
+  the reference's "base" sheets). It's placed as a normal floating **sheet zone**.
+- Each resolved button gets a navigate `ActionSpec` (`kind:'navigate'`) →
+  `actionsXml` emits a `<nav-action caption='Go to X' name='[ActionN]'>` with
+  `<activation type='on-select'/>`, `<source dashboard='<button's dash>' type='sheet'>`
+  EXCLUDING every other sheet on that dashboard (so only the button fires), and
+  `<params><param name='sheet' value='<target>'/></params>`. Target = a dashboard
+  name (Nav→frame / BUTTON name) or a worksheet name (Nav→SHEET node).
+- nav-actions emit ALWAYS; `includeActions` now only gates the tsc filter/highlight
+  actions (`includeActions = actions.some(a=>a.kind!=='navigate')`).
+- Removed: the `dashboard-object`/`<button>` emit branch, the `BasicButtonObject`
+  manifest flags, and the per-button `dashUuid`/`wsUuid` window-id wiring (the
+  stable `wsUuid` is still used for worksheet-window simple-ids). `validateTwb`
+  throws on any `<button` (safety net). Tests: `faithful_nav_smoke.ts` (BUTTON/) +
+  `faithful_navlink_smoke.ts` (Nav/) rewritten to assert the nav-action structure.
+
+⚠️ **Reference-backed (Navigation Menu Example uses exactly this) + smoke-tested,
+but the nav-action element itself is NOT yet confirmed in the user's 2026.2.** The
+reference is a 2019 file; `<nav-action>` is long-standing and far more likely to
+load than the rejected `<button>`, but confirm by exporting + clicking. If it
+fails, get a reference: have the user build a 2-dashboard workbook with a working
+navigation button in THEIR Tableau and export it (`tableau-get-reference-twb`).
+
+**Bug-fix round (`nav-fixes-titles-44`, 2026-06-29) — from user testing:**
+1. **Nav/ wasn't navigating / always went to a dashboard.** Root cause: the
+   prototype link is usually wired on a CHILD of the `Nav/` frame, so
+   `navDestination` (reading only the frame's own `reactions`) returned nothing →
+   the button fell through to the `BUTTON/` A↔B *dashboard* toggle. Fixes:
+   `navDestination` now **searches the subtree** for the first NODE reaction;
+   `sendFaithful` calls **`figma.loadAllPagesAsync()`** first (dynamic-page docs);
+   and `FaithfulZone.isNav` marks Nav/ buttons so seed **never** applies the
+   BUTTON/ name-toggle to them (an unreadable link → plain button, never a wrong
+   jump). A `SHEET/` destination correctly resolves to a worksheet window now that
+   the destination id is actually captured.
+2. **Swapped/added sheets weren't exported.** `addSheets` staged `SHEET/` frames
+   as SIBLINGS (and selected them); `resolveFrame` returned a frame-like node
+   as-is, so export saw the lone cards, not the dashboard. Fixes: `addSheets` now
+   appends the `SHEET/` frames **INSIDE the dashboard frame**, below the content
+   (frame grown taller, no overlap), and leaves the DASHBOARD selected;
+   `resolveFrame` now returns the **OUTERMOST** frame ancestor, so a selected
+   nested `SHEET/` frame resolves to its dashboard. The sheets are children → the
+   walk picks them up → they swap in their real data.
+3. **Workbook-name box ignored.** The faithful export rebuilt the name from the
+   frame title. `App.tsx` now mirrors `spec.workbookName` into `workbookNameRef`
+   and applies it to the faithful spec before export, so the downloaded `.twbx`
+   (and the inner `.twb`) match the typed name.
+4. **Sheet titles.** Every faithful SHEET zone now exports with
+   `show-title='true'` by default (the "Show Title" checkbox stays checked), and a
+   `seed.dropFigmaTitles()` post-pass removes each chart's redundant Figma heading
+   text — a SHORT text zone whose width fits within the sheet and which sits in its
+   title band (≈60px above the top down into its top quarter), inside the card or
+   just above it. Wide section/page titles spanning multiple charts and unrelated
+   body text are kept. Covered by `test/faithful_features_smoke.ts`.
+
 **Worksheet swap = import the user's REAL sheets — BUILT (`import-swap-34`).**
 "Swap" means: import worksheets the user already built (in an existing `.twbx`)
 and substitute them for the demo SHEET/ placeholders, so the export carries their
@@ -635,6 +729,20 @@ data (today the import wins).
   and `filtersByWs` skips `filterParam` zones (imported sheets already carry their
   filters internally). Covered by the extended `test/twb_import_smoke.ts` (asserts
   the verbatim `[federated.*]` param + `show-title='true'` on the swapped sheet).
+
+**Swap sharing — BUILT (`swap-share-navsheet-47`).** The whole swap step moved out
+of `App.tsx` into a pure, tested `applyImportedSwap(spec, imp)` in `exporter.ts`.
+The match is now by **base name**, not the deduped worksheet name: seed records the
+pre-dedupe `baseSheetName` on each sheet `ZoneSpec`, and the swap repoints **every
+copy** of a placed `SHEET/X` (across all dashboards) at the one imported worksheet
+`X`, then prunes the orphaned `X 2`/`X 3` demo worksheets. This fixes the reported
+"swapped sheets don't export, only the defaults do" + "duplicate sheet names show
+different sheets despite placing the same sheet" — those were the dedupe suffix
+(`uniqNameIn` is workbook-global) breaking the exact-name match for every copy
+after the first. A same-name repeat on the SAME dashboard still keeps its deduped
+demo name (Tableau can't place one worksheet on a dashboard twice). The demo-only
+multi/dupname dedup (Revenue/Revenue 2) is unchanged — sharing only happens on the
+swap path. Test: `test/twb_import_share_smoke.ts`.
 
 **Unconfirmed (needs the user to open in Tableau after a manifest re-import):**
 - Whether `entire-view-29` visually matches `multi.twbx`/their `Our.twb` in

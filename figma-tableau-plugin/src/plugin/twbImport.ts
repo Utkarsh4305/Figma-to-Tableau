@@ -26,10 +26,26 @@ export interface ParsedImport {
   filtersFor: (names: string[]) => ImportedFilter[]; // quick filters on a subset
 }
 
-/** Read the `name='…'` (or another attr) off a block's opening tag. */
+/** Decode the XML entities Tableau writes inside attribute values, so a worksheet
+ * stored as `name='A &amp; B'` becomes the REAL name "A & B". Critical: this name
+ * is what we stage as a `SHEET/` layer, match against, and re-escape on output —
+ * if we kept the raw `&amp;`, the export would double-escape it ("&amp;amp;") and
+ * the dashboard zone could no longer resolve its worksheet (chart shows as demo). */
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&amp;/g, "&"); // last, so "&amp;lt;" -> "&lt;" not "<"
+}
+
+/** Read the `name='…'` (or another attr) off a block's opening tag, entity-decoded. */
 function attrOf(openingTag: string, attr: string): string | undefined {
   const m = openingTag.match(new RegExp(`\\b${attr}='([^']*)'`));
-  return m ? m[1] : undefined;
+  return m ? decodeEntities(m[1]) : undefined;
 }
 
 /**

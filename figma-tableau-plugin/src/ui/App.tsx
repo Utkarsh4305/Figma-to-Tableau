@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { DashboardModel, PluginToUi, UiToPlugin, DefaultKind } from "../shared/types";
 import type { WorkbookSpec } from "../shared/spec";
-import { nextId } from "../shared/spec";
 import { seedSpecFromModel, blankSpec, faithfulSpecMulti } from "../plugin/seed";
-import { exportSpecTwbx } from "../plugin/exporter";
+import { exportSpecTwbx, applyImportedSwap } from "../plugin/exporter";
 import { parseImport, type ParsedImport } from "../plugin/twbImport";
 import DashboardPreview from "./DashboardPreview";
 
-const BUILD = "nav-interactions-tabs-43";
+const BUILD = "swap-match-clone-48";
 
 type Status = { kind: "ok" | "err" | "warn"; text: string } | null;
 
@@ -140,6 +139,11 @@ export default function App() {
   const pendingFaithfulRef = useRef(false);
   const modelRef           = useRef<DashboardModel | null>(null);
   modelRef.current = model;
+  // The workbook-name box edits `spec.workbookName`, but the faithful export
+  // builds a fresh spec — mirror the current name into a ref so the once-
+  // registered faithful-ready handler can apply it (→ the .twbx file name matches).
+  const workbookNameRef    = useRef<string>("");
+  if (spec) workbookNameRef.current = spec.workbookName;
   useEffect(() => {
     const handler = (event: MessageEvent) => {
       const msg = event.data.pluginMessage as PluginToUi | undefined;
@@ -162,57 +166,24 @@ export default function App() {
             // was removed from the UI; faithfulSpecMulti still supports 'flow' for
             // tests, but the export never requests it.)
             const fSpec   = faithfulSpecMulti(models);
+            // Honor the name typed in the Export box (the file + .twb are named
+            // from spec.workbookName); fall back to the frame-derived default.
+            const typedName = workbookNameRef.current.trim();
+            if (typedName) fSpec.workbookName = typedName;
             // Worksheet swap: if the user uploaded their real .twbx, replace any
             // SHEET/ placeholder whose name matches an imported worksheet with
             // that real sheet (on its real data) instead of a demo sample chart.
             let swapped = 0;
             let importedFilters = 0;
+            let unmatched: string[] = [];
             const imp = importedRef.current;
             if (imp) {
-              const wsNames = new Set(fSpec.worksheets.map((w) => w.name));
-              const matches = imp.worksheetNames.filter((n) => wsNames.has(n));
-              if (matches.length) {
-                fSpec.imports = imp.payloadFor(matches);
-                swapped = matches.length;
-                const swappedSet = new Set(matches);
-                // Show the imported sheet's REAL name as the zone title (Tableau
-                // renders it in the zone's title bar) instead of leaving it hidden.
-                for (const d of fSpec.dashboards)
-                  for (const z of d.zones)
-                    if (z.kind === "sheet" && z.worksheet && swappedSet.has(z.worksheet))
-                      z.showTitle = true;
-                // Lift each swapped sheet's own quick filters onto the dashboard as
-                // real filter cards (bound to the imported data via their verbatim
-                // param), placed just above the sheet they control.
-                const FW = 200, FH = 32, FGAP = 8;
-                const perSheet = new Map<string, number>();
-                for (const f of imp.filtersFor(matches)) {
-                  const dash = fSpec.dashboards.find((d) =>
-                    d.zones.some((z) => z.kind === "sheet" && z.worksheet === f.worksheet)
-                  );
-                  if (!dash) continue;
-                  const sheet = dash.zones.find(
-                    (z) => z.kind === "sheet" && z.worksheet === f.worksheet
-                  )!;
-                  const idx = perSheet.get(f.worksheet) ?? 0;
-                  perSheet.set(f.worksheet, idx + 1);
-                  dash.zones.push({
-                    id: nextId("z"),
-                    kind: "filter",
-                    friendlyName: `Filter ${f.field}`,
-                    x: sheet.x + idx * (FW + FGAP),
-                    y: Math.max(0, sheet.y - FH - 4),
-                    w: Math.min(FW, Math.round(sheet.w)),
-                    h: FH,
-                    worksheet: f.worksheet,
-                    field: f.field,
-                    filterParam: f.param,
-                    bg: "#FFFFFF",
-                    fg: "#D7DAEC",
-                  });
-                  importedFilters++;
-                }
-              }
+              // Swap placed SHEET/ demos for the user's real imported worksheets,
+              // matched by base name across every dashboard (see applyImportedSwap).
+              const r = applyImportedSwap(fSpec, imp);
+              swapped = r.swapped;
+              importedFilters = r.importedFilters;
+              unmatched = r.unmatched;
             }
             const res     = await exportSpecTwbx(fSpec);
             const allZones = models.flatMap((m) => m.zones);
@@ -226,9 +197,25 @@ export default function App() {
               (swapped ? `, ${swapped} real sheet(s) swapped in` : "") +
               (importedFilters ? `, ${importedFilters} imported filter(s)` : "") +
               (fSpec.actions.length ? `, ${fSpec.actions.length} action(s)` : "");
+            // Surface why charts may be demo data instead of the user's real sheets:
+            //  - no workbook loaded this session (the upload isn't remembered across
+            //    plugin restarts — a very common "all charts are demo" cause);
+            //  - a workbook IS loaded but nothing / not everything matched a SHEET/.
+            const realSheetCount = allZones.filter(
+              (z) => z.kind === "sheet" && !/^\s*nav\s*\//i.test(z.name || "")
+            ).length;
+            const swapWarn = !imp
+              ? realSheetCount > 0
+                ? ` ⚠ No Tableau workbook is loaded, so every chart uses demo data. Re-upload your .twb/.twbx under "Use my real Tableau sheets" (it isn't remembered between plugin sessions), then export again.`
+                : ""
+              : swapped === 0
+              ? ` ⚠ No SHEET/ layer matched an imported worksheet, so every chart is demo data. Name your SHEET/ layers to match: ${imp.worksheetNames.slice(0, 8).join(", ")}${imp.worksheetNames.length > 8 ? "…" : ""}.`
+              : unmatched.length
+              ? ` ⚠ ${unmatched.length} SHEET/ placeholder(s) didn't match an imported sheet (still demo data): ${unmatched.slice(0, 6).join(", ")}${unmatched.length > 6 ? "…" : ""}.`
+              : "";
             setStatus({
-              kind: res.warnings.length ? "warn" : "ok",
-              text: `Exported — ${dashes} dashboard(s), ${res.zoneCount} zones, ${sheets} worksheet(s)${extra}. Download started.`,
+              kind: res.warnings.length || swapWarn ? "warn" : "ok",
+              text: `Exported — ${dashes} dashboard(s), ${res.zoneCount} zones, ${sheets} worksheet(s)${extra}. Download started.${swapWarn}`,
             });
             toPlugin({ type: "notify", message: ".twbx downloaded — check your downloads." });
           } catch (e) {

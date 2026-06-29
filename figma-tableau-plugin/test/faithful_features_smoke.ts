@@ -32,7 +32,11 @@ const model: FaithfulModel = {
     // FILTER/Region
     { id: "f1", name: "FILTER/Region", kind: "filter", x: 40, y: 40, w: 240, h: 48, filterField: "Region" },
     // URL/en.wikipedia.org/wiki/Tableau  (bare host gets an https:// scheme)
-    { id: "w1", name: "URL/en.wikipedia.org/wiki/Tableau", kind: "web", x: 40, y: 500, w: 1200, h: 240, url: "https://en.wikipedia.org/wiki/Tableau" },
+    { id: "w1", name: "URL/en.wikipedia.org/wiki/Tableau", kind: "web", x: 40, y: 460, w: 1200, h: 200, url: "https://en.wikipedia.org/wiki/Tableau" },
+    // a chart heading just above the Sales sheet -> dropped (its Tableau title shows it)
+    { id: "ttl", name: "chart title", kind: "text", x: 48, y: 96, w: 220, h: 18, text: "Sales by Region", fontSize: 13, fontColor: "#101828" },
+    // unrelated body text far from any sheet -> kept
+    { id: "note", name: "note", kind: "text", x: 40, y: 760, w: 400, h: 20, text: "Updated daily", fontSize: 11, fontColor: "#6B7280" },
   ],
 };
 
@@ -53,6 +57,11 @@ async function main() {
   assert(!!webZone, "URL/ layer -> a web zone");
   assert(webZone!.url === "https://en.wikipedia.org/wiki/Tableau", "web zone carries the URL");
 
+  // "remove the figma title": the heading drawn above the Sales sheet is dropped
+  // (the Tableau title bar now shows it); unrelated body text is kept.
+  assert(!spec.dashboards[0].zones.some((z) => z.kind === "text" && z.friendlyName === "chart title"), "chart heading above the sheet is dropped");
+  assert(spec.dashboards[0].zones.some((z) => z.kind === "text" && z.friendlyName === "note"), "unrelated body text is kept");
+
   const res = generateSpecWorkbook(spec);
   const xml = res.twbXml;
 
@@ -60,7 +69,7 @@ async function main() {
   assert(/type-v2='filter'/.test(xml), "quick-filter card emitted (type-v2='filter')");
   assert(/mode='checkdropdown'/.test(xml), "filter card uses checkdropdown mode");
   assert(/name='Sales by Region' show-title='true'/.test(xml), ":showTitle -> show-title='true' on that sheet");
-  assert(/name='Trend' show-title='false'/.test(xml), "untagged sheet stays show-title='false'");
+  assert(/name='Trend' show-title='true'/.test(xml), "sheets now show their title by default (checked always)");
   assert(/command='tsc:tsl-filter'/.test(xml), "filter action command present");
   assert(/command='tsc:brush'/.test(xml), "highlight action command present");
   assert(/<source type='sheet' worksheet='Trend' \/>/.test(xml), "highlight sourced from the Trend sheet");

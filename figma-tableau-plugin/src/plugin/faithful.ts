@@ -135,12 +135,22 @@ function dominantChartColor(node: SceneNode): string | undefined {
  * single `.action`; returns the first NODE-type action's destinationId.
  */
 function navDestination(node: SceneNode): string | undefined {
+  // Read this node's own reactions first.
   const reactions = (node as SceneNode & { reactions?: readonly unknown[] }).reactions;
-  if (!Array.isArray(reactions)) return undefined;
-  for (const r of reactions as Array<{ action?: unknown; actions?: unknown[] }>) {
-    const actions = Array.isArray(r.actions) ? r.actions : r.action ? [r.action] : [];
-    for (const a of actions as Array<{ type?: string; destinationId?: string | null }>) {
-      if (a && a.type === "NODE" && a.destinationId) return a.destinationId;
+  if (Array.isArray(reactions)) {
+    for (const r of reactions as Array<{ action?: unknown; actions?: unknown[] }>) {
+      const actions = Array.isArray(r.actions) ? r.actions : r.action ? [r.action] : [];
+      for (const a of actions as Array<{ type?: string; destinationId?: string | null }>) {
+        if (a && a.type === "NODE" && a.destinationId) return a.destinationId;
+      }
+    }
+  }
+  // The designer often wires the prototype link from an inner button/instance, not
+  // the named Nav/ frame itself — so search descendants for the first navigation.
+  if ("children" in node) {
+    for (const c of (node as ChildrenMixin).children) {
+      const d = navDestination(c as SceneNode);
+      if (d) return d;
     }
   }
   return undefined;
@@ -373,6 +383,7 @@ function walk(node: SceneNode, origin: { x: number; y: number }, zones: Faithful
       kind: "button",
       ...rect,
       label: ts.text || label,
+      isNav: true,
       navTargetId: navDestination(node),
       fill: fill && fill.a > 0.01 ? fill.hex : undefined,
       fontColor: ts.color,
@@ -617,11 +628,18 @@ export function parseFaithful(): FaithfulModel {
   return buildModelForFrame(frame);
 }
 
-/** Resolve a selected node to the outermost frame-like ancestor (or itself). */
+/**
+ * Resolve a selected node to the OUTERMOST frame-like ancestor — i.e. the
+ * dashboard it belongs to. A top-level frame resolves to itself; a frame NESTED
+ * in another frame (e.g. a `SHEET/` card the user dragged INTO their dashboard,
+ * or staged sheets dropped inside it) resolves UP to that dashboard, so the
+ * dashboard — with the sheet as a child — is what gets exported, not the lone
+ * card. (Previously a frame-like node returned itself, which made a selected
+ * inner `SHEET/` frame export as its own stray single-sheet dashboard.)
+ */
 function resolveFrame(node: SceneNode): SceneNode | undefined {
-  if (isFrameLike(node)) return node;
+  let outer: SceneNode | undefined = isFrameLike(node) ? node : undefined;
   let p: BaseNode | null = node.parent;
-  let outer: SceneNode | undefined;
   while (p && p.type !== "PAGE" && p.type !== "DOCUMENT") {
     if (isFrameLike(p)) outer = p as SceneNode;
     p = p.parent;
@@ -678,14 +696,45 @@ export function parseFaithfulAll(): FaithfulModel[] {
 }
 
 /**
+ * Build a SHEET-ONLY model from a node the designer wired a Nav/ link to: just
+ * the one worksheet, no dashboard. This is what makes "navigate to a sheet" add
+ * ONLY the sheet (not its enclosing dashboard). The zone id === the node id so
+ * seed maps the nav target straight to this worksheet.
+ */
+function buildSheetOnlyModel(node: SceneNode): FaithfulModel {
+  const pfx = matchLayerPrefix(node.name || "");
+  const { sheetName, chart } = parseSheetTag(pfx ? pfx.clean : node.name || "Sheet");
+  const bb =
+    (node as SceneNode & { absoluteBoundingBox?: Rect | null }).absoluteBoundingBox ?? {
+      x: node.x,
+      y: node.y,
+      w: node.width,
+      h: node.height,
+    };
+  const w = bb.w || node.width || 600;
+  const h = bb.h || node.height || 400;
+  return {
+    id: node.id,
+    title: sheetName,
+    sheetOnly: true,
+    width: w,
+    height: h,
+    zones: [
+      { id: node.id, name: node.name || sheetName, kind: "sheet", x: 0, y: 0, w, h, sheetName, chart, markColor: dominantChartColor(node) },
+    ],
+  };
+}
+
+/**
  * Resolve every Nav/ button's Figma interaction to a real export target, pulling
  * in any destination the user didn't select. For each Nav/ zone that carries a
  * `navTargetId` (the reaction's destination node):
- *   - find the destination's enclosing FRAME and, if it isn't already one of the
- *     models, transpile it and APPEND it (so the navigation has somewhere to go);
- *   - if the destination is itself a SHEET/ node, mark the button as a sheet
- *     target (seed navigates to that worksheet's window); otherwise it's a
- *     dashboard target (the enclosing frame's window).
+ *   - if the destination is a SHEET (its own name is a SHEET/ layer, or it's
+ *     already a placed sheet), navigate to that WORKSHEET. If its worksheet isn't
+ *     already being exported, append a SHEET-ONLY model so just the sheet — NOT
+ *     its whole dashboard — is added (the user's explicit ask);
+ *   - otherwise navigate to the destination's enclosing DASHBOARD, appending that
+ *     frame as a full dashboard model if it wasn't selected.
  * Only the directly-referenced destinations are pulled in (one level deep), so a
  * single Nav/ link can't drag the whole prototype graph into the export. Returns
  * the (possibly longer) model list. Runs in the sandbox (needs getNodeByIdAsync).
@@ -708,18 +757,35 @@ export async function expandNavTargets(models: FaithfulModel[]): Promise<Faithfu
       dest = null;
     }
     if (!dest || !("type" in dest)) continue;
-    const frame = resolveFrame(dest as SceneNode);
+    const destNode = dest as SceneNode;
+
+    // SHEET destination -> navigate to a WORKSHEET. A destination is a sheet when
+    // its OWN name carries a SHEET/ prefix, or it's already a placed sheet zone.
+    const destPfx = matchLayerPrefix(destNode.name || "");
+    const destIsSheet = (destPfx && destPfx.role === "worksheet") || sheetNodeIds.has(destNode.id);
+    if (destIsSheet) {
+      z.navTargetIsSheet = true;
+      // If the worksheet isn't already in the export, add it ALONE (no dashboard).
+      if (!sheetNodeIds.has(destNode.id) && !haveFrame.has(destNode.id)) {
+        haveFrame.add(destNode.id);
+        const sheetModel = buildSheetOnlyModel(destNode);
+        out.push(sheetModel);
+        sheetNodeIds.add(destNode.id);
+      }
+      continue;
+    }
+
+    // DASHBOARD destination -> navigate to the enclosing frame's window.
+    const frame = resolveFrame(destNode);
     if (!frame) continue;
     z.navTargetFrameId = frame.id;
+    z.navTargetIsSheet = false;
     if (!haveFrame.has(frame.id)) {
       haveFrame.add(frame.id);
       const model = buildModelForFrame(frame);
       out.push(model);
       for (const z2 of model.zones) if (z2.kind === "sheet") sheetNodeIds.add(z2.id);
     }
-    // A destination that ended up as a worksheet (its node id is a sheet zone) is
-    // a SHEET target; otherwise the enclosing dashboard is the target.
-    z.navTargetIsSheet = sheetNodeIds.has(z.navTargetId!);
   }
   return out;
 }

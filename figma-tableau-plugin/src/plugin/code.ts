@@ -48,6 +48,13 @@ async function applyTagsAndResend(): Promise<void> {
 // the models.
 async function sendFaithful(): Promise<void> {
   try {
+    // dynamic-page docs: make sure every page (and its nodes' prototype reactions
+    // + the frames those navigate to) is loaded before we read interactions.
+    try {
+      await figma.loadAllPagesAsync();
+    } catch {
+      /* older API / single-page docs — reactions on the current page still read */
+    }
     // Pull in any Nav/ interaction destinations the user didn't select (so the
     // navigation has a real worksheet/dashboard to land on), THEN rasterize.
     let models = parseFaithfulAll();
@@ -105,38 +112,43 @@ async function loadLabelFont(): Promise<FontName | null> {
 }
 
 /**
- * Create one `SHEET/<name>` placeholder frame per chosen imported worksheet, in
- * an EMPTY STAGING AREA to the RIGHT of the dashboard frame (NOT inside it — so
- * they never overlap the design). They're added as siblings of the dashboard
- * (same parent); the user then drags each onto the dashboard where they want it.
- * Skips any `SHEET/<name>` already staged so re-clicking is safe.
+ * Create one `SHEET/<name>` placeholder frame per chosen imported worksheet,
+ * placed INSIDE the dashboard frame in a tidy grid BELOW the existing content
+ * (the frame is grown taller to fit). Inside-the-frame is what makes them export:
+ * they're children of the dashboard, so the faithful walk picks them up and each
+ * swaps in its real imported sheet. Below the content means they never overlap
+ * the design — the user drags each up into place (or leaves it; it still exports).
+ * The dashboard frame stays SELECTED so the very next export includes them.
+ * Skips any `SHEET/<name>` already present so re-clicking is safe. With no
+ * dashboard frame we fall back to dropping them on the page.
  */
 async function addSheets(names: string[]): Promise<void> {
   const frame = findDashboardFrame();
-  const parent: BaseNode & ChildrenMixin =
-    frame && frame.parent && "appendChild" in frame.parent
-      ? (frame.parent as BaseNode & ChildrenMixin)
-      : figma.currentPage;
+  // Host = the dashboard frame itself (so the sheets are its children and export);
+  // only fall back to the page when there's no frame at all.
+  const host: BaseNode & ChildrenMixin =
+    frame && "appendChild" in frame ? (frame as unknown as BaseNode & ChildrenMixin) : figma.currentPage;
+  const inFrame = host === (frame as unknown);
 
-  // Skip names already staged among the parent's direct SHEET/ children.
+  // Skip names already present among the host's direct SHEET/ children.
   const existing = new Set(
-    ("children" in parent ? parent.children : [])
+    ("children" in host ? host.children : [])
       .map((c) => c.name)
       .filter((n) => /^\s*sheet\s*\//i.test(n))
       .map((n) => n.replace(/^\s*sheet\s*\/\s*/i, "").trim().toLowerCase())
   );
   const todo = names.filter((n) => !existing.has(n.trim().toLowerCase()));
   if (todo.length === 0) {
-    figma.notify("Those sheets are already staged next to your dashboard.");
+    figma.notify("Those sheets are already on your dashboard.");
     return;
   }
 
   const font = await loadLabelFont();
   const SW = 360, SH = 240, GAP = 24, COLS = 2;
-  // Anchor the grid in empty space just right of the dashboard frame (in the
-  // parent's coordinate space, so siblings line up beside it).
-  const originX = frame ? frame.x + frame.width + 80 : 0;
-  const originY = frame ? frame.y : 0;
+  // Inside the frame: a grid starting just below the current content (frame-
+  // relative coords). On the page fallback: just right of the frame.
+  const baseX = inFrame ? GAP : frame ? frame.x + frame.width + 80 : 0;
+  const baseY = inFrame ? (frame ? frame.height + GAP : GAP) : frame ? frame.y : 0;
   const created: SceneNode[] = [];
   todo.forEach((name, i) => {
     const col = i % COLS;
@@ -144,8 +156,8 @@ async function addSheets(names: string[]): Promise<void> {
     const f = figma.createFrame();
     f.name = `SHEET/${name}`;
     f.resize(SW, SH);
-    f.x = originX + col * (SW + GAP);
-    f.y = originY + row * (SH + GAP);
+    f.x = baseX + col * (SW + GAP);
+    f.y = baseY + row * (SH + GAP);
     f.cornerRadius = 10;
     f.fills = [{ type: "SOLID", color: { r: 0.93, g: 0.94, b: 0.98 } }];
     f.strokes = [{ type: "SOLID", color: { r: 0.78, g: 0.8, b: 0.9 } }];
@@ -160,15 +172,25 @@ async function addSheets(names: string[]): Promise<void> {
       t.x = 16;
       t.y = 16;
     }
-    parent.appendChild(f);
+    host.appendChild(f);
     created.push(f);
   });
 
+  // Grow the dashboard frame so the new grid sits fully inside it (no overlap).
+  if (inFrame && frame && created.length && "resize" in frame) {
+    const rows = Math.ceil(todo.length / COLS);
+    const neededH = baseY + rows * (SH + GAP);
+    if (neededH > frame.height) (frame as FrameNode).resize(frame.width, Math.ceil(neededH));
+  }
+
   if (created.length) {
-    figma.currentPage.selection = created;
+    // Select the DASHBOARD (not the cards) so the next export targets it with the
+    // sheets included; zoom to the new cards so the user can find/reposition them.
+    figma.currentPage.selection = frame ? [frame] : created;
     figma.viewport.scrollAndZoomIntoView(created);
   }
-  figma.notify(`Staged ${created.length} sheet(s) beside your dashboard — drag them onto your design, then export.`);
+  const where = inFrame ? "onto your dashboard (below the design)" : "beside your dashboard";
+  figma.notify(`Added ${created.length} sheet(s) ${where} — reposition them, then export. They'll swap in their real data.`);
 }
 
 /**

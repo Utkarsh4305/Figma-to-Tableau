@@ -248,8 +248,17 @@ interface FaithfulCtx {
   imgN: number; // running image counter → unique Image/<name>_<n>.png
   sheetN: number; // running sheet counter → alternates the sample measure
   sheetIdToWs: Map<string, string>; // figma sheet-layer node id → worksheet name
-  // Nav/ buttons awaiting target resolution once every dashboard/worksheet exists.
-  navButtons: Array<{ zone: ZoneSpec; targetId?: string; targetFrameId?: string; isSheet?: boolean }>;
+  // Navigation buttons (rendered as button-worksheets) awaiting target resolution
+  // once every dashboard/worksheet exists → each becomes a <nav-action>.
+  navButtons: Array<{
+    buttonWs: string; // the button-worksheet's name (the nav-action source)
+    sourceDash: string; // the dashboard the button sits on
+    isNav?: boolean; // true = Nav/ (interaction-driven); false = BUTTON/ (name)
+    nameTarget?: string; // BUTTON/ "> Target" name
+    targetId?: string; // Nav/ reaction destination node id
+    targetFrameId?: string; // Nav/ destination's enclosing frame
+    isSheet?: boolean; // Nav/ destination is a SHEET node
+  }>;
 }
 
 function uniqNameIn(ctx: FaithfulCtx, base: string): string {
@@ -347,7 +356,11 @@ function buildFaithfulDashboard(model: FaithfulModel, ctx: FaithfulCtx, dashName
       } else if (z.actionKind === "highlight") {
         ctx.actions.push({ id: nextId("act"), name: `Highlight from ${wsName}`, kind: "highlight", sourceSheet: wsName, target: wsName, field: dimension, runOn: "select" });
       }
-      return { id: nextId("z"), kind: "sheet" as const, ...base, worksheet: wsName, bg: "#FFFFFF", cornerRadius: z.cornerRadius, showTitle: z.showTitle || undefined };
+      // Show the worksheet's title by default (the "Show Title" checkbox stays
+      // CHECKED) so every chart is labelled by its own Tableau title bar.
+      // baseSheetName carries the PRE-dedupe name so a worksheet-swap can repoint
+      // every "X"/"X 2" copy of the same SHEET/ at the one imported sheet.
+      return { id: nextId("z"), kind: "sheet" as const, ...base, worksheet: wsName, baseSheetName: z.sheetName || z.name || wsName, bg: "#FFFFFF", cornerRadius: z.cornerRadius, showTitle: true };
     }
     if (z.kind === "filter") {
       // Real Tableau quick-filter card. Bound to a worksheet (set in the
@@ -366,28 +379,39 @@ function buildFaithfulDashboard(model: FaithfulModel, ctx: FaithfulCtx, dashName
       return { id: nextId("z"), kind: "web" as const, ...base, url: z.url };
     }
     if (z.kind === "button") {
-      // Native Tableau navigation button. For a BUTTON/ layer, `targetDashboard`
-      // holds the RAW target string parsed from the layer name. For a Nav/ layer,
-      // the target comes from the Figma interaction (navTargetId/...) and is
-      // resolved in assembleFaithfulWorkbook to a worksheet OR dashboard window.
-      // Until then a target may be undefined (an unresolved button falls back to a
-      // styled text zone in the generator — still load-safe).
-      const zb: ZoneSpec = {
-        id: nextId("z"),
-        kind: "button" as const,
-        ...base,
-        text: z.label || z.name || "Button",
-        targetDashboard: z.navTargetId ? undefined : z.target,
-        bg: z.fill || "#2563EB",
-        fg: z.fontColor || "#FFFFFF",
-        fontSize: z.fontSize ? Math.round(z.fontSize) : 13,
-        cornerRadius: z.cornerRadius,
-        bold: true,
-        align: 1,
-      };
-      if (z.navTargetId)
-        ctx.navButtons.push({ zone: zb, targetId: z.navTargetId, targetFrameId: z.navTargetFrameId, isSheet: z.navTargetIsSheet });
-      return zb;
+      // A navigation button becomes a BUTTON-WORKSHEET (a Text-mark sheet showing
+      // the caption on a colored background) placed as a sheet zone; a <nav-action>
+      // sourced from it (built in assembleFaithfulWorkbook) does the navigation.
+      // This is the only nav mechanism the user's Tableau accepts — the native
+      // <button> dashboard-object is rejected (D2E8DA72) in a floating dashboard.
+      const caption = z.label || z.name || "Button";
+      const btnWs = uniqNameIn(ctx, (caption || "Button").slice(0, 40));
+      ctx.worksheets.push({
+        id: nextId("ws"),
+        name: btnWs,
+        mark: "Text",
+        measures: [],
+        dualAxis: false,
+        showLabels: true,
+        navButton: {
+          caption,
+          bg: z.fill || "#2563EB",
+          fg: z.fontColor || "#FFFFFF",
+          fontSize: z.fontSize ? Math.round(z.fontSize) : 13,
+        },
+      });
+      ctx.navButtons.push({
+        buttonWs: btnWs,
+        sourceDash: dashName,
+        isNav: z.isNav,
+        nameTarget: z.target,
+        targetId: z.navTargetId,
+        targetFrameId: z.navTargetFrameId,
+        isSheet: z.navTargetIsSheet,
+      });
+      // showTitle:false so dropFigmaTitles (which only touches titled chart sheets)
+      // leaves this button alone; the worksheet itself draws the caption.
+      return { id: nextId("z"), kind: "sheet" as const, ...base, worksheet: btnWs, bg: z.fill || "#2563EB", cornerRadius: z.cornerRadius, showTitle: false };
     }
     if (z.kind === "text") {
       return {
@@ -431,9 +455,51 @@ function buildFaithfulDashboard(model: FaithfulModel, ctx: FaithfulCtx, dashName
     widthPx: Math.round(model.width),
     heightPx: Math.round(model.height),
     bg: model.background || "#FFFFFF",
-    zones,
+    zones: dropFigmaTitles(zones),
     layoutMode: "floating",
   };
+}
+
+/**
+ * Drop each chart's redundant Figma heading text. Every SHEET zone now shows its
+ * own Tableau title bar (the worksheet name), so a text layer the designer drew as
+ * that chart's title — at the top INSIDE the card or JUST ABOVE it — would just
+ * duplicate it. For each sheet we remove the single best-matching heading: a SHORT
+ * text zone whose width fits within the sheet's (so a wide dashboard/section title
+ * spanning several charts is never removed) and that sits in the sheet's title
+ * band (from ~60px above its top down into its top quarter). Body text, value
+ * labels, and text not tied to a chart are left untouched. Conservative by design:
+ * at most one heading per sheet, and only a confidently chart-scoped one.
+ */
+function dropFigmaTitles(zones: ZoneSpec[]): ZoneSpec[] {
+  // Only titled CHART sheets duplicate a heading; button-worksheet sheets (and any
+  // other show-title='false' sheet) are skipped so their nearby text is kept.
+  const sheets = zones.filter((z) => z.kind === "sheet" && z.showTitle === true);
+  if (!sheets.length) return zones;
+  const remove = new Set<string>();
+  const ABOVE = 60; // px a heading may sit above the sheet's top
+  for (const s of sheets) {
+    let best: ZoneSpec | undefined;
+    let bestDist = Infinity;
+    for (const t of zones) {
+      if (t.kind !== "text" || remove.has(t.id) || !t.text) continue;
+      // Width fits within the sheet (+ small slack): excludes wide section/page
+      // titles that span multiple charts, and overlaps this sheet horizontally.
+      const hOK = t.x >= s.x - 16 && t.x + t.w <= s.x + s.w + 16 && t.x < s.x + s.w && t.x + t.w > s.x;
+      // In the title band: a little above the sheet, down into its top quarter.
+      const vOK = t.y >= s.y - ABOVE && t.y <= s.y + s.h * 0.25;
+      if (!hOK || !vOK) continue;
+      // A heading is short (a line or two, not a paragraph).
+      if (t.text.trim().length > 60 || t.text.split("\n").length > 2) continue;
+      const dist = Math.abs(t.y - s.y);
+      if (dist < bestDist) {
+        best = t;
+        bestDist = dist;
+      }
+    }
+    if (best) remove.add(best.id);
+  }
+  return remove.size ? zones.filter((z) => !remove.has(z.id)) : zones;
 }
 
 /** A content zone (vs. a purely decorative rect / background). */
@@ -504,6 +570,34 @@ function applyFlowLayout(dash: DashboardSpec): void {
   dash.root = root;
 }
 
+/**
+ * Materialize a sheet-only model's worksheets into `ctx` WITHOUT a dashboard.
+ * Used for a Nav/ button whose SHEET destination wasn't selected: we need the
+ * worksheet to exist (so the nav-action has a target) but the user asked for only
+ * the sheet — not its whole enclosing dashboard — to be added. sheetIdToWs is
+ * populated so the nav target resolves to this worksheet by the destination's id.
+ */
+function materializeSheetOnly(model: FaithfulModel, ctx: FaithfulCtx): void {
+  for (const z of model.zones) {
+    if (z.kind !== "sheet") continue;
+    const wsName = uniqNameIn(ctx, z.sheetName || z.name || "Sheet");
+    ctx.sheetIdToWs.set(z.id, wsName);
+    const mark = markTypeOf(z.chart);
+    const measure = ctx.sheetN++ % 2 === 0 ? "Sales" : "Profit";
+    const isTrend = mark === "Line" || mark === "Area";
+    ctx.worksheets.push({
+      id: nextId("ws"),
+      name: wsName,
+      mark,
+      dimension: isTrend ? "Period" : "Region",
+      measures: [{ field: measure, agg: "Sum" }],
+      dualAxis: false,
+      markColor: z.markColor || "#898989",
+      showLabels: true,
+    });
+  }
+}
+
 /** Assemble a faithful workbook from one OR MORE models (one dashboard each). */
 function assembleFaithfulWorkbook(
   models: FaithfulModel[],
@@ -511,15 +605,22 @@ function assembleFaithfulWorkbook(
 ): WorkbookSpec {
   const { fields, rows } = sampleData();
   const ctx: FaithfulCtx = { worksheets: [], actions: [], used: new Set(), imgN: 0, sheetN: 0, sheetIdToWs: new Map(), navButtons: [] };
+  // Sheet-only models (Nav/ sheet targets that weren't selected) become bare
+  // worksheets, not dashboards — split them out so only real frames make dashboards.
+  const dashModels = models.filter((m) => !m.sheetOnly);
+  const sheetOnlyModels = models.filter((m) => m.sheetOnly);
   // Dashboard names must be UNIQUE across the workbook: Tableau's <windows>
   // section enforces a unique-name (and unique simple-id) identity constraint, so
   // two frames named the same (e.g. several "Data Metrics") would otherwise fail
   // to load with D2E8DA72 "duplicate identity constraint". Resolve to unique names
   // up front so dashName flows consistently into the spec, actions, nav targets,
   // and the per-dashboard window uuid.
-  const resolvedDashNames = uniqueDashNames(models.map((m) => m.title || "Dashboard"));
-  const dashboards = models.map((m, i) => buildFaithfulDashboard(m, ctx, resolvedDashNames[i]));
+  const resolvedDashNames = uniqueDashNames(dashModels.map((m) => m.title || "Dashboard"));
+  const dashboards = dashModels.map((m, i) => buildFaithfulDashboard(m, ctx, resolvedDashNames[i]));
   if (opts?.layout === "flow") for (const d of dashboards) applyFlowLayout(d);
+  // Now the sheet-only worksheets (after dashboards, so sheetIdToWs already has
+  // every placed sheet; these add the extra nav-target worksheets on top).
+  for (const m of sheetOnlyModels) materializeSheetOnly(m, ctx);
 
   // A workbook needs >=1 worksheet. If NO design had a SHEET/-tagged layer, keep
   // one unplaced dummy so the faithful (text/shape) export still opens.
@@ -535,67 +636,50 @@ function assembleFaithfulWorkbook(
     });
   }
 
-  // Bind every FILTER/ card to a host worksheet (a quick-filter card needs one).
-  // Prefer the first real chart sheet ON THE CARD'S OWN DASHBOARD so the card
-  // filters a view it sits beside; fall back to the first worksheet overall.
+  // Bind every FILTER/ card to a host CHART worksheet (a quick-filter card needs
+  // one). Prefer the first real chart sheet ON THE CARD'S OWN DASHBOARD (never a
+  // nav button-worksheet); fall back to the first chart worksheet overall.
+  const buttonWsNames = new Set(ctx.worksheets.filter((w) => w.navButton).map((w) => w.name));
+  const firstChart = ctx.worksheets.find((w) => !w.navButton)?.name;
   for (const dash of dashboards) {
-    const localHost = dash.zones.find((z) => z.kind === "sheet" && z.worksheet)?.worksheet;
-    const host = localHost ?? ctx.worksheets[0].name;
-    for (const zn of dash.zones) if (zn.kind === "filter" && !zn.worksheet) zn.worksheet = host;
+    const localHost = dash.zones.find(
+      (z) => z.kind === "sheet" && z.worksheet && !buttonWsNames.has(z.worksheet)
+    )?.worksheet;
+    const host = localHost ?? firstChart;
+    if (host) for (const zn of dash.zones) if (zn.kind === "filter" && !zn.worksheet) zn.worksheet = host;
   }
 
-  // Nav/ buttons first: their target comes from the Figma interaction, resolved
-  // here now that every dashboard/worksheet exists. A SHEET destination navigates
-  // to that worksheet's window; any other destination navigates to its enclosing
-  // dashboard. An unresolved destination leaves the button plain (load-safe). The
-  // BUTTON/ name-convention loop below skips these (they're already resolved).
+  // Resolve every navigation button to a target and emit a <nav-action> (the only
+  // nav mechanism the user's Tableau accepts — the native <button> object is
+  // rejected in floating dashboards). A Nav/ button's target comes from its Figma
+  // interaction: a SHEET destination → that worksheet, any other → its dashboard.
+  // A BUTTON/ button's target comes from its name (">"/"->"), else the A↔B toggle
+  // (2 dashboards) or next-with-wrap (>2). An unresolved button just doesn't get
+  // an action (its worksheet still renders as a static styled label — load-safe).
   const frameIdToDash = new Map<string, string>();
-  models.forEach((m, i) => {
+  dashModels.forEach((m, i) => {
     if (m.id) frameIdToDash.set(m.id, resolvedDashNames[i]);
   });
-  const navResolvedIds = new Set<string>();
-  for (const nb of ctx.navButtons) {
-    navResolvedIds.add(nb.zone.id);
-    nb.zone.targetDashboard = undefined;
-    nb.zone.targetWorksheet = undefined;
-    if (nb.isSheet && nb.targetId && ctx.sheetIdToWs.has(nb.targetId)) {
-      nb.zone.targetWorksheet = ctx.sheetIdToWs.get(nb.targetId);
-    } else if (nb.targetFrameId && frameIdToDash.has(nb.targetFrameId)) {
-      nb.zone.targetDashboard = frameIdToDash.get(nb.targetFrameId);
-    }
-  }
-
-  // Resolve each navigation button's target to a REAL dashboard name now that all
-  // dashboards exist. Match priority: (1) an explicit target (after ">"/"->" in
-  // the layer name) that names another dashboard, case-insensitively; (2) when
-  // there are exactly two dashboards, the OTHER one (the obvious A↔B toggle);
-  // (3) the next dashboard in order (wrap-around). A button never targets its own
-  // dashboard. If nothing resolves, targetDashboard is cleared and the generator
-  // renders the button as a styled text zone (no navigation) — still load-safe.
   const dashNames = dashboards.map((d) => d.name);
   const findDash = (raw: string | undefined): string | undefined => {
     if (!raw) return undefined;
     const t = raw.trim().toLowerCase();
     return dashNames.find((n) => n.toLowerCase() === t) ?? dashNames.find((n) => n.toLowerCase().includes(t));
   };
-  for (let di = 0; di < dashboards.length; di++) {
-    const dash = dashboards[di];
-    for (const zn of dash.zones) {
-      if (zn.kind !== "button") continue;
-      if (navResolvedIds.has(zn.id)) continue; // Nav/ buttons resolved above
-      const raw = zn.targetDashboard;
-      let target: string | undefined;
-      if (raw) {
-        // Explicit "> Target": only honor a real dashboard match. A typo / a
-        // target that doesn't exist is left UNresolved (plain button) rather than
-        // silently navigating somewhere unexpected.
-        target = findDash(raw);
-      } else if (dashboards.length === 2) {
-        target = dashNames[(di + 1) % 2]; // the obvious A↔B toggle
-      } else if (dashboards.length > 2) {
-        target = dashNames[(di + 1) % dashNames.length]; // next, wrap around
-      }
-      zn.targetDashboard = target && target !== dash.name ? target : undefined;
+  for (const nb of ctx.navButtons) {
+    let target: string | undefined;
+    if (nb.isNav) {
+      if (nb.isSheet && nb.targetId && ctx.sheetIdToWs.has(nb.targetId)) target = ctx.sheetIdToWs.get(nb.targetId);
+      else if (nb.targetFrameId && frameIdToDash.has(nb.targetFrameId)) target = frameIdToDash.get(nb.targetFrameId);
+    } else if (nb.nameTarget) {
+      target = findDash(nb.nameTarget);
+    } else if (dashNames.length === 2) {
+      target = dashNames[(dashNames.indexOf(nb.sourceDash) + 1) % 2];
+    } else if (dashNames.length > 2) {
+      target = dashNames[(dashNames.indexOf(nb.sourceDash) + 1) % dashNames.length];
+    }
+    if (target && target !== nb.sourceDash && target !== nb.buttonWs) {
+      ctx.actions.push({ id: nextId("act"), name: `Go to ${target}`, kind: "navigate", sourceSheet: nb.buttonWs, target, runOn: "select" });
     }
   }
 
@@ -607,7 +691,8 @@ function assembleFaithfulWorkbook(
     worksheets: ctx.worksheets,
     dashboards,
     actions: ctx.actions,
-    includeActions: ctx.actions.length > 0,
+    // tsc filter/highlight actions stay opt-in; navigate actions emit regardless.
+    includeActions: ctx.actions.some((a) => a.kind !== "navigate"),
   };
 }
 

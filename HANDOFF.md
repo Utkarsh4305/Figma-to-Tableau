@@ -3,8 +3,8 @@
 > Self-contained context for any AI/engineer picking this up, **including on a
 > device without the local Claude memory**. It folds in the essential facts from
 > the private memory files (the Tableau 2026.2 recipe, the reference-export
-> workflow, and project state). Last updated: **2026-06-28**, build
-> `floating-only-42`.
+> workflow, and project state). Last updated: **2026-06-29**, build
+> `nav-interactions-tabs-43`.
 
 ---
 
@@ -71,7 +71,8 @@ DOM-free and `figma`-free (imported by both).
 
 ### Message flow (current)
 - UI → sandbox: `request-parse`, `request-faithful`, `apply-tags`, `resize`,
-  `notify`.
+  `notify`, `add-sheets` (stage imported sheets as `SHEET/` frames),
+  `insert-default` (Defaults tab — drop a ready-made tagged starter component).
 - sandbox → UI: `model-ready` (the heuristic parse), `faithful-ready` (the
   faithful transpile).
 - **Removed this session:** the whole `request-background` / `background-ready`
@@ -137,6 +138,7 @@ all lowered to CONFIRMED Tableau XML — verified against `DM_Dashboards.twb` /
 | `FILTER/Region` | a **real quick-filter card** (`type-v2='filter'`, `mode='checkdropdown'`) bound to the first chart sheet, on a sample string dimension (`Region`, or `Period` if the name hints time) |
 | `URL/en.wikipedia.org/...` or `WEB/https://...` | a **real web page object** (`type-v2='web'` + `forceUpdate='' param='<URL>'`); a bare host gets an `https://` scheme. Confirmed from `Using Web Page Object in Tableau.twb` |
 | `BUTTON/Go to Sales > Sales` (or `->`) | a **native navigation button** (`type-v2='dashboard-object'` + `<button action='tabdoc:goto-sheet'>`) that switches to the named dashboard frame; no target / 2 frames → toggles to the other. Confirmed from LaDataViz `multi.twbx`. See §10 |
+| `Nav/Open Details` | a **native nav button whose target = the layer's Figma PROTOTYPE INTERACTION** (its "Navigate to" reaction), not the layer name. If the destination is a `SHEET/` node → navigates to that **worksheet** window; else → its **dashboard** window. A destination frame you didn't select is **auto-included** in the export. Build 43; see §10 |
 | `SHEET/Sales[bar]:showTitle` | the worksheet zone shows its **title bar** (`show-title='true'`); default stays `false` |
 | `SHEET/Sales[bar]:filter` | clicking that sheet runs a **dashboard filter action** (`tsc:tsl-filter`, `special-fields='all'`) |
 | `SHEET/Trend[line]:highlight` | clicking that sheet runs a **highlight action** (`tsc:brush` on its dimension) |
@@ -341,6 +343,13 @@ current tag. Many "it's still broken" reports were just a stale build.
   `layout-flow`, all content zones placed, enclosing card/bg rects dropped, NO
   container background (confirmed-XML discipline), load-safe; and the default
   (no layout arg) stays floating with no layout-flow.
+- `faithful_nav_smoke.ts` — `BUTTON/` named-target nav buttons (explicit `>`,
+  A↔B toggle, unresolvable→text fallback, `window-id`==dashboard `simple-id`).
+- `faithful_navlink_smoke.ts` — `Nav/` interaction nav (`nav-interactions-tabs-43`):
+  a Nav→frame resolves to a dashboard window, a Nav→SHEET node resolves to a
+  worksheet window, an unresolvable destination falls back to a plain button.
+- `twb_import_smoke.ts` — worksheet swap from `examples/DM_Dashboards.twbx`; also
+  (build 43) asserts the verbatim imported filter param + swapped-sheet title.
 
 Floating `.twb` output was historically kept **byte-identical** across refactors,
 but the byte counts have since shifted intentionally as features landed (the
@@ -374,6 +383,20 @@ tested by `faithful_flow_smoke.ts` — it's just not reachable from the UI, so i
 can be re-exposed later if a real responsive use-case appears. Build tag is now
 `floating-only-42` (native nav buttons + design-color marks + dup-name fix +
 flow toggle removed — see §10 and §7.9).
+
+**Tabs added (`nav-interactions-tabs-43`).** `App.tsx` now has a 3-tab bar under
+the brand block — **Export** (the existing workflow), **Syntax**, **Defaults**:
+- **Syntax** is static documentation of every layer-name convention (`SHEET/`,
+  `Nav/`, `BUTTON/`, `FILTER/`, `KPI/`, `Image/`, `URL/`, `TEXT/`, `CONTAINER/`)
+  with the `[type]` tags and `:option` suffixes. Pure reference, no plugin calls.
+- **Defaults** inserts ready-made, correctly-named **starter components**: a grid
+  of cards (`Worksheet`, `KPI`, `Nav button`, `Named button`, `Filter`, `Image`,
+  `Web object`, `Text`) that send `insert-default` → `code.ts insertDefault(kind)`,
+  which drops a `SHEET/New Sheet[bar]` / `Nav/Go to…` / `FILTER/Region` / … frame
+  in the empty area beside the dashboard (same staging spot as `add-sheets`). The
+  user drags it onto the design and restyles freely — the NAME carries the Tableau
+  mapping. Syntax/Defaults render with or without a frame selected; the footer +
+  export button show only on the Export tab.
 
 ---
 
@@ -507,6 +530,43 @@ real test: make a button frame whose inner text is the caption, name the frame
 export both frames, open in 2026.2, click the button — it should switch
 dashboards.
 
+**Navigation by Figma INTERACTION + nav-to-worksheet + auto-include — BUILT
+(`nav-interactions-tabs-43`).** A new **`Nav/Label`** prefix drives navigation
+from the layer's **Figma prototype interaction** instead of its name (the user's
+explicit ask). End-to-end:
+- `faithful.ts walk()` has a `Nav/` branch (mirrors `BUTTON/`): it reads the
+  layer's `reactions[]` via `navDestination()` (first `actions[].type==='NODE'`
+  → `destinationId`) and records it as `FaithfulZone.navTargetId` on a button
+  zone (caption = inner text or the label after `Nav/`).
+- New async **`expandNavTargets(models)`** (in `faithful.ts`, called from
+  `code.ts sendFaithful` BEFORE `attachFaithfulImages`): resolves each
+  `navTargetId` via `getNodeByIdAsync`, finds its enclosing frame, and **appends
+  that frame as an extra model if the user didn't select it** (one level deep, so
+  a single link can't drag in the whole prototype graph). Sets `navTargetFrameId`
+  + `navTargetIsSheet`. `buildModelForFrame` now treats a frame whose OWN name is
+  `SHEET/…` as a single worksheet (so a Nav target that's a standalone SHEET frame
+  becomes one worksheet, id == frame id).
+- `seed.ts assembleFaithfulWorkbook`: a nav-resolution pass (using `ctx.sheetIdToWs`
+  = Figma sheet-node-id → worksheet name, and `frameIdToDash` = frame id →
+  dashboard name) runs BEFORE the `BUTTON/` name-convention loop (which now skips
+  nav-resolved zones). A SHEET destination → `ZoneSpec.targetWorksheet`; any other
+  → `targetDashboard`; unresolved → plain button.
+- `workbookGenerator.ts`: a new **stable `wsUuid` map** (mirrors `dashUuid`) gives
+  every worksheet window a fixed `<simple-id>`, so a nav button can point its
+  `goto-sheet window-id` at a **worksheet** window, not just a dashboard. The
+  button branch emits whichever target resolved.
+- Covered by `test/faithful_navlink_smoke.ts`: a Nav→frame resolves to the
+  dashboard window, a Nav→SHEET node resolves to the worksheet window, an
+  unresolvable destination falls back to a plain button, and each `window-id`
+  matches its target window's `simple-id`.
+
+⚠️ **Generated + well-formed + smoke-tested, NOT yet opened in the user's
+Tableau.** The Figma-side reaction reading (`navDestination`/`expandNavTargets`)
+can only run inside the real plugin sandbox (the smoke test feeds the
+post-resolution fields directly). First real test: name a layer `Nav/…`, wire a
+prototype "Navigate to" link from it to another frame (or a `SHEET/` layer),
+export, open in 2026.2, click it.
+
 **Worksheet swap = import the user's REAL sheets — BUILT (`import-swap-34`).**
 "Swap" means: import worksheets the user already built (in an existing `.twbx`)
 and substitute them for the demo SHEET/ placeholders, so the export carries their
@@ -555,6 +615,27 @@ imported sheet that references a parameter/extract our manifest union misses;
 collision if a generated sheet and an imported sheet share a name with different
 data (today the import wins).
 
+**Swap improvements — BUILT (`nav-interactions-tabs-43`):**
+- **De-dupe by NAME, not position (bug fix).** `exporter.dedupeWorksheetNames` now
+  seeds its used-set with the **imported worksheet names**, so a generated demo
+  sheet can never collide with — or get its zone repointed onto — an imported one.
+  This fixes the reported "swap takes some other sheet" (dedupe was renaming /
+  positionally remapping across the import boundary). The swap changes the sheet
+  strictly by name; an imported-bound zone is left untouched.
+- **Swapped sheets show their REAL title.** On swap, `App.tsx` sets
+  `show-title='true'` on each matched SHEET/ zone, so Tableau renders the imported
+  worksheet's actual name in the zone's title bar instead of leaving it hidden.
+- **Filters lifted from the imported sheets.** `twbImport.filtersFor(names)` parses
+  each imported worksheet's `<slices>` and returns its quick-filter columns
+  verbatim (`[datasource].[field-instance]`, skipping internal Measure-Names /
+  object-id pseudo-columns). On swap, `App.tsx` drops one **real filter card per
+  filter** onto the dashboard just above the sheet it controls, carrying the
+  verbatim param on `ZoneSpec.filterParam`. The generator's filter branch uses that
+  param directly (so the card filters the IMPORTED datasource, not our sample one),
+  and `filtersByWs` skips `filterParam` zones (imported sheets already carry their
+  filters internally). Covered by the extended `test/twb_import_smoke.ts` (asserts
+  the verbatim `[federated.*]` param + `show-title='true'` on the swapped sheet).
+
 **Unconfirmed (needs the user to open in Tableau after a manifest re-import):**
 - Whether `entire-view-29` visually matches `multi.twbx`/their `Our.twb` in
   Tableau. The user's reports have repeatedly come from STALE Figma builds — ALWAYS
@@ -592,16 +673,16 @@ src/shared/
 src/plugin/        (sandbox: code/parser/faithful; UI: the rest)
   code.ts           sandbox entry; message switch; parseAndSend/sendFaithful/applyTagsAndResend
   parser.ts         heuristic parse → DashboardModel; applyAutoTags; exportPng/attachImages
-  faithful.ts       parseFaithful → FaithfulModel (the primary transpiler); attachFaithfulImages
-  seed.ts           seedSpecFromModel + faithfulSpec + blankSpec; sample dataset
+  faithful.ts       parseFaithful → FaithfulModel (the primary transpiler); Nav/ reaction read (navDestination) + expandNavTargets (auto-include destinations); attachFaithfulImages
+  seed.ts           seedSpecFromModel + faithfulSpec + blankSpec; sample dataset; Nav/ target resolution (sheet vs dashboard window)
   workbookGenerator.ts  WorkbookSpec → .twb XML  ← worksheet/pane/zone styling lives here
   exporter.ts       generateSpecWorkbook/exportSpecTwbx + validateTwb (the load guards)
   twbxBuilder.ts    zip .twb + Data/ + Image/ → .twbx blob, download
   csv.ts / xlsx.ts  data upload/parse/type-infer/sample rows
   tableauGenerator.ts / mapper.ts  OLD DashboardModel→.twb path (legacy, still tested)
 src/ui/
-  App.tsx           tabs, message handler, the single export button, BUILD tag
-  editor/*          DataPanel, SheetsPanel, LayoutPanel, LayoutCanvas
+  App.tsx           Export/Syntax/Defaults tabs, message handler, the export button + import-swap (title/filter injection), SyntaxTab/DefaultsTab, BUILD tag
+  editor/*          DataPanel, SheetsPanel, LayoutPanel, LayoutCanvas (legacy editor panels, not wired into the current App)
   devMock.ts        browser stand-in for the Figma sandbox
   main.tsx/index.html/styles.css
 scripts/build-ui.mjs  the esbuild single-file UI build (do not use vite build for UI)

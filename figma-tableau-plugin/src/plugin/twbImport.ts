@@ -17,12 +17,13 @@
 // ---------------------------------------------------------------------------
 
 import JSZip from "jszip";
-import type { ImportPayload, ImportAsset } from "../shared/spec";
+import type { ImportPayload, ImportAsset, ImportedFilter } from "../shared/spec";
 
 /** What we hand back to the UI after parsing an upload (before any matching). */
 export interface ParsedImport {
   worksheetNames: string[]; // every worksheet found, for the user to map against
   payloadFor: (names: string[]) => ImportPayload; // build a payload for a subset
+  filtersFor: (names: string[]) => ImportedFilter[]; // quick filters on a subset
 }
 
 /** Read the `name='…'` (or another attr) off a block's opening tag. */
@@ -78,6 +79,36 @@ function manifestEntriesIn(xml: string): string[] {
   const re = /<([A-Za-z_][\w.]*)\s*\/>/g;
   while ((m = re.exec(sec))) names.add(m[1]);
   return [...names];
+}
+
+/**
+ * Quick-filter columns a worksheet shows, lifted verbatim from its <slices>.
+ * Each <column> is a `[datasource].[field-instance]` reference. We skip Tableau's
+ * internal pseudo-columns (Measure Names, object-id measures) and keep only real
+ * dimension filters — those are the cards a user actually placed on the sheet.
+ * The human label is parsed from the instance (`[none:Region:nk]` -> "Region").
+ */
+function slicesIn(worksheetXml: string): ImportedFilter[] {
+  const sec = sectionOf(worksheetXml, "slices");
+  if (!sec) return [];
+  const out: ImportedFilter[] = [];
+  const seen = new Set<string>();
+  let m: RegExpExecArray | null;
+  const re = /<column>([\s\S]*?)<\/column>/g;
+  while ((m = re.exec(sec))) {
+    const param = m[1].trim();
+    if (!param || seen.has(param)) continue;
+    // Skip internal pseudo-columns that aren't user-facing dimension filters.
+    if (param.includes("[:Measure Names]") || param.includes("[__tableau_internal_object_id__]")) continue;
+    // Parse a friendly label from the field instance, e.g.
+    // "[ds].[none:Query Status:nk]" -> "Query Status"; fall back to the raw tail.
+    const fld = param.match(/\[(?:[a-z]+):([^:\]]+):[^\]]*\]\s*$/i);
+    const tail = param.match(/\[([^\]]+)\]\s*$/);
+    const field = (fld ? fld[1] : tail ? tail[1] : param).trim();
+    seen.add(param);
+    out.push({ worksheet: "", field, param });
+  }
+  return out;
 }
 
 /** Locate the single `.twb` entry inside a `.twbx` zip (or the file itself). */
@@ -145,5 +176,18 @@ export async function parseImport(buf: ArrayBuffer, fileName: string): Promise<P
     };
   };
 
-  return { worksheetNames: worksheets.map((w) => w.name!), payloadFor };
+  // Quick filters each chosen worksheet shows on the dashboard (from its slices),
+  // tagged with the worksheet they belong to so the UI can bind a filter card to
+  // the right sheet on swap.
+  const filtersFor = (names: string[]): ImportedFilter[] => {
+    const out: ImportedFilter[] = [];
+    for (const nm of names) {
+      const wx = wsByName.get(nm);
+      if (!wx) continue;
+      for (const f of slicesIn(wx)) out.push({ ...f, worksheet: nm });
+    }
+    return out;
+  };
+
+  return { worksheetNames: worksheets.map((w) => w.name!), payloadFor, filtersFor };
 }

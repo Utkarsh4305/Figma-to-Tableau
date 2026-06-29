@@ -42,9 +42,18 @@ export interface ExportResult {
  * path already dedupes at creation, so its output stays byte-identical. Sheet/
  * filter zone `worksheet` references are remapped positionally (zones are emitted
  * in worksheet order) so each zone still points at its own renamed worksheet.
+ *
+ * Import-aware: a swapped-in worksheet keeps its REAL name (it's matched by name,
+ * and its XML is spliced verbatim). We seed `used` with the imported names so a
+ * generated demo sheet can never (a) collide with an imported window name, nor
+ * (b) be the one that gets renamed out from under a SHEET/ zone — i.e. the swap
+ * changes the sheet BY NAME and dedupe never silently repoints a zone at some
+ * other (renamed) sheet. Imported names carry no queue entry, so a zone bound to
+ * an imported sheet is returned unchanged by `remap`.
  */
 export function dedupeWorksheetNames(spec: WorkbookSpec): WorkbookSpec {
-  const used = new Set<string>();
+  const importedNames = spec.imports ? [...spec.imports.worksheetXml.keys()] : [];
+  const used = new Set<string>(importedNames);
   const queues = new Map<string, string[]>(); // original name -> assigned names, in order
   let changed = false;
   const worksheets = spec.worksheets.map((ws) => {

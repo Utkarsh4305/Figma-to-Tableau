@@ -127,6 +127,25 @@ function dominantChartColor(node: SceneNode): string | undefined {
   return best?.hex;
 }
 
+/**
+ * The destination node id of a layer's Figma prototype interaction (its first
+ * "Navigate to" reaction). Drives the Nav/ convention: instead of naming a target
+ * in the layer name, the designer just wires a prototype connection in Figma and
+ * we follow it. Reads both the modern `reactions[].actions[]` and the legacy
+ * single `.action`; returns the first NODE-type action's destinationId.
+ */
+function navDestination(node: SceneNode): string | undefined {
+  const reactions = (node as SceneNode & { reactions?: readonly unknown[] }).reactions;
+  if (!Array.isArray(reactions)) return undefined;
+  for (const r of reactions as Array<{ action?: unknown; actions?: unknown[] }>) {
+    const actions = Array.isArray(r.actions) ? r.actions : r.action ? [r.action] : [];
+    for (const a of actions as Array<{ type?: string; destinationId?: string | null }>) {
+      if (a && a.type === "NODE" && a.destinationId) return a.destinationId;
+    }
+  }
+  return undefined;
+}
+
 /** First TEXT descendant's text + color + point size (a button's caption). */
 function firstTextStyle(node: SceneNode): { text?: string; color?: string; sizePt?: number } {
   let found: { text?: string; color?: string; sizePt?: number } | undefined;
@@ -336,6 +355,33 @@ function walk(node: SceneNode, origin: { x: number; y: number }, zones: Faithful
   // here instead of the static design. Emit one sheet zone and DON'T recurse:
   // the worksheet replaces whatever the designer drew inside the frame. This is
   // exactly how LaDataViz produced the live charts in Template.twbx.
+  // Nav/Label -> a native Tableau navigation button whose TARGET comes from the
+  // layer's Figma prototype interaction (its "Navigate to" reaction), resolved to
+  // a worksheet or dashboard window by expandNavTargets + seed.ts. The caption is
+  // the inner text (or the label after "Nav/"); colors/shape come from the layer.
+  // Like BUTTON/ we don't recurse — the native button replaces the inner design.
+  const navRe = /^\s*nav\s*\/\s*/i;
+  if (navRe.test(node.name || "")) {
+    const clean = (node.name || "").replace(navRe, "").trim();
+    const { label } = parseButtonName(clean);
+    const ts = firstTextStyle(node);
+    const fill = fillOf(node);
+    const cr = (node as SceneNode & { cornerRadius?: number | symbol }).cornerRadius;
+    zones.push({
+      id: node.id,
+      name: node.name || "Nav",
+      kind: "button",
+      ...rect,
+      label: ts.text || label,
+      navTargetId: navDestination(node),
+      fill: fill && fill.a > 0.01 ? fill.hex : undefined,
+      fontColor: ts.color,
+      fontSize: ts.sizePt,
+      cornerRadius: typeof cr === "number" ? cr : undefined,
+    });
+    return;
+  }
+
   const pfx = matchLayerPrefix(node.name || "");
   if (pfx && pfx.role === "worksheet") {
     const opts = parseLayerOptions(pfx.clean);
@@ -526,6 +572,26 @@ function buildModelForFrame(frame: SceneNode): FaithfulModel {
   const origin = { x: bb.x, y: bb.y };
   const zones: FaithfulZone[] = [];
 
+  // A frame whose OWN name is SHEET/… is a single worksheet (not a dashboard of
+  // its inner parts). This makes a Nav/ destination that points straight at a
+  // SHEET/ frame become one Tableau worksheet we can navigate to. The whole frame
+  // is the sheet zone (id === frame id, so seed maps the nav target to it).
+  const framePfx = matchLayerPrefix(frame.name || "");
+  if (framePfx && framePfx.role === "worksheet") {
+    const { sheetName, chart } = parseSheetTag(framePfx.clean);
+    const sheetBg = fillOf(frame);
+    return {
+      id: frame.id,
+      title: frame.name || sheetName,
+      width: bb.w || frame.width,
+      height: bb.h || frame.height,
+      background: sheetBg?.hex,
+      zones: [
+        { id: frame.id, name: frame.name || sheetName, kind: "sheet", x: 0, y: 0, w: bb.w || frame.width, h: bb.h || frame.height, sheetName, chart, markColor: dominantChartColor(frame) },
+      ],
+    };
+  }
+
   // The frame's own background first (so it sits behind everything).
   const bg = fillOf(frame);
   if (bg && bg.a > 0.01) {
@@ -609,6 +675,53 @@ export function parseFaithfulAll(): FaithfulModel[] {
   const frames = collectFrames();
   if (!frames.length) throw new Error("Select one or more frames to convert.");
   return frames.map(buildModelForFrame);
+}
+
+/**
+ * Resolve every Nav/ button's Figma interaction to a real export target, pulling
+ * in any destination the user didn't select. For each Nav/ zone that carries a
+ * `navTargetId` (the reaction's destination node):
+ *   - find the destination's enclosing FRAME and, if it isn't already one of the
+ *     models, transpile it and APPEND it (so the navigation has somewhere to go);
+ *   - if the destination is itself a SHEET/ node, mark the button as a sheet
+ *     target (seed navigates to that worksheet's window); otherwise it's a
+ *     dashboard target (the enclosing frame's window).
+ * Only the directly-referenced destinations are pulled in (one level deep), so a
+ * single Nav/ link can't drag the whole prototype graph into the export. Returns
+ * the (possibly longer) model list. Runs in the sandbox (needs getNodeByIdAsync).
+ */
+export async function expandNavTargets(models: FaithfulModel[]): Promise<FaithfulModel[]> {
+  const out = [...models];
+  const haveFrame = new Set(out.map((m) => m.id).filter((id): id is string => !!id));
+  const sheetNodeIds = new Set<string>();
+  for (const m of out) for (const z of m.zones) if (z.kind === "sheet") sheetNodeIds.add(z.id);
+
+  // Snapshot the nav zones from the USER-selected models only (one level deep).
+  const navZones: FaithfulZone[] = [];
+  for (const m of models) for (const z of m.zones) if (z.kind === "button" && z.navTargetId) navZones.push(z);
+
+  for (const z of navZones) {
+    let dest: BaseNode | null = null;
+    try {
+      dest = await figma.getNodeByIdAsync(z.navTargetId!);
+    } catch {
+      dest = null;
+    }
+    if (!dest || !("type" in dest)) continue;
+    const frame = resolveFrame(dest as SceneNode);
+    if (!frame) continue;
+    z.navTargetFrameId = frame.id;
+    if (!haveFrame.has(frame.id)) {
+      haveFrame.add(frame.id);
+      const model = buildModelForFrame(frame);
+      out.push(model);
+      for (const z2 of model.zones) if (z2.kind === "sheet") sheetNodeIds.add(z2.id);
+    }
+    // A destination that ended up as a worksheet (its node id is a sheet zone) is
+    // a SHEET target; otherwise the enclosing dashboard is the target.
+    z.navTargetIsSheet = sheetNodeIds.has(z.navTargetId!);
+  }
+  return out;
 }
 
 // --- image rasterization (sandbox) ------------------------------------------

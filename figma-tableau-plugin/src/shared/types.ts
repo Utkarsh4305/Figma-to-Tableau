@@ -7,12 +7,6 @@
 /** Tableau field data types we support. */
 export type FieldType = "string" | "date" | "integer" | "real";
 
-/** A column in the (placeholder) Tableau data source. */
-export interface DataField {
-  name: string;
-  type: FieldType;
-}
-
 /** Chart kinds we can detect from a Figma mockup and emit as a worksheet. */
 export type ChartKind =
   | "bar"
@@ -149,6 +143,16 @@ export interface FaithfulZone {
   // part after ">"/"->"; resolved to a real dashboard name in seed.ts).
   label?: string;
   target?: string;
+  // nav (Nav/-tagged layer): a navigation button whose destination comes from the
+  // layer's Figma PROTOTYPE INTERACTION ("Navigate to" reaction), not the layer
+  // name. `navTargetId` is the reaction's destination node id (set in the sandbox
+  // walk); `navTargetFrameId` is that destination's enclosing frame (the dashboard
+  // to auto-include) and `navTargetIsSheet` is true when the destination is itself
+  // a SHEET/ node (→ navigate to that worksheet's window instead of a dashboard).
+  // The latter two are filled in by the async expandNavTargets pass.
+  navTargetId?: string;
+  navTargetFrameId?: string;
+  navTargetIsSheet?: boolean;
   // rect
   fill?: string; // hex background
   cornerRadius?: number;
@@ -221,6 +225,19 @@ export interface MsgAddSheets {
   names: string[];
 }
 
+/** The ready-made tagged components the Defaults tab can drop onto the canvas. */
+export type DefaultKind = "sheet" | "kpi" | "nav" | "button" | "filter" | "image" | "web" | "text";
+
+/**
+ * Ask the sandbox to insert a correctly-named starter component (a `SHEET/`,
+ * `Nav/`, `FILTER/`, … layer) beside the dashboard, so the user can design with
+ * the conventions without typing the prefix by hand.
+ */
+export interface MsgInsertDefault {
+  type: "insert-default";
+  kind: DefaultKind;
+}
+
 export interface MsgFaithfulReady {
   type: "faithful-ready";
   // One model per selected frame — each becomes its own Tableau dashboard in the
@@ -236,4 +253,5 @@ export type UiToPlugin =
   | MsgNotify
   | MsgApplyTags
   | MsgRequestFaithful
-  | MsgAddSheets;
+  | MsgAddSheets
+  | MsgInsertDefault;

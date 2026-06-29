@@ -421,3 +421,89 @@ select {
 }
 
 .scratch-btn:hover { color: var(--text); border-color: #444; }
+
+/* ── Tab bar ─────────────────────────────────────────────── */
+.tab-bar {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 2px;
+  padding: 8px 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 8px 6px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { color: var(--text); border-bottom-color: var(--green); }
+
+/* ── Syntax tab ──────────────────────────────────────────── */
+.syntax-intro {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-2);
+  margin-bottom: 12px;
+}
+
+.syntax-list { display: flex; flex-direction: column; gap: 8px; }
+
+.syntax-item {
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-2);
+}
+
+.syntax-tag {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  color: var(--green);
+  margin-bottom: 5px;
+}
+
+.syntax-title { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+.syntax-desc { font-size: 11px; line-height: 1.5; color: var(--text-2); }
+
+/* ── Defaults tab ────────────────────────────────────────── */
+.defaults-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.default-card {
+  text-align: left;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-2);
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.default-card:hover { border-color: var(--border-focus); background: var(--bg-3); }
+.default-label { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+
+.default-hint {
+  display: block;
+  font-size: 10px;
+  color: var(--text-2);
+  word-break: break-all;
+}

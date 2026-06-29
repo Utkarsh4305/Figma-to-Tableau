@@ -109,6 +109,11 @@ export interface ZoneSpec {
   isKpi?: boolean;
   // filter card: the (string) dimension the quick filter is on
   field?: string;
+  // filter card bound to an IMPORTED worksheet: the verbatim
+  // `[datasource].[field-instance]` column reference lifted from the imported
+  // sheet's own <slices>, so the card filters its REAL data (not our sample
+  // datasource). When set, the generator uses it as the zone `param` directly.
+  filterParam?: string;
   // text / button
   text?: string;
   bg?: string;
@@ -125,8 +130,12 @@ export interface ZoneSpec {
   cornerRadius?: number;
   strokeColor?: string;
   strokeWidth?: number;
-  // button
+  // button: navigation target — a dashboard window (targetDashboard) OR, for a
+  // Nav/ button whose Figma interaction points at a SHEET/ destination, a
+  // worksheet window (targetWorksheet). At most one is set; the generator points
+  // the button's goto-sheet window-id at the matching window's simple-id.
   targetDashboard?: string;
+  targetWorksheet?: string;
   // web object (URL/ layer): the page URL loaded by the type-v2='web' zone
   url?: string;
   // image zone: base64 PNG payload + the in-package filename it's stored under
@@ -178,6 +187,17 @@ export interface DataSpec {
   fields: SpecField[];
   calcs: CalcField[];
   rows: string[][]; // values aligned to fields order
+}
+
+/**
+ * A quick-filter found inside an imported worksheet (lifted from its <slices>).
+ * Placed on the dashboard as a real filter card bound to that worksheet's own
+ * data when the sheet is swapped in.
+ */
+export interface ImportedFilter {
+  worksheet: string; // the imported worksheet the quick filter belongs to
+  field: string; // human label parsed from the column instance (e.g. "Region")
+  param: string; // verbatim [datasource].[field-instance] reference
 }
 
 /** A binary asset (data extract / image) lifted from an imported .twbx. */

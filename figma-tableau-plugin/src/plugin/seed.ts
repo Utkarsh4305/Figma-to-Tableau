@@ -247,6 +247,9 @@ interface FaithfulCtx {
   used: Set<string>; // assigned worksheet names so far (dedupe across dashboards)
   imgN: number; // running image counter → unique Image/<name>_<n>.png
   sheetN: number; // running sheet counter → alternates the sample measure
+  sheetIdToWs: Map<string, string>; // figma sheet-layer node id → worksheet name
+  // Nav/ buttons awaiting target resolution once every dashboard/worksheet exists.
+  navButtons: Array<{ zone: ZoneSpec; targetId?: string; targetFrameId?: string; isSheet?: boolean }>;
 }
 
 function uniqNameIn(ctx: FaithfulCtx, base: string): string {
@@ -312,6 +315,7 @@ function buildFaithfulDashboard(model: FaithfulModel, ctx: FaithfulCtx, dashName
     const base = { x: z.x, y: z.y, w: z.w, h: z.h, friendlyName: z.name };
     if (z.kind === "sheet") {
       const wsName = uniqNameIn(ctx, z.sheetName || z.name || "Sheet");
+      ctx.sheetIdToWs.set(z.id, wsName); // so a Nav/ target can resolve to this sheet
       const mark = markTypeOf(z.chart);
       // Alternate the measure so adjacent sample charts aren't identical.
       const measure = ctx.sheetN++ % 2 === 0 ? "Sales" : "Profit";
@@ -362,17 +366,18 @@ function buildFaithfulDashboard(model: FaithfulModel, ctx: FaithfulCtx, dashName
       return { id: nextId("z"), kind: "web" as const, ...base, url: z.url };
     }
     if (z.kind === "button") {
-      // Native Tableau navigation button. `targetDashboard` holds the RAW target
-      // string parsed from the layer name; assembleFaithfulWorkbook resolves it to
-      // a real dashboard name once every dashboard is known. Until then it may be
-      // undefined (a button with no resolvable target falls back to a styled text
-      // zone in the generator — still load-safe).
-      return {
+      // Native Tableau navigation button. For a BUTTON/ layer, `targetDashboard`
+      // holds the RAW target string parsed from the layer name. For a Nav/ layer,
+      // the target comes from the Figma interaction (navTargetId/...) and is
+      // resolved in assembleFaithfulWorkbook to a worksheet OR dashboard window.
+      // Until then a target may be undefined (an unresolved button falls back to a
+      // styled text zone in the generator — still load-safe).
+      const zb: ZoneSpec = {
         id: nextId("z"),
         kind: "button" as const,
         ...base,
         text: z.label || z.name || "Button",
-        targetDashboard: z.target,
+        targetDashboard: z.navTargetId ? undefined : z.target,
         bg: z.fill || "#2563EB",
         fg: z.fontColor || "#FFFFFF",
         fontSize: z.fontSize ? Math.round(z.fontSize) : 13,
@@ -380,6 +385,9 @@ function buildFaithfulDashboard(model: FaithfulModel, ctx: FaithfulCtx, dashName
         bold: true,
         align: 1,
       };
+      if (z.navTargetId)
+        ctx.navButtons.push({ zone: zb, targetId: z.navTargetId, targetFrameId: z.navTargetFrameId, isSheet: z.navTargetIsSheet });
+      return zb;
     }
     if (z.kind === "text") {
       return {
@@ -502,7 +510,7 @@ function assembleFaithfulWorkbook(
   opts?: { layout?: "flow" | "floating" }
 ): WorkbookSpec {
   const { fields, rows } = sampleData();
-  const ctx: FaithfulCtx = { worksheets: [], actions: [], used: new Set(), imgN: 0, sheetN: 0 };
+  const ctx: FaithfulCtx = { worksheets: [], actions: [], used: new Set(), imgN: 0, sheetN: 0, sheetIdToWs: new Map(), navButtons: [] };
   // Dashboard names must be UNIQUE across the workbook: Tableau's <windows>
   // section enforces a unique-name (and unique simple-id) identity constraint, so
   // two frames named the same (e.g. several "Data Metrics") would otherwise fail
@@ -536,6 +544,27 @@ function assembleFaithfulWorkbook(
     for (const zn of dash.zones) if (zn.kind === "filter" && !zn.worksheet) zn.worksheet = host;
   }
 
+  // Nav/ buttons first: their target comes from the Figma interaction, resolved
+  // here now that every dashboard/worksheet exists. A SHEET destination navigates
+  // to that worksheet's window; any other destination navigates to its enclosing
+  // dashboard. An unresolved destination leaves the button plain (load-safe). The
+  // BUTTON/ name-convention loop below skips these (they're already resolved).
+  const frameIdToDash = new Map<string, string>();
+  models.forEach((m, i) => {
+    if (m.id) frameIdToDash.set(m.id, resolvedDashNames[i]);
+  });
+  const navResolvedIds = new Set<string>();
+  for (const nb of ctx.navButtons) {
+    navResolvedIds.add(nb.zone.id);
+    nb.zone.targetDashboard = undefined;
+    nb.zone.targetWorksheet = undefined;
+    if (nb.isSheet && nb.targetId && ctx.sheetIdToWs.has(nb.targetId)) {
+      nb.zone.targetWorksheet = ctx.sheetIdToWs.get(nb.targetId);
+    } else if (nb.targetFrameId && frameIdToDash.has(nb.targetFrameId)) {
+      nb.zone.targetDashboard = frameIdToDash.get(nb.targetFrameId);
+    }
+  }
+
   // Resolve each navigation button's target to a REAL dashboard name now that all
   // dashboards exist. Match priority: (1) an explicit target (after ">"/"->" in
   // the layer name) that names another dashboard, case-insensitively; (2) when
@@ -553,6 +582,7 @@ function assembleFaithfulWorkbook(
     const dash = dashboards[di];
     for (const zn of dash.zones) {
       if (zn.kind !== "button") continue;
+      if (navResolvedIds.has(zn.id)) continue; // Nav/ buttons resolved above
       const raw = zn.targetDashboard;
       let target: string | undefined;
       if (raw) {

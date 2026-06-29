@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import type { DashboardModel, PluginToUi, UiToPlugin } from "../shared/types";
+import type { DashboardModel, PluginToUi, UiToPlugin, DefaultKind } from "../shared/types";
 import type { WorkbookSpec } from "../shared/spec";
+import { nextId } from "../shared/spec";
 import { seedSpecFromModel, blankSpec, faithfulSpecMulti } from "../plugin/seed";
 import { exportSpecTwbx } from "../plugin/exporter";
 import { parseImport, type ParsedImport } from "../plugin/twbImport";
 import DashboardPreview from "./DashboardPreview";
 
-const BUILD = "floating-only-42";
+const BUILD = "nav-interactions-tabs-43";
 
 type Status = { kind: "ok" | "err" | "warn"; text: string } | null;
 
@@ -52,6 +53,74 @@ const Brand = () => (
   </div>
 );
 
+/** Documentation of the layer-name conventions the transpiler understands. */
+const SYNTAX: Array<{ tag: string; title: string; desc: string }> = [
+  { tag: "SHEET/Name[type]", title: "Worksheet", desc: "A real Tableau worksheet. type = bar · line · area · pie · scatter. Add :showTitle to show its title, :filter or :highlight to make clicks act on the dashboard." },
+  { tag: "Nav/Label", title: "Navigation (interaction)", desc: "A native nav button. Its destination comes from the layer's Figma prototype link — wire a “Navigate to” connection to the target frame (or to a SHEET/ layer to open that worksheet). Unselected destinations are pulled into the export automatically." },
+  { tag: "BUTTON/Label > Target", title: "Navigation (named)", desc: "A nav button whose target dashboard is named after the “>”. With two dashboards and no “>”, it toggles to the other one." },
+  { tag: "FILTER/Field", title: "Quick filter", desc: "A Tableau quick-filter card on that dimension, bound to a chart on the same dashboard." },
+  { tag: "KPI/Label", title: "KPI big number", desc: "A single-number worksheet (Text mark, one measure, no dimension)." },
+  { tag: "Image/Name", title: "Image", desc: "Rasterized to a bitmap. IMG/ and LOGO/ work too. Vectors/icons are auto-rasterized even without the prefix." },
+  { tag: "URL/page", title: "Web page object", desc: "A Tableau web-page object that loads the URL. WEB/ works too; bare hosts get https://." },
+  { tag: "TEXT/Heading", title: "Text", desc: "A text zone with the layer's real text, font, size and color." },
+  { tag: "CONTAINER/Name", title: "Layout container", desc: "A layout group. GROUP/ works too. Auto-Layout frames are also reconstructed as flow containers." },
+];
+
+function SyntaxTab() {
+  return (
+    <div>
+      <div className="section-label">Layer-name conventions</div>
+      <div className="syntax-intro">
+        Name a Figma layer with one of these prefixes and it becomes the matching
+        Tableau object on export. Matching is case-insensitive; spaces around the
+        “/” are fine.
+      </div>
+      <div className="syntax-list">
+        {SYNTAX.map((s) => (
+          <div key={s.tag} className="syntax-item">
+            <code className="syntax-tag">{s.tag}</code>
+            <div className="syntax-title">{s.title}</div>
+            <div className="syntax-desc">{s.desc}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Starter components the user can drop onto the canvas, pre-named per convention. */
+const DEFAULTS: Array<{ kind: DefaultKind; label: string; hint: string }> = [
+  { kind: "sheet", label: "Worksheet", hint: "SHEET/New Sheet[bar]" },
+  { kind: "kpi", label: "KPI", hint: "KPI/Metric" },
+  { kind: "nav", label: "Nav button", hint: "Nav/Go to… (wire a prototype link)" },
+  { kind: "button", label: "Named button", hint: "BUTTON/Open > Dashboard" },
+  { kind: "filter", label: "Filter", hint: "FILTER/Region" },
+  { kind: "image", label: "Image", hint: "Image/Logo" },
+  { kind: "web", label: "Web object", hint: "URL/example.com" },
+  { kind: "text", label: "Text", hint: "TEXT/Heading" },
+];
+
+function DefaultsTab({ onInsert }: { onInsert: (k: DefaultKind) => void }) {
+  return (
+    <div>
+      <div className="section-label">Insert a starter component</div>
+      <div className="syntax-intro">
+        Drops a correctly-named layer beside your dashboard frame. Drag it onto
+        your design, restyle it freely, then export — the name carries the Tableau
+        mapping. For a Nav button, wire its prototype “Navigate to” link in Figma.
+      </div>
+      <div className="defaults-grid">
+        {DEFAULTS.map((d) => (
+          <button key={d.kind} className="default-card" onClick={() => onInsert(d.kind)}>
+            <div className="default-label">{d.label}</div>
+            <code className="default-hint">{d.hint}</code>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [model,      setModel]      = useState<DashboardModel | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
@@ -60,6 +129,7 @@ export default function App() {
   const [busy,       setBusy]       = useState(false);
   const [importedNames, setImportedNames] = useState<string[]>([]);
   const [checkedSheets, setCheckedSheets] = useState<Record<string, boolean>>({});
+  const [tab, setTab] = useState<"export" | "syntax" | "defaults">("export");
 
   // Imported real worksheets (the swap feature) — held in a ref so the once-
   // registered faithful-ready handler reads the latest upload.
@@ -96,6 +166,7 @@ export default function App() {
             // SHEET/ placeholder whose name matches an imported worksheet with
             // that real sheet (on its real data) instead of a demo sample chart.
             let swapped = 0;
+            let importedFilters = 0;
             const imp = importedRef.current;
             if (imp) {
               const wsNames = new Set(fSpec.worksheets.map((w) => w.name));
@@ -103,6 +174,44 @@ export default function App() {
               if (matches.length) {
                 fSpec.imports = imp.payloadFor(matches);
                 swapped = matches.length;
+                const swappedSet = new Set(matches);
+                // Show the imported sheet's REAL name as the zone title (Tableau
+                // renders it in the zone's title bar) instead of leaving it hidden.
+                for (const d of fSpec.dashboards)
+                  for (const z of d.zones)
+                    if (z.kind === "sheet" && z.worksheet && swappedSet.has(z.worksheet))
+                      z.showTitle = true;
+                // Lift each swapped sheet's own quick filters onto the dashboard as
+                // real filter cards (bound to the imported data via their verbatim
+                // param), placed just above the sheet they control.
+                const FW = 200, FH = 32, FGAP = 8;
+                const perSheet = new Map<string, number>();
+                for (const f of imp.filtersFor(matches)) {
+                  const dash = fSpec.dashboards.find((d) =>
+                    d.zones.some((z) => z.kind === "sheet" && z.worksheet === f.worksheet)
+                  );
+                  if (!dash) continue;
+                  const sheet = dash.zones.find(
+                    (z) => z.kind === "sheet" && z.worksheet === f.worksheet
+                  )!;
+                  const idx = perSheet.get(f.worksheet) ?? 0;
+                  perSheet.set(f.worksheet, idx + 1);
+                  dash.zones.push({
+                    id: nextId("z"),
+                    kind: "filter",
+                    friendlyName: `Filter ${f.field}`,
+                    x: sheet.x + idx * (FW + FGAP),
+                    y: Math.max(0, sheet.y - FH - 4),
+                    w: Math.min(FW, Math.round(sheet.w)),
+                    h: FH,
+                    worksheet: f.worksheet,
+                    field: f.field,
+                    filterParam: f.param,
+                    bg: "#FFFFFF",
+                    fg: "#D7DAEC",
+                  });
+                  importedFilters++;
+                }
               }
             }
             const res     = await exportSpecTwbx(fSpec);
@@ -115,6 +224,7 @@ export default function App() {
               (filters ? `, ${filters} filter(s)` : "") +
               (webs ? `, ${webs} web object(s)` : "") +
               (swapped ? `, ${swapped} real sheet(s) swapped in` : "") +
+              (importedFilters ? `, ${importedFilters} imported filter(s)` : "") +
               (fSpec.actions.length ? `, ${fSpec.actions.length} action(s)` : "");
             setStatus({
               kind: res.warnings.length ? "warn" : "ok",
@@ -224,11 +334,61 @@ export default function App() {
     });
   };
 
+  const insertDefault = (kind: DefaultKind) => {
+    toPlugin({ type: "insert-default", kind });
+    setStatus({ kind: "ok", text: `Inserted a ${kind} component beside your dashboard — drag it onto your design.` });
+  };
+
+  // ── Tabs: Export (the workflow) · Syntax (the conventions) · Defaults
+  // (starter components). Syntax/Defaults work with or without a frame selected.
+  const tabBar = (
+    <div className="tab-bar">
+      {([
+        ["export", "Export"],
+        ["syntax", "Syntax"],
+        ["defaults", "Defaults"],
+      ] as const).map(([id, label]) => (
+        <button
+          key={id}
+          className={`tab-btn ${tab === id ? "active" : ""}`}
+          onClick={() => setTab(id)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (tab === "syntax") {
+    return (
+      <>
+        <Brand />
+        {tabBar}
+        <div className="scroll-area">
+          <SyntaxTab />
+        </div>
+      </>
+    );
+  }
+
+  if (tab === "defaults") {
+    return (
+      <>
+        <Brand />
+        {tabBar}
+        <div className="scroll-area">
+          <DefaultsTab onInsert={insertDefault} />
+        </div>
+      </>
+    );
+  }
+
   // ── No frame selected ──────────────────────────────────────────────────────
   if (!spec) {
     return (
       <>
         <Brand />
+        {tabBar}
 
         <div className="scroll-area">
           {parseError ? (
@@ -258,6 +418,7 @@ export default function App() {
   return (
     <>
       <Brand />
+      {tabBar}
 
       <div className="scroll-area">
 

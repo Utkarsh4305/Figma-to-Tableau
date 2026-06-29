@@ -675,7 +675,8 @@ function dashboardXml(
   dash: DashboardSpec,
   dsName: string,
   reg: Map<string, GenField>,
-  dashUuid: Map<string, string>
+  dashUuid: Map<string, string>,
+  wsUuid: Map<string, string>
 ): { xml: string; sheetNames: string[] } {
   const fw = dash.widthPx || 1280;
   const fh = dash.heightPx || 800;
@@ -743,10 +744,16 @@ function dashboardXml(
       o.push(
         `        <zone${fn}${fix} h='${H}' id='${nid()}' ${sc} param='Image/${esc(z.imageFile)}' type-v2='bitmap' w='${W}' x='${X}' y='${Y}' />\n`
       );
-    } else if (z.kind === "filter" && z.worksheet && z.field) {
-      // dashboard quick-filter card bound to a worksheet + dimension (CONFIRMED)
-      const f = reg.get(z.field);
-      const param = f ? `[${dsName}].${dimInstance(f.base)}` : `[${dsName}].[none:${z.field}:nk]`;
+    } else if (z.kind === "filter" && z.worksheet && (z.field || z.filterParam)) {
+      // dashboard quick-filter card bound to a worksheet + dimension (CONFIRMED).
+      // An imported sheet's filter carries its OWN verbatim param (so it filters
+      // the imported datasource); a generated sheet resolves against our sample ds.
+      const f = z.field ? reg.get(z.field) : undefined;
+      const param = z.filterParam
+        ? z.filterParam
+        : f
+        ? `[${dsName}].${dimInstance(f.base)}`
+        : `[${dsName}].[none:${z.field}:nk]`;
       o.push(
         `        <zone${fn}${fix} h='${H}' id='${nid()}' mode='checkdropdown' name='${esc(z.worksheet)}' param='${param}' type-v2='filter' w='${W}' x='${X}' y='${Y}'>\n`
       );
@@ -779,14 +786,21 @@ function dashboardXml(
         )
       );
       o.push("        </zone>\n");
-    } else if (z.kind === "button" && z.targetDashboard && dashUuid.get(z.targetDashboard)) {
+    } else if (
+      z.kind === "button" &&
+      ((z.targetWorksheet && wsUuid.get(z.targetWorksheet)) ||
+        (z.targetDashboard && dashUuid.get(z.targetDashboard)))
+    ) {
       // Native Tableau navigation button — copied VERBATIM from LaDataViz's
       // multi.twbx: a type-v2='dashboard-object' zone whose <button> action is
       // `tabdoc:goto-sheet window-id="{UUID}"`, where the UUID is the TARGET
-      // dashboard window's <simple-id> (see windowsXml). button-type='text' shows
+      // window's <simple-id> (see windowsXml). The target is a worksheet window
+      // (Nav/ → SHEET destination) or a dashboard window; button-type='text' shows
       // the caption; the visual state carries caption/font/background.
-      const targetUuid = dashUuid.get(z.targetDashboard)!;
-      const caption = z.text || z.targetDashboard;
+      const targetUuid = z.targetWorksheet
+        ? wsUuid.get(z.targetWorksheet)!
+        : dashUuid.get(z.targetDashboard!)!;
+      const caption = z.text || z.targetWorksheet || z.targetDashboard;
       const fontcolor = z.fg || "#FFFFFF";
       const bg = z.bg || "#2563EB";
       const fontsize = Math.max(7, Math.round(z.fontSize || 12));
@@ -973,7 +987,8 @@ const WS_CARDS =
 
 function windowsXml(
   wsNames: string[],
-  dashboards: { name: string; sheets: string[]; uuid: string }[]
+  dashboards: { name: string; sheets: string[]; uuid: string }[],
+  wsUuid: Map<string, string>
 ): string {
   const x: string[] = ["  <windows source-height='44'>\n"];
   for (const nm of wsNames) {
@@ -983,7 +998,10 @@ function windowsXml(
     // instead of sizing to content). Confirmed from DM_Dashboards.twb: a
     // <viewpoint> after <cards> carrying <zoom type='entire-view'/>.
     x.push("      <viewpoint>\n        <zoom type='entire-view' />\n      </viewpoint>\n");
-    x.push(`      <simple-id uuid='${uid()}' />\n`);
+    // STABLE uuid (not a fresh uid()) so a Nav/ button targeting this worksheet
+    // can point its goto-sheet window-id at this window. See wsUuid in
+    // generateWorkbookXml.
+    x.push(`      <simple-id uuid='${wsUuid.get(nm) ?? uid()}' />\n`);
     x.push("    </window>\n");
   }
   for (const d of dashboards) {
@@ -1067,7 +1085,9 @@ export function generateWorkbookXml(spec: WorkbookSpec, dataDirectory: string): 
   const filtersByWs = new Map<string, Set<string>>();
   for (const d of spec.dashboards)
     for (const z of d.zones)
-      if (z.kind === "filter" && z.worksheet && z.field) {
+      // Imported filters (filterParam) already live inside their spliced
+      // worksheet XML — only generated sample-data sheets need a filter block.
+      if (z.kind === "filter" && z.worksheet && z.field && !z.filterParam) {
         const s = filtersByWs.get(z.worksheet) ?? new Set<string>();
         s.add(z.field);
         filtersByWs.set(z.worksheet, s);
@@ -1080,12 +1100,18 @@ export function generateWorkbookXml(spec: WorkbookSpec, dataDirectory: string): 
   const dashUuid = new Map<string, string>();
   for (const d of spec.dashboards) dashUuid.set(d.name, uid());
 
-  const dashOut = spec.dashboards.map((d) => dashboardXml(d, ds.dsName, reg, dashUuid));
   // Imported (real) worksheets are spliced verbatim; their names join the window
   // list so each gets a standard worksheet <window> (load-safe) and shows up in
   // the dashboard viewpoints alongside our generated sheets.
   const importedWsNames = spec.imports ? [...spec.imports.worksheetXml.keys()] : [];
   const wsNames = [...spec.worksheets.map((w) => w.name), ...importedWsNames];
+  // Each worksheet window gets a STABLE uuid up front too: a Nav/ button can
+  // navigate to a worksheet (not just a dashboard), so its `window-id` must match
+  // the worksheet window's <simple-id>. Same flow as dashUuid.
+  const wsUuid = new Map<string, string>();
+  for (const n of wsNames) wsUuid.set(n, uid());
+
+  const dashOut = spec.dashboards.map((d) => dashboardXml(d, ds.dsName, reg, dashUuid, wsUuid));
 
   const out: string[] = [];
   out.push("<?xml version='1.0' encoding='utf-8' ?>\n");
@@ -1120,7 +1146,8 @@ export function generateWorkbookXml(spec: WorkbookSpec, dataDirectory: string): 
         name: d.name,
         sheets: dashOut[i].sheetNames,
         uuid: dashUuid.get(d.name)!,
-      }))
+      })),
+      wsUuid
     )
   );
   out.push(actionsXml(spec));

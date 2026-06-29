@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import { parseSelection, attachImages, applyAutoTags } from "./parser";
-import { parseFaithfulAll, attachFaithfulImages } from "./faithful";
+import { parseFaithfulAll, attachFaithfulImages, expandNavTargets } from "./faithful";
 import type { UiToPlugin, PluginToUi } from "../shared/types";
 import { UI_SIZE } from "../shared/constants";
 
@@ -48,7 +48,14 @@ async function applyTagsAndResend(): Promise<void> {
 // the models.
 async function sendFaithful(): Promise<void> {
   try {
-    const models = parseFaithfulAll();
+    // Pull in any Nav/ interaction destinations the user didn't select (so the
+    // navigation has a real worksheet/dashboard to land on), THEN rasterize.
+    let models = parseFaithfulAll();
+    try {
+      models = await expandNavTargets(models);
+    } catch {
+      /* nav expansion is best-effort — a failure just leaves buttons unlinked */
+    }
     for (const m of models) {
       try {
         await attachFaithfulImages(m);
@@ -164,6 +171,65 @@ async function addSheets(names: string[]): Promise<void> {
   figma.notify(`Staged ${created.length} sheet(s) beside your dashboard — drag them onto your design, then export.`);
 }
 
+/**
+ * Insert ONE ready-made, correctly-named starter component (the Defaults tab):
+ * a `SHEET/`, `KPI/`, `Nav/`, `BUTTON/`, `FILTER/`, `Image/`, `URL/` or `TEXT/`
+ * layer, placed in empty space beside the dashboard frame so it never overlaps
+ * the design. The user then drags it onto their dashboard (and, for Nav/, wires a
+ * prototype "Navigate to" connection in Figma). Selected + zoomed for discovery.
+ */
+async function insertDefault(kind: string): Promise<void> {
+  const frame = findDashboardFrame();
+  const parent: BaseNode & ChildrenMixin =
+    frame && frame.parent && "appendChild" in frame.parent
+      ? (frame.parent as BaseNode & ChildrenMixin)
+      : figma.currentPage;
+  const originX = frame ? frame.x + frame.width + 80 : 0;
+  const originY = frame ? frame.y : 0;
+  const font = await loadLabelFont();
+
+  // Per-kind template: layer name (carries the LaDataViz prefix), size, look and
+  // the caption text drawn inside (so it reads like a real component in Figma).
+  const T: Record<string, { name: string; w: number; h: number; fill: RGB; caption?: string; capColor?: RGB }> = {
+    sheet:  { name: "SHEET/New Sheet[bar]", w: 360, h: 240, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "SHEET/New Sheet[bar]", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
+    kpi:    { name: "KPI/Metric",           w: 220, h: 120, fill: { r: 0.95, g: 0.96, b: 1.0 },  caption: "1,234", capColor: { r: 0.1, g: 0.12, b: 0.2 } },
+    nav:    { name: "Nav/Go to…",           w: 160, h: 48,  fill: { r: 0.145, g: 0.388, b: 0.922 }, caption: "Go to…", capColor: { r: 1, g: 1, b: 1 } },
+    button: { name: "BUTTON/Open > Dashboard", w: 180, h: 48, fill: { r: 0.067, g: 0.094, b: 0.153 }, caption: "Open", capColor: { r: 1, g: 1, b: 1 } },
+    filter: { name: "FILTER/Region",        w: 220, h: 40,  fill: { r: 1, g: 1, b: 1 },          caption: "Region ▾", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
+    image:  { name: "Image/Logo",           w: 140, h: 140, fill: { r: 0.9, g: 0.91, b: 0.96 },  caption: "Image", capColor: { r: 0.4, g: 0.43, b: 0.55 } },
+    web:    { name: "URL/example.com",      w: 480, h: 320, fill: { r: 0.97, g: 0.98, b: 1.0 },  caption: "URL/example.com", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
+    text:   { name: "TEXT/Heading",         w: 360, h: 48,  fill: { r: 1, g: 1, b: 1 },           caption: "Heading", capColor: { r: 0.06, g: 0.09, b: 0.15 } },
+  };
+  const t = T[kind] ?? T.sheet;
+
+  const f = figma.createFrame();
+  f.name = t.name;
+  f.resize(t.w, t.h);
+  f.x = originX;
+  f.y = originY;
+  f.cornerRadius = kind === "nav" || kind === "button" || kind === "filter" ? 8 : 10;
+  f.fills = [{ type: "SOLID", color: t.fill }];
+  if (kind === "sheet" || kind === "image" || kind === "web" || kind === "filter") {
+    f.strokes = [{ type: "SOLID", color: { r: 0.78, g: 0.8, b: 0.9 } }];
+    f.strokeWeight = 1;
+  }
+  if (font && t.caption) {
+    const txt = figma.createText();
+    txt.fontName = font;
+    txt.characters = t.caption;
+    txt.fontSize = kind === "kpi" ? 28 : 14;
+    txt.fills = [{ type: "SOLID", color: t.capColor ?? { r: 0.25, g: 0.28, b: 0.42 } }];
+    f.appendChild(txt);
+    txt.x = 14;
+    txt.y = Math.max(8, (t.h - txt.height) / 2);
+  }
+  parent.appendChild(f);
+  figma.currentPage.selection = [f];
+  figma.viewport.scrollAndZoomIntoView([f]);
+  const hint = kind === "nav" ? " — now wire a prototype “Navigate to” link from it in Figma." : "";
+  figma.notify(`Inserted ${t.name} beside your dashboard — drag it onto your design${hint}`);
+}
+
 // Re-parse whenever the user changes their selection.
 figma.on("selectionchange", () => void parseAndSend());
 
@@ -180,6 +246,9 @@ figma.ui.onmessage = (msg: UiToPlugin) => {
       break;
     case "add-sheets":
       void addSheets(msg.names);
+      break;
+    case "insert-default":
+      void insertDefault(msg.kind);
       break;
     case "resize":
       figma.ui.resize(Math.max(360, msg.width), Math.max(420, msg.height));

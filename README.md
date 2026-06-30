@@ -22,6 +22,11 @@ no manual rebuild.
   dashboard) bound to a built-in sample dataset.
 - **Bring your own sheets.** Upload an existing `.twbx` and swap your *real*
   worksheets — with their real data — in place of the sample charts.
+- **Prototype your navigation in Figma.** Wire a Figma "Navigate to" prototype
+  interaction from a `Nav/` layer to another frame (or a `SHEET/` layer), and the
+  export becomes a working Tableau navigation button that switches dashboard or
+  worksheet — no Tableau actions to set up by hand. Multiple selected frames
+  export as multiple linked dashboards in one workbook.
 - **Interactive objects.** Quick-filter cards, web page objects, worksheet
   titles, and dashboard filter / highlight actions — all driven by simple layer
   names.
@@ -44,6 +49,8 @@ object's name.
 | `URL/example.com` · `WEB/https://…` | A **web page object** loading that URL |
 | `IMAGE/` · `IMG/` · `LOGO/` | A **bitmap image** zone (rasterised from Figma) |
 | `KPI/Revenue` | A "big number" worksheet |
+| `Nav/Open Details` | A **navigation button** whose target is the layer's Figma prototype "Navigate to" interaction (a frame → that dashboard, a `SHEET/` layer → that worksheet) |
+| `BUTTON/Go to Sales > Sales` | A **navigation button** that switches to the named dashboard (or, with two frames selected and no target, toggles to the other) |
 | `TEXT/Title` · `CONTAINER/Row` | A text zone / layout container |
 
 ### Chart types
@@ -87,6 +94,31 @@ By default `SHEET/` worksheets bind to a built-in sample dataset
 
 The imported worksheet XML is carried byte-for-byte (never regenerated), and its
 data files are repackaged at their original paths so the connections resolve.
+
+---
+
+## Navigation — prototype it in Figma
+
+Select **multiple** dashboard frames and each one becomes its own dashboard in a
+single workbook. To link them:
+
+1. Add a button layer and name it **`Nav/Label`**.
+2. In Figma's **Prototype** tab, drag a **"Navigate to"** interaction from that
+   layer to the destination frame — or to a `SHEET/` layer to jump straight to a
+   worksheet.
+3. **Export.** The plugin reads the prototype interaction and emits a real Tableau
+   navigation action, so clicking the button in Tableau switches to that
+   dashboard or worksheet.
+
+If a destination frame wasn't part of your selection, it's pulled into the export
+automatically (one level deep). Prefer naming the target explicitly? Use
+`BUTTON/Caption > Target Dashboard` instead — the text after `>` is the
+destination, and with exactly two frames selected a bare `BUTTON/Caption` toggles
+between them.
+
+> Navigation is emitted as a Tableau `<nav-action>` driven by an invisible
+> button-worksheet — the mechanism confirmed to load in Tableau 2026.2. (The
+> native button object is *not* used: it's rejected in floating dashboards.)
 
 ---
 
@@ -180,8 +212,11 @@ where `<script type="module">` is blocked. Don't bundle the UI any other way.
   are mapped to **Segoe UI** so Tableau renders them at the intended width.
 - **Layout:** the design is exported at absolute pixel positions (floating
   layout), faithful to the Figma frame.
-- A generated workbook is always *well-formed*; visual fidelity and the
-  worksheet-swap merge should be confirmed by opening the `.twbx` in Tableau.
+
+The faithful design transpile, multi-dashboard export, **worksheet swap** (your
+real sheets + data), and **prototype-driven navigation** are all confirmed to open
+and work in Tableau 2026.2. Generated workbooks are always *well-formed*; for a
+brand-new design it's still worth a final visual check in Tableau.
 
 ---
 

@@ -3,13 +3,22 @@
 > Self-contained context for any AI/engineer picking this up, **including on a
 > device without the local Claude memory**. It folds in the essential facts from
 > the private memory files (the Tableau 2026.2 recipe, the reference-export
-> workflow, and project state). Last updated: **2026-06-29**, build
-> `swap-share-navsheet-47`. **nav-action navigation is now TABLEAU-CONFIRMED
-> working by the user.** Build 47 fixed three reported swap/nav bugs (see §
-> below): worksheet-swap now shares ONE imported sheet across every copy of a
-> placed `SHEET/` (match by `baseSheetName`, via `applyImportedSwap` in
-> `exporter.ts`), and a Nav/ link to a SHEET adds ONLY that worksheet — not its
-> whole enclosing dashboard (`FaithfulModel.sheetOnly` + `materializeSheetOnly`).
+> workflow, and project state). Last updated: **2026-06-30**, build
+> `swap-match-clone-48`.
+>
+> ✅ **TABLEAU-2026.2-CONFIRMED by the user (2026-06-30): worksheet SWAP and
+> prototype-NAVIGATION both work end-to-end.** Uploading a `.twbx` and swapping in
+> the user's real worksheets renders their real sheets + data in the opened
+> workbook (not demo), and a `Nav/` layer wired with a Figma "Navigate to"
+> prototype interaction exports as a working nav button that switches
+> dashboards/worksheets in Tableau. These were the two biggest remaining
+> "generated-but-not-confirmed" items — both are now load-confirmed, joining the
+> already-confirmed **multi-dashboard** export and **nav-action** mechanism (build
+> 46/47). Build 47 fixed three reported swap/nav bugs (worksheet-swap shares ONE
+> imported sheet across every copy of a placed `SHEET/` via `applyImportedSwap` in
+> `exporter.ts`; a Nav/ link to a SHEET adds ONLY that worksheet via
+> `FaithfulModel.sheetOnly` + `materializeSheetOnly`); build 48 made swap matching
+> case/space-tolerant (`normName`) so real sheets stop falling back to demo data.
 
 ---
 
@@ -398,7 +407,7 @@ It sends `request-faithful`; the `faithful-ready` handler builds `faithfulSpec` 
 (`exportRealComponents`, `handleExport`) were **removed**, along with the
 background-image export mode and all its plumbing. The Export tab still has:
 workbook name, Tableau version, a re-read/auto-tag source card, and a summary
-table. Build tag is in `App.tsx` `const BUILD` (currently `swap-share-navsheet-47`).
+table. Build tag is in `App.tsx` `const BUILD` (currently `swap-match-clone-48`).
 The export covers **all selected frames** (one dashboard each), **always
 pixel-exact floating**. The **"Responsive layout (flow containers)"** checkbox was
 **REMOVED from the UI** (`floating-only-42`): flow mode reflows the design via the
@@ -587,12 +596,14 @@ explicit ask). End-to-end:
   unresolvable destination falls back to a plain button, and each `window-id`
   matches its target window's `simple-id`.
 
-⚠️ **Generated + well-formed + smoke-tested, NOT yet opened in the user's
-Tableau.** The Figma-side reaction reading (`navDestination`/`expandNavTargets`)
-can only run inside the real plugin sandbox (the smoke test feeds the
-post-resolution fields directly). First real test: name a layer `Nav/…`, wire a
-prototype "Navigate to" link from it to another frame (or a `SHEET/` layer),
-export, open in 2026.2, click it.
+✅ **TABLEAU-CONFIRMED (2026-06-30).** The user wired a `Nav/` layer with a Figma
+"Navigate to" prototype interaction, exported, and the resulting nav button
+switches dashboards/worksheets in Tableau 2026.2. The full chain works:
+*prototype the navigation in Figma → working navigation in the exported workbook.*
+(The Figma-side reaction reading `navDestination`/`expandNavTargets` runs in the
+real plugin sandbox; the smoke test feeds the post-resolution fields directly.)
+This rides on the nav-action mechanism (build 45/46) — not the dead native
+`<button>` object.
 
 **Navigation REWRITTEN to `<nav-action>` (`nav-action-buttons-45`, 2026-06-29).**
 ⚠️ The native `<button>` dashboard-object (above, builds 39–44) **does NOT load in
@@ -699,15 +710,21 @@ real sheets + data instead of the Region/Sales sample. How it works:
   datasource/worksheet/window are spliced, the `.xlsx` is packaged, the demo of
   that name is dropped, and the 192 KB merged `.twb` is well-formed (minidom).
 
-⚠️ Generated + well-formed + minidom-clean, but **merging foreign XML is the
-highest load-risk thing in the project** — NOT yet opened in the user's Tableau.
-First real test: upload a real `.twbx`, name a layer `SHEET/<exact sheet name>`,
-export, open in 2026.2. If a swapped sheet errors, decompile and compare the
-spliced datasource block against a known-good standalone export of that sheet.
-Known gaps for a future pass: extract/`.hyper` connection-path edge cases;
-imported sheet that references a parameter/extract our manifest union misses;
-collision if a generated sheet and an imported sheet share a name with different
-data (today the import wins).
+✅ **TABLEAU-CONFIRMED (2026-06-30).** The user uploaded a real `.twbx`, staged
+the `SHEET/<name>` layers, dragged them onto the design, exported, and the
+imported worksheets render with their **real data** in Tableau 2026.2 (not the
+Region/Sales demo). This clears the long-standing ⚠️ on what was **the
+highest load-risk feature in the project** — merging foreign `<datasource>` /
+`<worksheet>` XML verbatim + repackaging the imported `Data/` assets. Builds 34→48
+got it there (the build-48 `normName` case/space-tolerant match was the final fix
+— before it, a `SHEET/` layer that differed from the imported worksheet by case or
+spacing silently fell back to demo data). Known gaps still open for a future pass
+(none block the confirmed happy path): extract/`.hyper` connection-path edge
+cases; an imported sheet referencing a parameter/extract our manifest union
+misses; collision if a generated sheet and an imported sheet share a name with
+different data (today the import wins); and the in-memory `importedRef` isn't
+remembered across plugin sessions, so the `.twbx` must be re-uploaded in the same
+session as the export (App.tsx warns when no workbook is loaded).
 
 **Swap improvements — BUILT (`nav-interactions-tabs-43`):**
 - **De-dupe by NAME, not position (bug fix).** `exporter.dedupeWorksheetNames` now

@@ -18,12 +18,14 @@
 
 import JSZip from "jszip";
 import type { ImportPayload, ImportAsset, ImportedFilter } from "../shared/spec";
+import type { ImportStoredData } from "../shared/types";
 
 /** What we hand back to the UI after parsing an upload (before any matching). */
 export interface ParsedImport {
   worksheetNames: string[]; // every worksheet found, for the user to map against
   payloadFor: (names: string[]) => ImportPayload; // build a payload for a subset
   filtersFor: (names: string[]) => ImportedFilter[]; // quick filters on a subset
+  toStoredData: () => ImportStoredData; // serializable form for persistence
 }
 
 /** Decode the XML entities Tableau writes inside attribute values, so a worksheet
@@ -171,8 +173,10 @@ export async function parseImport(buf: ArrayBuffer, fileName: string): Promise<P
     const datasourceXml = new Map<string, string>();
     const neededDs = new Set<string>();
     for (const nm of names) {
-      const wx = wsByName.get(nm);
+      let wx = wsByName.get(nm);
       if (!wx) continue;
+      // Strip <shelf-sorts> — not in Tableau 2026.2 <view> content model (D2E8DA72).
+      wx = wx.replace(/<shelf-sorts\b[^>]*>[\s\S]*?<\/shelf-sorts>/g, "");
       worksheetXml.set(nm, wx);
       for (const dn of datasourceNamesIn(wx)) neededDs.add(dn);
     }
@@ -205,5 +209,67 @@ export async function parseImport(buf: ArrayBuffer, fileName: string): Promise<P
     return out;
   };
 
-  return { worksheetNames: worksheets.map((w) => w.name!), payloadFor, filtersFor };
+  const worksheetNames = worksheets.map((w) => w.name!);
+  const toStoredData = (): ImportStoredData => ({
+    worksheetNames,
+    worksheetXml: Object.fromEntries(wsByName),
+    datasourceXml: Object.fromEntries(dsByName),
+    manifestEntries: allManifest,
+    assets: assets.map((a) => ({ path: a.path, bytes: a.bytes })),
+  });
+
+  return { worksheetNames, payloadFor, filtersFor, toStoredData };
+}
+
+/**
+ * Reconstruct a ParsedImport from previously-stored data, so the plugin can
+ * restore the user's uploaded workbook across sessions without re-parsing.
+ */
+export function parsedImportFromStored(data: ImportStoredData): ParsedImport {
+  const wsByName = new Map(Object.entries(data.worksheetXml));
+  const dsByName = new Map(Object.entries(data.datasourceXml));
+  const allManifest = data.manifestEntries;
+  const assets = data.assets.map((a) => ({ path: a.path, bytes: new Uint8Array(a.bytes) }));
+
+  const payloadFor = (names: string[]): ImportPayload => {
+    const worksheetXml = new Map<string, string>();
+    const datasourceXml = new Map<string, string>();
+    const neededDs = new Set<string>();
+    for (const nm of names) {
+      let wx = wsByName.get(nm);
+      if (!wx) continue;
+      wx = wx.replace(/<shelf-sorts\b[^>]*>[\s\S]*?<\/shelf-sorts>/g, "");
+      worksheetXml.set(nm, wx);
+      for (const dn of datasourceNamesIn(wx)) neededDs.add(dn);
+    }
+    for (const dn of neededDs) {
+      const dx = dsByName.get(dn);
+      if (dx) datasourceXml.set(dn, dx);
+    }
+    const dsBlob = [...datasourceXml.values()].join("\n");
+    const usedAssets = assets.filter((a) => dsBlob.includes(a.path) || dsBlob.includes(a.path.replace(/^Data\//i, "")));
+    return {
+      worksheetXml,
+      datasourceXml,
+      manifestEntries: allManifest,
+      assets: usedAssets.length ? usedAssets : assets,
+    };
+  };
+
+  const filtersFor = (names: string[]): ImportedFilter[] => {
+    const out: ImportedFilter[] = [];
+    for (const nm of names) {
+      const wx = wsByName.get(nm);
+      if (!wx) continue;
+      for (const f of slicesIn(wx)) out.push({ ...f, worksheet: nm });
+    }
+    return out;
+  };
+
+  return {
+    worksheetNames: data.worksheetNames,
+    payloadFor,
+    filtersFor,
+    toStoredData: () => data,
+  };
 }

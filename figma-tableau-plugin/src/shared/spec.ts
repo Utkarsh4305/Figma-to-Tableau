@@ -239,6 +239,24 @@ export interface ImportPayload {
   assets: ImportAsset[];
 }
 
+export type FilterShelfPosition = "left" | "right" | "hidden";
+
+export interface ExportOptions {
+  showFilters: boolean;
+  showLegends: boolean;
+  showTitles: boolean;
+  showTooltips: boolean;
+  filterShelfPosition: FilterShelfPosition;
+}
+
+export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
+  showFilters: true,
+  showLegends: false,
+  showTitles: true,
+  showTooltips: true,
+  filterShelfPosition: "right",
+};
+
 export interface WorkbookSpec {
   workbookName: string;
   tableauVersion: string;
@@ -250,6 +268,7 @@ export interface WorkbookSpec {
   // Imported real worksheets (the "swap" feature). Their names appear as zone
   // `worksheet` refs and in the windows section; their XML is spliced verbatim.
   imports?: ImportPayload;
+  exportOptions?: ExportOptions;
 }
 
 // --- small helpers shared by UI + generator ---------------------------------

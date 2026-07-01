@@ -192,6 +192,34 @@ export interface FaithfulModel {
   sheetOnly?: boolean;
 }
 
+// --- Detection engine result (shared between sandbox and UI) ------------------
+
+export type DashboardRegion =
+  | "header"
+  | "kpi-strip"
+  | "chart-area"
+  | "table-area"
+  | "sidebar"
+  | "filter-panel"
+  | "footer"
+  | "unknown";
+
+export interface DetectionResult {
+  id: string;
+  name: string;
+  figmaType: string;
+  rect: Rect;
+  detectedType: string;
+  elementRole: ElementRole;
+  chartKind?: ChartKind;
+  confidence: number;
+  reasons: string[];
+  mappedTableauType: string;
+  region: DashboardRegion;
+  children?: DetectionResult[];
+  metadata?: Record<string, string>;
+}
+
 // --- Messages between the Figma sandbox and the UI iframe ---------------------
 
 export interface MsgModelReady {
@@ -256,7 +284,66 @@ export interface MsgFaithfulReady {
   error?: string;
 }
 
-export type PluginToUi = MsgModelReady | MsgFaithfulReady;
+// --- Persisted import data (survives plugin close/reopen) --------------------
+
+/**
+ * Serializable form of an uploaded .twb/.twbx — everything needed to reconstruct
+ * a ParsedImport on the next plugin session. Stored via figma.clientStorage.
+ * Binary assets (images/extracts) are included best-effort; if too large for
+ * storage, the user re-uploads.
+ */
+export interface ImportStoredData {
+  worksheetNames: string[];
+  worksheetXml: Record<string, string>;
+  datasourceXml: Record<string, string>;
+  manifestEntries: string[];
+  assets: { path: string; bytes: Uint8Array }[];
+}
+
+export interface MsgSaveImport {
+  type: "save-import";
+  data: ImportStoredData;
+}
+
+export interface MsgImportRestored {
+  type: "import-restored";
+  data: ImportStoredData | null;
+}
+
+export interface MsgDetectionReady {
+  type: "detection-ready";
+  results: DetectionResult[];
+  error?: string;
+}
+
+export interface MsgRequestAnalyze {
+  type: "request-analyze";
+}
+
+export interface MsgOverrideType {
+  type: "override-type";
+  nodeId: string;
+  detectedType: string;
+}
+
+export type LibraryComponentId =
+  | "worksheet" | "bar-chart" | "line-chart" | "area-chart" | "pie-chart"
+  | "scatter-plot" | "heatmap" | "table" | "kpi-large" | "kpi-small"
+  | "filter" | "nav-button" | "text-box" | "image-placeholder" | "web-object";
+
+export interface MsgInsertLibraryComponent {
+  type: "insert-library-component";
+  componentId: LibraryComponentId;
+}
+
+export type TemplateId = "clinical" | "sales" | "finance" | "executive" | "operations";
+
+export interface MsgApplyTemplate {
+  type: "apply-template";
+  templateId: TemplateId;
+}
+
+export type PluginToUi = MsgModelReady | MsgFaithfulReady | MsgImportRestored | MsgDetectionReady;
 export type UiToPlugin =
   | MsgRequestParse
   | MsgResize
@@ -264,4 +351,9 @@ export type UiToPlugin =
   | MsgApplyTags
   | MsgRequestFaithful
   | MsgAddSheets
-  | MsgInsertDefault;
+  | MsgInsertDefault
+  | MsgSaveImport
+  | MsgRequestAnalyze
+  | MsgOverrideType
+  | MsgInsertLibraryComponent
+  | MsgApplyTemplate;

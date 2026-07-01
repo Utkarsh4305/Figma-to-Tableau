@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import type { DashboardModel, PluginToUi, UiToPlugin, DefaultKind } from "../shared/types";
 import type { WorkbookSpec } from "../shared/spec";
+import { DEFAULT_EXPORT_OPTIONS } from "../shared/spec";
 import { seedSpecFromModel, blankSpec, faithfulSpecMulti } from "../plugin/seed";
+
 import { exportSpecTwbx, applyImportedSwap } from "../plugin/exporter";
-import { parseImport, type ParsedImport } from "../plugin/twbImport";
-import DashboardPreview from "./DashboardPreview";
+import { parseImport, parsedImportFromStored, type ParsedImport } from "../plugin/twbImport";
+import ComponentLibrary from "./components/ComponentLibrary";
+import DashboardTemplates from "./templates/DashboardTemplates";
 
 const BUILD = "swap-match-clone-48";
 
@@ -14,43 +17,7 @@ function toPlugin(msg: UiToPlugin) {
   parent.postMessage({ pluginMessage: msg }, "*");
 }
 
-/**
- * Logo — a clean data-flow mark:
- * Three ascending bars (chart) with a small arrow connector,
- * representing "design data → Tableau workbook".
- */
-const PluginLogo = () => (
-  <svg
-    width="40"
-    height="40"
-    viewBox="0 0 40 40"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-  >
-    {/* Background */}
-    <rect width="40" height="40" rx="10" fill="#1e1e1e" />
 
-    {/* Bar chart — three columns, ascending left to right */}
-    {/* Left bar */}
-    <rect x="8"  y="22" width="5" height="10" rx="1.5" fill="#f0f0f0" opacity="0.4" />
-    {/* Middle bar */}
-    <rect x="17" y="16" width="5" height="16" rx="1.5" fill="#f0f0f0" opacity="0.7" />
-    {/* Right bar */}
-    <rect x="26" y="10" width="5" height="22" rx="1.5" fill="#f0f0f0" />
-
-    {/* Small top-right dot — data point marker */}
-    <circle cx="28.5" cy="8" r="2" fill="#f0f0f0" opacity="0.5" />
-  </svg>
-);
-
-/** Centred brand block shown at the top of the plugin */
-const Brand = () => (
-  <div className="brand">
-    <PluginLogo />
-    <div className="brand-name">Figma to Tableau</div>
-    <div className="brand-sub">Export dashboards as .twbx workbooks</div>
-  </div>
-);
 
 /** Documentation of the layer-name conventions the transpiler understands. */
 const SYNTAX: Array<{ tag: string; title: string; desc: string }> = [
@@ -128,10 +95,18 @@ export default function App() {
   const [busy,       setBusy]       = useState(false);
   const [importedNames, setImportedNames] = useState<string[]>([]);
   const [checkedSheets, setCheckedSheets] = useState<Record<string, boolean>>({});
-  const [tab, setTab] = useState<"export" | "syntax" | "defaults">("export");
+  const [tab, setTab] = useState<"dashboard" | "library" | "account">("dashboard");
+
+  // Auto-dismiss status toasts after 4 seconds
+  useEffect(() => {
+    if (!status) return;
+    const timer = setTimeout(() => setStatus(null), 4000);
+    return () => clearTimeout(timer);
+  }, [status]);
 
   // Imported real worksheets (the swap feature) — held in a ref so the once-
-  // registered faithful-ready handler reads the latest upload.
+  // registered faithful-ready handler reads the latest upload. Persisted across
+  // plugin sessions via figma.clientStorage (restored on mount).
   const importedRef        = useRef<ParsedImport | null>(null);
   const seededFrameRef     = useRef<string | null>(null);
   const manualRef          = useRef(false);
@@ -174,7 +149,6 @@ export default function App() {
             // SHEET/ placeholder whose name matches an imported worksheet with
             // that real sheet (on its real data) instead of a demo sample chart.
             let swapped = 0;
-            let importedFilters = 0;
             let unmatched: string[] = [];
             const imp = importedRef.current;
             if (imp) {
@@ -182,7 +156,6 @@ export default function App() {
               // matched by base name across every dashboard (see applyImportedSwap).
               const r = applyImportedSwap(fSpec, imp);
               swapped = r.swapped;
-              importedFilters = r.importedFilters;
               unmatched = r.unmatched;
             }
             const res     = await exportSpecTwbx(fSpec);
@@ -195,18 +168,16 @@ export default function App() {
               (filters ? `, ${filters} filter(s)` : "") +
               (webs ? `, ${webs} web object(s)` : "") +
               (swapped ? `, ${swapped} real sheet(s) swapped in` : "") +
-              (importedFilters ? `, ${importedFilters} imported filter(s)` : "") +
               (fSpec.actions.length ? `, ${fSpec.actions.length} action(s)` : "");
             // Surface why charts may be demo data instead of the user's real sheets:
-            //  - no workbook loaded this session (the upload isn't remembered across
-            //    plugin restarts — a very common "all charts are demo" cause);
+            //  - no workbook ever uploaded this session or any prior;
             //  - a workbook IS loaded but nothing / not everything matched a SHEET/.
             const realSheetCount = allZones.filter(
               (z) => z.kind === "sheet" && !/^\s*nav\s*\//i.test(z.name || "")
             ).length;
             const swapWarn = !imp
               ? realSheetCount > 0
-                ? ` ⚠ No Tableau workbook is loaded, so every chart uses demo data. Re-upload your .twb/.twbx under "Use my real Tableau sheets" (it isn't remembered between plugin sessions), then export again.`
+                ? ` ⚠ No Tableau workbook is loaded, so every chart uses demo data. Upload your .twb/.twbx under "Use my real Tableau sheets" (it's remembered between sessions), then export again.`
                 : ""
               : swapped === 0
               ? ` ⚠ No SHEET/ layer matched an imported worksheet, so every chart is demo data. Name your SHEET/ layers to match: ${imp.worksheetNames.slice(0, 8).join(", ")}${imp.worksheetNames.length > 8 ? "…" : ""}.`
@@ -224,6 +195,27 @@ export default function App() {
             setBusy(false);
           }
         })();
+        return;
+      }
+
+      if (msg.type === "import-restored") {
+        if (msg.data) {
+          try {
+            const parsed = parsedImportFromStored(msg.data);
+            importedRef.current = parsed;
+            setImportedNames(parsed.worksheetNames);
+            setCheckedSheets(Object.fromEntries(parsed.worksheetNames.map((n) => [n, true])));
+            setStatus({
+              kind: "ok",
+              text: `Restored ${parsed.worksheetNames.length} imported sheet(s) from previous session.`,
+            });
+          } catch {
+            // Corrupted stored data — just start fresh.
+            importedRef.current = null;
+            setImportedNames([]);
+            setCheckedSheets({});
+          }
+        }
         return;
       }
 
@@ -290,6 +282,8 @@ export default function App() {
       setImportedNames(parsed.worksheetNames);
       // Pre-check every sheet so the user can add them all in one click.
       setCheckedSheets(Object.fromEntries(parsed.worksheetNames.map((n) => [n, true])));
+      // Persist across plugin sessions via the sandbox (figma.clientStorage).
+      toPlugin({ type: "save-import", data: parsed.toStoredData() });
       setStatus({
         kind: parsed.worksheetNames.length ? "ok" : "warn",
         text: parsed.worksheetNames.length
@@ -326,14 +320,35 @@ export default function App() {
     setStatus({ kind: "ok", text: `Inserted a ${kind} component beside your dashboard — drag it onto your design.` });
   };
 
-  // ── Tabs: Export (the workflow) · Syntax (the conventions) · Defaults
-  // (starter components). Syntax/Defaults work with or without a frame selected.
+  // ── Library sub-tabs
+  const [librarySubTab, setLibrarySubTab] = useState<"components" | "templates" | "syntax" | "defaults">("components");
+
+  const librarySubBar = (
+    <div className="sub-tab-bar">
+      {([
+        ["components", "Components"],
+        ["templates",  "Templates"],
+        ["syntax",     "Syntax"],
+        ["defaults",   "Defaults"],
+      ] as const).map(([id, label]) => (
+        <button
+          key={id}
+          className={`sub-tab-btn ${librarySubTab === id ? "active" : ""}`}
+          onClick={() => setLibrarySubTab(id)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  // ── Top-level tabs
   const tabBar = (
     <div className="tab-bar">
       {([
-        ["export", "Export"],
-        ["syntax", "Syntax"],
-        ["defaults", "Defaults"],
+        ["dashboard", "Dashboard"],
+        ["library",   "Library"],
+        ["account",   "Account"],
       ] as const).map(([id, label]) => (
         <button
           key={id}
@@ -346,155 +361,13 @@ export default function App() {
     </div>
   );
 
-  if (tab === "syntax") {
-    return (
-      <>
-        <Brand />
-        {tabBar}
-        <div className="scroll-area">
-          <SyntaxTab />
-        </div>
-      </>
-    );
-  }
-
-  if (tab === "defaults") {
-    return (
-      <>
-        <Brand />
-        {tabBar}
-        <div className="scroll-area">
-          <DefaultsTab onInsert={insertDefault} />
-        </div>
-      </>
-    );
-  }
-
-  // ── No frame selected ──────────────────────────────────────────────────────
-  if (!spec) {
-    return (
-      <>
-        <Brand />
-        {tabBar}
-
-        <div className="scroll-area">
-          {parseError ? (
-            <>
-              <div className="error-card">{parseError}</div>
-              <button
-                className="scratch-btn"
-                onClick={() => { manualRef.current = true; setSpec(blankSpec()); }}
-              >
-                Start from scratch
-              </button>
-            </>
-          ) : (
-            <div className="empty-state">
-              <div className="empty-title">No frame selected</div>
-              <div className="empty-sub">Select a dashboard frame on the canvas.</div>
-            </div>
-          )}
-        </div>
-      </>
-    );
-  }
-
-  // ── Main UI ────────────────────────────────────────────────────────────────
-  const isManual = manualRef.current;
-
-  return (
-    <>
-      <Brand />
-      {tabBar}
-
-      <div className="scroll-area">
-
-        {model && !isManual ? (
-          <DashboardPreview model={model} />
-        ) : (
-          <div className="frame-card">
-            <div className="frame-info">
-              <div className="frame-name">Manual workbook</div>
-              <div className="frame-meta">No frame selected</div>
-            </div>
-          </div>
-        )}
-
-        <div>
-          <div className="section-label">Export</div>
-          <div className="export-card">
-            <div className="export-row">
-              <div className="field-label">Workbook name</div>
-              <input
-                id="workbook-name"
-                type="text"
-                value={spec.workbookName}
-                onChange={(e) => update((s) => ({ ...s, workbookName: e.target.value }))}
-                placeholder="My Dashboard"
-              />
-            </div>
-            <div className="stats-strip">
-              {[
-                { label: "Worksheets", value: spec.worksheets.length },
-                { label: "Fields",     value: spec.data.fields.length },
-                { label: "Zones",      value: spec.dashboards[0]?.zones.length ?? 0 },
-              ].map(({ label, value }) => (
-                <div key={label} className="stat-cell">
-                  <div className="stat-val">{value}</div>
-                  <div className="stat-key">{label}</div>
-                </div>
-              ))}
-            </div>
-
-            <div className="export-row">
-              <div className="field-label">Use my real Tableau sheets (optional)</div>
-              <input type="file" accept=".twbx,.twb" onChange={onImportFile} />
-              {importedNames.length > 0 && (
-                <div className="import-list">
-                  <div className="import-list-head">
-                    <span>{importedNames.length} sheet(s) found</span>
-                    <button type="button" className="link-btn" onClick={toggleAllSheets}>
-                      {allChecked ? "Clear all" : "Select all"}
-                    </button>
-                  </div>
-                  <div className="import-items">
-                    {importedNames.map((n) => (
-                      <label key={n} className="import-item">
-                        <input
-                          type="checkbox"
-                          checked={!!checkedSheets[n]}
-                          onChange={() => toggleSheet(n)}
-                        />
-                        <span>{n}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    disabled={checkedSheetNames.length === 0}
-                    onClick={addSheetsToFigma}
-                  >
-                    Add {checkedSheetNames.length} sheet(s) to Figma
-                  </button>
-                  <div className="import-hint">
-                    Drops them as <code>SHEET/</code> cards in an empty area beside your
-                    dashboard. Drag each onto your design, then export — each swaps in its
-                    real sheet &amp; data.
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      {/* Footer */}
+  // ── Tab: Dashboard (Analyze + Export) ─────────────────────────────────────
+  if (tab === "dashboard") {
+    const dashboardFooter = spec ? (
       <div className="plugin-footer">
         {status && (
-          <div className={`status-bar ${status.kind}`}>
-            <span className="status-icon">
+          <div className={`toast ${status.kind}`}>
+            <span className="toast-icon">
               {status.kind === "ok" ? "✓" : status.kind === "err" ? "✕" : "–"}
             </span>
             <span>{status.text}</span>
@@ -511,6 +384,229 @@ export default function App() {
         </button>
 
         <div className="build-tag">build {BUILD}</div>
+      </div>
+    ) : null;
+
+    const body = spec ? (
+      <>
+        <div>
+          <div className="section-label">Export</div>
+          <div className="export-card">
+            <div className="export-row">
+              <div className="field-label">Workbook name</div>
+              <input
+                id="workbook-name"
+                type="text"
+                value={spec.workbookName}
+                onChange={(e) => update((s) => ({ ...s, workbookName: e.target.value }))}
+                placeholder="My Dashboard"
+              />
+            </div>
+
+            <details className="spec-details dashboard-details-accordion">
+              <summary className="field-label import-summary">
+                Dashboard details
+              </summary>
+              <div className="spec-details-body">
+                {model ? (
+                  <div className="spec-detail-row">
+                    <span className="spec-detail-label">Frame</span>
+                    <span className="spec-detail-value">{model.title}</span>
+                  </div>
+                ) : null}
+                {model ? (
+                  <div className="spec-detail-row">
+                    <span className="spec-detail-label">Dimensions</span>
+                    <span className="spec-detail-value">
+                      {Math.round(model.width)} × {Math.round(model.height)} · {model.elements.length} layers
+                    </span>
+                  </div>
+                ) : null}
+                <div className="spec-detail-row">
+                  <span className="spec-detail-label">Worksheets</span>
+                  <span className="spec-detail-value">{spec.worksheets.length}</span>
+                </div>
+                <div className="spec-detail-row">
+                  <span className="spec-detail-label">Fields</span>
+                  <span className="spec-detail-value">{spec.data.fields.length}</span>
+                </div>
+                <div className="spec-detail-row">
+                  <span className="spec-detail-label">Zones</span>
+                  <span className="spec-detail-value">{spec.dashboards[0]?.zones.length ?? 0}</span>
+                </div>
+                {spec.actions.length > 0 ? (
+                  <div className="spec-detail-row">
+                    <span className="spec-detail-label">Actions</span>
+                    <span className="spec-detail-value">{spec.actions.length}</span>
+                  </div>
+                ) : null}
+              </div>
+            </details>
+
+            <div className="export-row">
+              <div className="field-label">Export options</div>
+              <div className="toggle-row">
+                {([
+                  ["showFilters", "Dashboard filters"],
+                  ["showLegends", "Legends"],
+                  ["showTitles", "Titles"],
+                  ["showTooltips", "Tooltips"],
+                ] as const).map(([key, label]) => (
+                  <label key={key} className="toggle-item">
+                    <input
+                      type="checkbox"
+                      checked={!!(spec.exportOptions as any)?.[key]}
+                      onChange={() =>
+                        update((s) => ({
+                          ...s,
+                          exportOptions: {
+                            ...DEFAULT_EXPORT_OPTIONS,
+                            ...s.exportOptions,
+                            [key]: !(s.exportOptions as any)?.[key],
+                          },
+                        }))
+                      }
+                    />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="shelf-row">
+                <span className="shelf-label">Worksheet filter shelf:</span>
+                <select
+                  value={(spec.exportOptions as any)?.filterShelfPosition ?? "right"}
+                  onChange={(e) =>
+                    update((s) => ({
+                      ...s,
+                      exportOptions: {
+                        ...DEFAULT_EXPORT_OPTIONS,
+                        ...s.exportOptions,
+                        filterShelfPosition: e.target.value as "left" | "right" | "hidden",
+                      },
+                    }))
+                  }
+                >
+                  <option value="right">Right (recommended)</option>
+                  <option value="hidden">Hidden</option>
+                </select>
+              </div>
+            </div>
+
+            <details className="spec-details import-accordion">
+              <summary className="field-label import-summary">
+                Use my real Tableau sheets (optional)
+              </summary>
+              <div className="spec-details-body">
+                <input type="file" accept=".twbx,.twb" onChange={onImportFile} />
+                {importedNames.length > 0 && (
+                  <div className="import-list" style={{ marginTop: 8 }}>
+                    <div className="import-list-head">
+                      <span>{importedNames.length} sheet(s) found</span>
+                      <button type="button" className="link-btn" onClick={toggleAllSheets}>
+                        {allChecked ? "Clear all" : "Select all"}
+                      </button>
+                    </div>
+                    <div className="import-items">
+                      {importedNames.map((n) => (
+                        <label key={n} className="import-item">
+                          <input
+                            type="checkbox"
+                            checked={!!checkedSheets[n]}
+                            onChange={() => toggleSheet(n)}
+                          />
+                          <span>{n}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      disabled={checkedSheetNames.length === 0}
+                      onClick={addSheetsToFigma}
+                    >
+                      Add {checkedSheetNames.length} sheet(s) to Figma
+                    </button>
+                    <div className="import-hint">
+                      Drops them as <code>SHEET/</code> cards in an empty area beside your
+                      dashboard. Drag each onto your design, then export — each swaps in its
+                      real sheet &amp; data.
+                    </div>
+                  </div>
+                )}
+              </div>
+            </details>
+          </div>
+        </div>
+      </>
+    ) : (
+      <>
+        {parseError ? (
+          <>
+            <div className="error-card">{parseError}</div>
+            <button
+              className="scratch-btn"
+              onClick={() => { manualRef.current = true; setSpec(blankSpec()); }}
+            >
+              Start from scratch
+            </button>
+          </>
+        ) : null}
+      </>
+    );
+
+    return (
+      <>
+        {tabBar}
+        <div className="scroll-area">
+          {body}
+        </div>
+        {dashboardFooter}
+      </>
+    );
+  }
+
+  // ── Tab: Library (Components + Templates + Syntax + Defaults) ─────────────
+  if (tab === "library") {
+    let content: React.ReactNode;
+    if (librarySubTab === "components") content = <ComponentLibrary />;
+    else if (librarySubTab === "templates") content = <DashboardTemplates />;
+    else if (librarySubTab === "syntax") content = <SyntaxTab />;
+    else content = <DefaultsTab onInsert={insertDefault} />;
+
+    return (
+      <>
+        {tabBar}
+        {librarySubBar}
+        <div className="scroll-area">
+          {content}
+        </div>
+      </>
+    );
+  }
+
+  // ── Tab: Account (payment & account) ──────────────────────────────────────
+  if (tab === "account") {
+    return (
+      <>
+        {tabBar}
+        <div className="scroll-area">
+          <div className="empty-state">
+            <div className="empty-title">Account</div>
+            <div className="empty-sub">Payment &amp; account settings coming soon.</div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // ── Fallback (shouldn't happen) ───────────────────────────────────────────
+  return (
+    <>
+      {tabBar}
+      <div className="scroll-area">
+        <div className="empty-state">
+          <div className="empty-sub">Select a tab above.</div>
+        </div>
       </div>
     </>
   );

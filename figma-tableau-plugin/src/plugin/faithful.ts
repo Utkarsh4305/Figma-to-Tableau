@@ -423,6 +423,14 @@ function walk(node: SceneNode, origin: { x: number; y: number }, zones: Faithful
     });
     return;
   }
+  // IMAGE/<label> -> a rasterised bitmap zone (type-v2='bitmap').
+  // The IMAGE/ prefix forces image handling regardless of the node's fills,
+  // so a solid-colour rect tagged IMAGE/ still becomes a bitmap (it gets
+  // rasterised in attachFaithfulImages). We don't recurse.
+  if (pfx && pfx.role === "image") {
+    zones.push({ id: node.id, name: node.name || "Image", kind: "image", ...rect });
+    return;
+  }
   // URL/<page> -> a real Tableau web page object (type-v2='web'). Confirmed
   // schema (see "Using Web Page Object in Tableau.twb"). The text after URL/ is
   // the page address; bare hosts get an https:// scheme. We don't recurse.

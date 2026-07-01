@@ -470,10 +470,7 @@ function worksheetXml(
       x.push(`              <color column='${colorInstance}' />\n`);
       x.push("            </encodings>\n");
     }
-    const paneOpts = spec.exportOptions
-      ? { showTooltips: spec.exportOptions.showTooltips }
-      : undefined;
-    x.push(markPaneStyle(ws, paneOpts));
+    x.push(markPaneStyle(ws));
     x.push("          </pane>\n");
   }
   x.push("        </panes>\n");
@@ -604,9 +601,8 @@ function worksheetStyleXml(
  *   - bold, color-matched data labels; bars label every mark, line/area only
  *     the line ends (the single end-of-series value in the reference)
  *   - line/area get point markers; area gets a translucent fill
- *   - `opts` controls tooltip visibility per the export options.
  */
-function markPaneStyle(ws: WorksheetSpec, opts?: { showTooltips?: boolean }): string {
+function markPaneStyle(ws: WorksheetSpec): string {
   const isBar = ws.mark === "Bar";
   const isLine = ws.mark === "Line";
   const isArea = ws.mark === "Area";
@@ -631,9 +627,10 @@ function markPaneStyle(ws: WorksheetSpec, opts?: { showTooltips?: boolean }): st
   // Standalone area (no opaque line layered on top like the reference) needs a
   // higher opacity than the reference's 27 or it washes out to near-white.
   if (isArea) o.push("                <format attr='mark-transparency' value='65' />\n");
-  // Tooltip visibility (export option).
-  if (opts && opts.showTooltips === false)
-    o.push("                <format attr='tooltip-visibility' value='false' />\n");
+  // NOTE: tooltip on/off is intentionally NOT emitted here. Tableau 2026.2 has no
+  // valid mark-style attr for it (`tooltip-visibility` triggers load error
+  // D2E8DA72 "value 'tooltip-visibility' not in enumeration"), and there's no
+  // confirmed-safe schema to disable tooltips — so we never risk the load.
   o.push("              </style-rule>\n");
   o.push("            </style>\n");
   return o.join("");

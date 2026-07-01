@@ -649,6 +649,10 @@ select {
   cursor: pointer;
   font-family: inherit;
   transition: border-color 0.15s, background 0.15s;
+  /* Reliable HTML5 drag onto the Figma canvas (Chromium blocks drag on some
+     elements / when text is selectable). */
+  -webkit-user-drag: element;
+  user-select: none;
 }
 
 .default-card:hover { border-color: var(--border-focus); background: var(--bg-3); }
@@ -813,6 +817,9 @@ select {
   cursor: pointer;
   font-family: inherit;
   transition: border-color 0.15s, background 0.15s;
+  /* Reliable HTML5 drag onto the Figma canvas (see .default-card). */
+  -webkit-user-drag: element;
+  user-select: none;
 }
 
 .library-card:hover {

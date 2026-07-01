@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { DashboardModel, PluginToUi, UiToPlugin, DefaultKind } from "../shared/types";
-import type { WorkbookSpec } from "../shared/spec";
+import type { DashboardModel, PluginToUi, UiToPlugin } from "../shared/types";
+import type { WorkbookSpec, ExportOptions } from "../shared/spec";
 import { DEFAULT_EXPORT_OPTIONS } from "../shared/spec";
 import { seedSpecFromModel, blankSpec, faithfulSpecMulti } from "../plugin/seed";
 
@@ -9,7 +9,7 @@ import { parseImport, parsedImportFromStored, type ParsedImport } from "../plugi
 import ComponentLibrary from "./components/ComponentLibrary";
 import DashboardTemplates from "./templates/DashboardTemplates";
 
-const BUILD = "cleanup-simpleid-49";
+const BUILD = "merge-defaults-53";
 
 type Status = { kind: "ok" | "err" | "warn"; text: string } | null;
 
@@ -54,39 +54,6 @@ function SyntaxTab() {
   );
 }
 
-/** Starter components the user can drop onto the canvas, pre-named per convention. */
-const DEFAULTS: Array<{ kind: DefaultKind; label: string; hint: string }> = [
-  { kind: "sheet", label: "Worksheet", hint: "SHEET/New Sheet[bar]" },
-  { kind: "kpi", label: "KPI", hint: "KPI/Metric" },
-  { kind: "nav", label: "Nav button", hint: "Nav/Go to… (wire a prototype link)" },
-  { kind: "button", label: "Named button", hint: "BUTTON/Open > Dashboard" },
-  { kind: "filter", label: "Filter", hint: "FILTER/Region" },
-  { kind: "image", label: "Image", hint: "Image/Logo" },
-  { kind: "web", label: "Web object", hint: "URL/example.com" },
-  { kind: "text", label: "Text", hint: "TEXT/Heading" },
-];
-
-function DefaultsTab({ onInsert }: { onInsert: (k: DefaultKind) => void }) {
-  return (
-    <div>
-      <div className="section-label">Insert a starter component</div>
-      <div className="syntax-intro">
-        Drops a correctly-named layer beside your dashboard frame. Drag it onto
-        your design, restyle it freely, then export — the name carries the Tableau
-        mapping. For a Nav button, wire its prototype “Navigate to” link in Figma.
-      </div>
-      <div className="defaults-grid">
-        {DEFAULTS.map((d) => (
-          <button key={d.kind} className="default-card" onClick={() => onInsert(d.kind)}>
-            <div className="default-label">{d.label}</div>
-            <code className="default-hint">{d.hint}</code>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export default function App() {
   const [model,      setModel]      = useState<DashboardModel | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
@@ -104,6 +71,21 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [status]);
 
+  // Show the "copy" drag cursor (not the ⃠ not-allowed one) while dragging a
+  // component over the plugin UI. HTML5 marks any element that doesn't handle
+  // `dragover` as an invalid drop target; preventDefault + dropEffect='copy'
+  // over the whole window makes the plugin panel a valid target so the cursor
+  // reads as a drag. (Dropping actually happens on the Figma canvas via the
+  // card's dragend `pluginDrop` message.)
+  useEffect(() => {
+    const onDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+    };
+    window.addEventListener("dragover", onDragOver);
+    return () => window.removeEventListener("dragover", onDragOver);
+  }, []);
+
   // Imported real worksheets (the swap feature) — held in a ref so the once-
   // registered faithful-ready handler reads the latest upload. Persisted across
   // plugin sessions via figma.clientStorage (restored on mount).
@@ -119,6 +101,12 @@ export default function App() {
   // registered faithful-ready handler can apply it (→ the .twbx file name matches).
   const workbookNameRef    = useRef<string>("");
   if (spec) workbookNameRef.current = spec.workbookName;
+  // Likewise the Export-options checkboxes (titles/tooltips/legends/filters +
+  // filter-shelf position) edit `spec.exportOptions`, but the faithful export
+  // builds a fresh spec — mirror the latest choice into a ref so the once-
+  // registered faithful-ready handler applies it to the exported workbook.
+  const exportOptionsRef   = useRef<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
+  if (spec?.exportOptions) exportOptionsRef.current = spec.exportOptions;
   useEffect(() => {
     const handler = (event: MessageEvent) => {
       const msg = event.data.pluginMessage as PluginToUi | undefined;
@@ -145,6 +133,10 @@ export default function App() {
             // from spec.workbookName); fall back to the frame-derived default.
             const typedName = workbookNameRef.current.trim();
             if (typedName) fSpec.workbookName = typedName;
+            // Honor the Export-options checkboxes (titles/tooltips/legends/
+            // filters + filter-shelf position). Without this the export used the
+            // hard-coded defaults and the toggles appeared to do nothing.
+            fSpec.exportOptions = { ...DEFAULT_EXPORT_OPTIONS, ...exportOptionsRef.current };
             // Worksheet swap: if the user uploaded their real .twbx, replace any
             // SHEET/ placeholder whose name matches an imported worksheet with
             // that real sheet (on its real data) instead of a demo sample chart.
@@ -315,13 +307,8 @@ export default function App() {
     });
   };
 
-  const insertDefault = (kind: DefaultKind) => {
-    toPlugin({ type: "insert-default", kind });
-    setStatus({ kind: "ok", text: `Inserted a ${kind} component beside your dashboard — drag it onto your design.` });
-  };
-
   // ── Library sub-tabs
-  const [librarySubTab, setLibrarySubTab] = useState<"components" | "templates" | "syntax" | "defaults">("components");
+  const [librarySubTab, setLibrarySubTab] = useState<"components" | "templates" | "syntax">("components");
 
   const librarySubBar = (
     <div className="sub-tab-bar">
@@ -329,7 +316,6 @@ export default function App() {
         ["components", "Components"],
         ["templates",  "Templates"],
         ["syntax",     "Syntax"],
-        ["defaults",   "Defaults"],
       ] as const).map(([id, label]) => (
         <button
           key={id}
@@ -450,7 +436,6 @@ export default function App() {
                   ["showFilters", "Dashboard filters"],
                   ["showLegends", "Legends"],
                   ["showTitles", "Titles"],
-                  ["showTooltips", "Tooltips"],
                 ] as const).map(([key, label]) => (
                   <label key={key} className="toggle-item">
                     <input
@@ -570,8 +555,7 @@ export default function App() {
     let content: React.ReactNode;
     if (librarySubTab === "components") content = <ComponentLibrary />;
     else if (librarySubTab === "templates") content = <DashboardTemplates />;
-    else if (librarySubTab === "syntax") content = <SyntaxTab />;
-    else content = <DefaultsTab onInsert={insertDefault} />;
+    else content = <SyntaxTab />;
 
     return (
       <>

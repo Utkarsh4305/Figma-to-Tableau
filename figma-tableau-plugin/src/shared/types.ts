@@ -285,7 +285,7 @@ export interface MsgImportRestored {
 export type LibraryComponentId =
   | "worksheet" | "bar-chart" | "line-chart" | "area-chart" | "pie-chart"
   | "scatter-plot" | "heatmap" | "table" | "kpi-large" | "kpi-small"
-  | "filter" | "nav-button" | "text-box" | "image-placeholder" | "web-object";
+  | "filter" | "nav-button" | "named-button" | "text-box" | "image-placeholder" | "web-object";
 
 export interface MsgInsertLibraryComponent {
   type: "insert-library-component";

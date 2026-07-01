@@ -322,6 +322,13 @@ export function validateTwb(xml: string, worksheetNames: string[]): string[] {
     throw new Error("Generated .twb contains <shelf-sorts>, which Tableau 2026.2 rejects (D2E8DA72).");
   }
 
+  // 2b-ii. `tooltip-visibility` is NOT a valid mark-style format attr in 2026.2
+  // ("value 'tooltip-visibility' not in enumeration", D2E8DA72). There's no
+  // confirmed-safe way to toggle tooltips, so it must never be emitted.
+  if (/tooltip-visibility/.test(xml)) {
+    throw new Error("Generated .twb contains 'tooltip-visibility', which Tableau 2026.2 rejects (D2E8DA72).");
+  }
+
   // 2c. The native <button> dashboard-object is rejected by the user's Tableau
   // ("no declaration found for element 'button'", D2E8DA72) in a floating
   // dashboard. Navigation is done with <nav-action> + button-worksheets instead;

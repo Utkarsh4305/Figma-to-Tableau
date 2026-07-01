@@ -29,8 +29,16 @@ function markFromTag(tag: string | undefined): string {
     case "bubble":
     case "circle":
       return "Circle";
+    case "heatmap":
+    case "square":
+    case "map":
+      return "Square";
+    case "table":
+    case "text":
+    case "crosstab":
+      return "Text";
     default:
-      // bar / bar-hor / bar-vert / column / table / anything else -> Bar
+      // bar / bar-hor / bar-vert / column / anything else -> Bar
       return "Bar";
   }
 }

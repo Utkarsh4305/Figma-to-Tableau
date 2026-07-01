@@ -213,9 +213,11 @@ function sampleData(): { fields: SpecField[]; rows: string[][] } {
   return { fields, rows };
 }
 
-/** Coerce a faithful zone's mark tag to a valid MarkType (default Bar). */
+/** Coerce a faithful zone's mark tag to a valid MarkType (default Bar). Includes
+ * Square (heatmap) and Text (text table) — both confirmed-loadable mark classes
+ * (Text is what KPI/nav button-worksheets already use). */
 function markTypeOf(chart: string | undefined): MarkType {
-  const ok: MarkType[] = ["Bar", "Line", "Area", "Pie", "Circle"];
+  const ok: MarkType[] = ["Bar", "Line", "Area", "Pie", "Circle", "Square", "Text"];
   return (ok.find((m) => m === chart) as MarkType) || "Bar";
 }
 

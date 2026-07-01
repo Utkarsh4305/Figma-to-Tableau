@@ -104,6 +104,12 @@ function findDashboardFrame(): SceneNode | null {
   return (figma.currentPage.children.find((n) => n.type === "FRAME") as SceneNode) || null;
 }
 
+// Preloaded label font, so the drop handler can create text SYNCHRONOUSLY (a
+// drop callback shouldn't await — the gesture context can be lost). Populated at
+// startup by loadLabelFont(); until then drop-created frames just omit their
+// caption text (harmless — the layer NAME still carries the Tableau mapping).
+let preloadedLabelFont: FontName | null = null;
+
 /** Best-effort: load a usable font for the placeholder labels. */
 async function loadLabelFont(): Promise<FontName | null> {
   for (const f of [
@@ -113,6 +119,7 @@ async function loadLabelFont(): Promise<FontName | null> {
   ]) {
     try {
       await figma.loadFontAsync(f);
+      preloadedLabelFont = f;
       return f;
     } catch {
       /* try next */
@@ -120,6 +127,10 @@ async function loadLabelFont(): Promise<FontName | null> {
   }
   return null;
 }
+
+// Warm the font cache at startup so drag-and-drop can build labelled frames
+// synchronously (see preloadedLabelFont).
+void loadLabelFont();
 
 /**
  * Create one `SHEET/<name>` placeholder frame per chosen imported worksheet,
@@ -210,36 +221,27 @@ const LIBRARY_COMPONENTS: Record<string, { name: string; w: number; h: number; f
   "line-chart":         { name: "SHEET/Line Chart[line]", w: 360, h: 240, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Line Chart", capColor: { r: 0.25, g: 0.28, b: 0.42 }, stroke: true },
   "area-chart":         { name: "SHEET/Area Chart[area]", w: 360, h: 240, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Area Chart", capColor: { r: 0.25, g: 0.28, b: 0.42 }, stroke: true },
   "pie-chart":          { name: "SHEET/Pie Chart[pie]", w: 360, h: 240, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Pie Chart", capColor: { r: 0.25, g: 0.28, b: 0.42 }, stroke: true },
-  "scatter-plot":       { name: "SHEET/Scatter Plot[circle]", w: 360, h: 240, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Scatter Plot", capColor: { r: 0.25, g: 0.28, b: 0.42 }, stroke: true },
-  "heatmap":            { name: "SHEET/Heatmap[square]", w: 360, h: 240, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Heatmap", capColor: { r: 0.25, g: 0.28, b: 0.42 }, stroke: true },
-  "table":              { name: "SHEET/Data Table", w: 360, h: 240, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Data Table", capColor: { r: 0.25, g: 0.28, b: 0.42 }, stroke: true },
+  "scatter-plot":       { name: "SHEET/Scatter Plot[scatter]", w: 360, h: 240, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Scatter Plot", capColor: { r: 0.25, g: 0.28, b: 0.42 }, stroke: true },
+  "heatmap":            { name: "SHEET/Heatmap[heatmap]", w: 360, h: 240, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Heatmap", capColor: { r: 0.25, g: 0.28, b: 0.42 }, stroke: true },
+  "table":              { name: "SHEET/Data Table[table]", w: 360, h: 240, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Data Table", capColor: { r: 0.25, g: 0.28, b: 0.42 }, stroke: true },
   "kpi-large":          { name: "KPI/Metric", w: 260, h: 140, fill: { r: 0.95, g: 0.96, b: 1.0 }, caption: "1,234", capColor: { r: 0.1, g: 0.12, b: 0.2 }, fontSize: 32 },
   "kpi-small":          { name: "KPI/Sub Metric", w: 180, h: 80, fill: { r: 0.95, g: 0.96, b: 1.0 }, caption: "56.7%", capColor: { r: 0.1, g: 0.12, b: 0.2 }, fontSize: 22 },
   "filter":             { name: "FILTER/Category", w: 220, h: 40, fill: { r: 1, g: 1, b: 1 }, caption: "Category \u25BE", capColor: { r: 0.25, g: 0.28, b: 0.42 }, stroke: true, radius: 8 },
   "nav-button":         { name: "Nav/Dashboard", w: 160, h: 48, fill: { r: 0.145, g: 0.388, b: 0.922 }, caption: "Dashboard", capColor: { r: 1, g: 1, b: 1 }, radius: 8 },
+  "named-button":       { name: "BUTTON/Open > Dashboard", w: 180, h: 48, fill: { r: 0.067, g: 0.094, b: 0.153 }, caption: "Open", capColor: { r: 1, g: 1, b: 1 }, radius: 8 },
   "text-box":           { name: "TEXT/Body", w: 360, h: 48, fill: { r: 1, g: 1, b: 1 }, caption: "Body text", capColor: { r: 0.06, g: 0.09, b: 0.15 } },
   "image-placeholder":  { name: "Image/Placeholder", w: 140, h: 140, fill: { r: 0.9, g: 0.91, b: 0.96 }, caption: "Image", capColor: { r: 0.4, g: 0.43, b: 0.55 }, stroke: true },
   "web-object":         { name: "URL/example.com", w: 480, h: 320, fill: { r: 0.97, g: 0.98, b: 1.0 }, caption: "URL/example.com", capColor: { r: 0.25, g: 0.28, b: 0.42 }, stroke: true },
 };
 
-async function insertLibraryComponent(componentId: string): Promise<void> {
-  const frame = findDashboardFrame();
-  const parent: BaseNode & ChildrenMixin =
-    frame && frame.parent && "appendChild" in frame.parent
-      ? (frame.parent as BaseNode & ChildrenMixin)
-      : figma.currentPage;
-  const originX = frame ? frame.x + frame.width + 80 : 0;
-  const originY = frame ? frame.y : 0;
-  const font = await loadLabelFont();
-
+/** Build (but don't place) a library-component frame. Shared by click-insert and
+ * drag-and-drop so both produce an identical, correctly-named layer. */
+function buildLibraryFrame(componentId: string, font: FontName | null): FrameNode | null {
   const t = LIBRARY_COMPONENTS[componentId];
-  if (!t) return;
-
+  if (!t) return null;
   const f = figma.createFrame();
   f.name = t.name;
   f.resize(t.w, t.h);
-  f.x = originX + (Object.keys(LIBRARY_COMPONENTS).indexOf(componentId) % 3) * (t.w + 24);
-  f.y = originY + Math.floor(Object.keys(LIBRARY_COMPONENTS).indexOf(componentId) / 3) * (t.h + 24);
   f.cornerRadius = t.radius ?? 10;
   f.fills = [{ type: "SOLID", color: t.fill }];
   if (t.stroke) {
@@ -256,6 +258,26 @@ async function insertLibraryComponent(componentId: string): Promise<void> {
     txt.x = 14;
     txt.y = Math.max(8, (t.h - txt.height) / 2);
   }
+  return f;
+}
+
+async function insertLibraryComponent(componentId: string): Promise<void> {
+  const frame = findDashboardFrame();
+  const parent: BaseNode & ChildrenMixin =
+    frame && frame.parent && "appendChild" in frame.parent
+      ? (frame.parent as BaseNode & ChildrenMixin)
+      : figma.currentPage;
+  const originX = frame ? frame.x + frame.width + 80 : 0;
+  const originY = frame ? frame.y : 0;
+  const font = await loadLabelFont();
+
+  const t = LIBRARY_COMPONENTS[componentId];
+  if (!t) return;
+  const f = buildLibraryFrame(componentId, font);
+  if (!f) return;
+
+  f.x = originX + (Object.keys(LIBRARY_COMPONENTS).indexOf(componentId) % 3) * (t.w + 24);
+  f.y = originY + Math.floor(Object.keys(LIBRARY_COMPONENTS).indexOf(componentId) / 3) * (t.h + 24);
   parent.appendChild(f);
   figma.currentPage.selection = [f];
   figma.viewport.scrollAndZoomIntoView([f]);
@@ -412,35 +434,28 @@ async function applyTemplate(templateId: string): Promise<void> {
  * the design. The user then drags it onto their dashboard (and, for Nav/, wires a
  * prototype "Navigate to" connection in Figma). Selected + zoomed for discovery.
  */
-async function insertDefault(kind: string): Promise<void> {
-  const frame = findDashboardFrame();
-  const parent: BaseNode & ChildrenMixin =
-    frame && frame.parent && "appendChild" in frame.parent
-      ? (frame.parent as BaseNode & ChildrenMixin)
-      : figma.currentPage;
-  const originX = frame ? frame.x + frame.width + 80 : 0;
-  const originY = frame ? frame.y : 0;
-  const font = await loadLabelFont();
+// Per-kind Defaults template: layer name (carries the LaDataViz prefix), size,
+// look and the caption text drawn inside (so it reads like a real component in
+// Figma). Shared by click-insert and drag-and-drop.
+const DEFAULT_COMPONENTS: Record<string, { name: string; w: number; h: number; fill: RGB; caption?: string; capColor?: RGB }> = {
+  sheet:  { name: "SHEET/New Sheet[bar]", w: 360, h: 240, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "SHEET/New Sheet[bar]", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
+  kpi:    { name: "KPI/Metric",           w: 220, h: 120, fill: { r: 0.95, g: 0.96, b: 1.0 },  caption: "1,234", capColor: { r: 0.1, g: 0.12, b: 0.2 } },
+  nav:    { name: "Nav/Go to…",           w: 160, h: 48,  fill: { r: 0.145, g: 0.388, b: 0.922 }, caption: "Go to…", capColor: { r: 1, g: 1, b: 1 } },
+  button: { name: "BUTTON/Open > Dashboard", w: 180, h: 48, fill: { r: 0.067, g: 0.094, b: 0.153 }, caption: "Open", capColor: { r: 1, g: 1, b: 1 } },
+  filter: { name: "FILTER/Region",        w: 220, h: 40,  fill: { r: 1, g: 1, b: 1 },          caption: "Region ▾", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
+  image:  { name: "Image/Logo",           w: 140, h: 140, fill: { r: 0.9, g: 0.91, b: 0.96 },  caption: "Image", capColor: { r: 0.4, g: 0.43, b: 0.55 } },
+  web:    { name: "URL/example.com",      w: 480, h: 320, fill: { r: 0.97, g: 0.98, b: 1.0 },  caption: "URL/example.com", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
+  text:   { name: "TEXT/Heading",         w: 360, h: 48,  fill: { r: 1, g: 1, b: 1 },           caption: "Heading", capColor: { r: 0.06, g: 0.09, b: 0.15 } },
+};
 
-  // Per-kind template: layer name (carries the LaDataViz prefix), size, look and
-  // the caption text drawn inside (so it reads like a real component in Figma).
-  const T: Record<string, { name: string; w: number; h: number; fill: RGB; caption?: string; capColor?: RGB }> = {
-    sheet:  { name: "SHEET/New Sheet[bar]", w: 360, h: 240, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "SHEET/New Sheet[bar]", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
-    kpi:    { name: "KPI/Metric",           w: 220, h: 120, fill: { r: 0.95, g: 0.96, b: 1.0 },  caption: "1,234", capColor: { r: 0.1, g: 0.12, b: 0.2 } },
-    nav:    { name: "Nav/Go to…",           w: 160, h: 48,  fill: { r: 0.145, g: 0.388, b: 0.922 }, caption: "Go to…", capColor: { r: 1, g: 1, b: 1 } },
-    button: { name: "BUTTON/Open > Dashboard", w: 180, h: 48, fill: { r: 0.067, g: 0.094, b: 0.153 }, caption: "Open", capColor: { r: 1, g: 1, b: 1 } },
-    filter: { name: "FILTER/Region",        w: 220, h: 40,  fill: { r: 1, g: 1, b: 1 },          caption: "Region ▾", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
-    image:  { name: "Image/Logo",           w: 140, h: 140, fill: { r: 0.9, g: 0.91, b: 0.96 },  caption: "Image", capColor: { r: 0.4, g: 0.43, b: 0.55 } },
-    web:    { name: "URL/example.com",      w: 480, h: 320, fill: { r: 0.97, g: 0.98, b: 1.0 },  caption: "URL/example.com", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
-    text:   { name: "TEXT/Heading",         w: 360, h: 48,  fill: { r: 1, g: 1, b: 1 },           caption: "Heading", capColor: { r: 0.06, g: 0.09, b: 0.15 } },
-  };
-  const t = T[kind] ?? T.sheet;
-
+/** Build (but don't place) a Defaults-tab starter frame. Shared by click-insert
+ * and drag-and-drop so both produce an identical, correctly-named layer. */
+function buildDefaultFrame(kind: string, font: FontName | null): FrameNode | null {
+  const t = DEFAULT_COMPONENTS[kind] ?? DEFAULT_COMPONENTS.sheet;
+  if (!t) return null;
   const f = figma.createFrame();
   f.name = t.name;
   f.resize(t.w, t.h);
-  f.x = originX;
-  f.y = originY;
   f.cornerRadius = kind === "nav" || kind === "button" || kind === "filter" ? 8 : 10;
   f.fills = [{ type: "SOLID", color: t.fill }];
   if (kind === "sheet" || kind === "image" || kind === "web" || kind === "filter") {
@@ -457,15 +472,99 @@ async function insertDefault(kind: string): Promise<void> {
     txt.x = 14;
     txt.y = Math.max(8, (t.h - txt.height) / 2);
   }
+  return f;
+}
+
+async function insertDefault(kind: string): Promise<void> {
+  const frame = findDashboardFrame();
+  const parent: BaseNode & ChildrenMixin =
+    frame && frame.parent && "appendChild" in frame.parent
+      ? (frame.parent as BaseNode & ChildrenMixin)
+      : figma.currentPage;
+  const originX = frame ? frame.x + frame.width + 80 : 0;
+  const originY = frame ? frame.y : 0;
+  const font = await loadLabelFont();
+
+  const f = buildDefaultFrame(kind, font);
+  if (!f) return;
+  f.x = originX;
+  f.y = originY;
   parent.appendChild(f);
   figma.currentPage.selection = [f];
   figma.viewport.scrollAndZoomIntoView([f]);
   const hint = kind === "nav" ? " — now wire a prototype “Navigate to” link from it in Figma." : "";
-  figma.notify(`Inserted ${t.name} beside your dashboard — drag it onto your design${hint}`);
+  figma.notify(`Inserted ${f.name} beside your dashboard — drag it onto your design${hint}`);
+}
+
+/** Nearest frame-like ancestor of `node` (inclusive) we can appendChild into, so
+ * a dropped component becomes a CHILD of the dashboard (and thus exports). */
+function frameLikeContainer(node: BaseNode | null): (BaseNode & ChildrenMixin) | null {
+  const isFrameLike = (n: BaseNode) =>
+    n.type === "FRAME" || n.type === "COMPONENT" || n.type === "INSTANCE" || n.type === "COMPONENT_SET";
+  let p: BaseNode | null = node;
+  while (p && p.type !== "PAGE" && p.type !== "DOCUMENT") {
+    if (isFrameLike(p) && "appendChild" in p) return p as BaseNode & ChildrenMixin;
+    p = p.parent;
+  }
+  return null;
+}
+
+/**
+ * Drag-and-drop from the plugin UI onto the canvas. The Library / Defaults cards
+ * set a `text/plain` dataTransfer payload ({ ftDrop, source, id }); Figma fires
+ * this `drop` event with that payload + the canvas position. We build the same
+ * frame the click-insert would and drop it AT the cursor — inside the dashboard
+ * frame under the cursor (so it exports) or free on the page otherwise.
+ */
+function handleDrop(event: DropEvent): void {
+  const item = event.items.find((i) => i.type === "text/plain");
+  if (!item) return;
+  let payload: { ftDrop?: boolean; source?: string; id?: string };
+  try {
+    payload = JSON.parse(item.data);
+  } catch {
+    return;
+  }
+  if (!payload || !payload.ftDrop || !payload.id) return;
+
+  const font = preloadedLabelFont;
+  const f =
+    payload.source === "library"
+      ? buildLibraryFrame(payload.id, font)
+      : buildDefaultFrame(payload.id, font);
+  if (!f) return;
+
+  // Drop INTO the frame-like container under the cursor so it's a dashboard child
+  // (converting the PAGE-space drop point — absoluteX/absoluteY — to that frame's
+  // local coordinates via its absolute transform); else drop free on the page.
+  const container = frameLikeContainer(event.node);
+  if (container) {
+    container.appendChild(f);
+    const at = (container as unknown as { absoluteTransform: Transform }).absoluteTransform;
+    f.x = Math.round(event.absoluteX - at[0][2]);
+    f.y = Math.round(event.absoluteY - at[1][2]);
+  } else {
+    figma.currentPage.appendChild(f);
+    f.x = Math.round(event.absoluteX);
+    f.y = Math.round(event.absoluteY);
+  }
+  figma.currentPage.selection = [f];
+  figma.notify(`Added ${f.name}`);
 }
 
 // Re-parse whenever the user changes their selection.
 figma.on("selectionchange", () => void parseAndSend());
+
+// Place a component dragged from the UI Library / Defaults cards onto the canvas.
+// Returning false tells Figma we've handled the drop (no default behaviour).
+figma.on("drop", (event: DropEvent) => {
+  try {
+    handleDrop(event);
+  } catch (e) {
+    figma.notify(`Couldn't drop component: ${(e as Error).message}`);
+  }
+  return false;
+});
 
 figma.ui.onmessage = (msg: UiToPlugin) => {
   switch (msg.type) {

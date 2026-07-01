@@ -341,6 +341,45 @@ function styledRuns(tn: TextNode): FaithfulTextRun[] | undefined {
   return runs.length > 1 ? runs : undefined;
 }
 
+/**
+ * Break the text into its visual lines, each tagged with the LARGEST font size
+ * (pt) that appears on that line. Tableau text zones don't auto-grow — they clip
+ * overflow — so we size the zone per line: a KPI's big value line needs a tall
+ * row while its small label/subtitle lines only need width for their own size.
+ * Uses the styled runs when present (mixed-size KPI text), else the flat size.
+ */
+function linesWithSizes(
+  chars: string,
+  runs: FaithfulTextRun[] | undefined,
+  flatPt: number
+): Array<{ text: string; size: number }> {
+  const clean = chars.replace(/\n+$/, "");
+  if (!runs || runs.length === 0) {
+    return (clean ? clean.split("\n") : [""]).map((text) => ({ text, size: flatPt }));
+  }
+  // Runs are character spans that may straddle newlines. Walk them, starting a
+  // new line at every '\n', and track the max size of the actual (non-empty)
+  // text on each line — a run boundary that lands at a '\n' must NOT carry its
+  // size onto the empty end of the previous line, or a big value on line 2 would
+  // wrongly inflate the label on line 1.
+  const lines: Array<{ text: string; size: number }> = [{ text: "", size: 0 }];
+  for (const r of runs) {
+    const size = r.fontSize ?? flatPt;
+    const parts = r.text.split("\n"); // keep every break, including trailing ones
+    for (let i = 0; i < parts.length; i++) {
+      if (i > 0) lines.push({ text: "", size: 0 });
+      const cur = lines[lines.length - 1];
+      if (parts[i]) {
+        cur.text += parts[i];
+        cur.size = Math.max(cur.size, size);
+      }
+    }
+  }
+  // A final '\n' in the last run leaves a trailing empty line — drop it.
+  if (lines.length > 1 && lines[lines.length - 1].text === "") lines.pop();
+  return lines.map((l) => ({ text: l.text, size: l.size || flatPt }));
+}
+
 function alignOf(node: TextNode): number {
   switch (node.textAlignHorizontal) {
     case "CENTER":
@@ -491,31 +530,46 @@ function walk(node: SceneNode, origin: { x: number; y: number }, zones: Faithful
         flatPt = runs.reduce((a, b) => (b.text.length > a.text.length ? b : a)).fontSize;
       }
       const sizePt = flatPt ?? 14;
-      // Grow a too-short Figma text box so Tableau doesn't clip glyph tops (a
-      // big title in an auto-height layer can have a bbox shorter than its line
-      // box). Only ever grows, never shrinks; ~1.7px per point per line.
-      const lines = Math.max(1, chars.replace(/\n+$/, "").split("\n").length);
-      const maxPt = Math.max(sizePt, ...(runs ? runs.map((r) => r.fontSize ?? 0) : [0]));
-      const needH = Math.ceil(maxPt * 1.5 * lines);
+      // Tableau text zones DON'T auto-grow — they clip whatever overflows — so we
+      // must size the zone to fit the text ourselves (a KPI card mixes a small
+      // label, a big value and a small subtitle, each on its own line). The
+      // emitted font is Segoe UI (see safeFont), whose average glyph advance is
+      // ~0.6× the point size. We only ever GROW the box, never shrink it.
+      const lineInfo = linesWithSizes(chars, runs, sizePt);
+      const CHAR_W = 0.6; // Segoe UI average advance per point
+      // Width: fit the widest SHORT line (KPI label/value/subtitle) on one line so
+      // Tableau doesn't wrap+clip it. Genuinely long lines (paragraph body text)
+      // are left to wrap — growing them to one line would balloon the zone past
+      // the dashboard. Each line is measured at ITS OWN font size.
+      const oneLineW = (l: { text: string; size: number }) =>
+        l.text.length * l.size * CHAR_W;
+      const shortLines = lineInfo.filter((l) => l.text.replace(/\s/g, "").length <= 28);
+      if (shortLines.length) {
+        const needW = Math.ceil(Math.max(...shortLines.map(oneLineW)) + 12);
+        if (rect.w < needW) rect.w = needW;
+      }
+      // Height: sum each line's own line-box, counting how many visual rows it
+      // wraps into at the (now grown) width, plus a cushion. Using the real
+      // per-line size + wrap count fixes both the "big value clipped at the top"
+      // and "subtitle clipped at the bottom" cases. 1.7× the point size is
+      // Tableau's Segoe UI line box WITH room for descenders (y/g/p) — a tighter
+      // factor left the top row's descender clipped even though Figma showed it.
+      const innerW = Math.max(1, rect.w - 8);
+      const maxLineSize = Math.max(...lineInfo.map((l) => l.size));
+      let needH = 0;
+      for (const l of lineInfo) {
+        const rows = Math.max(1, Math.ceil(oneLineW(l) / innerW));
+        needH += l.size * 1.7 * rows;
+      }
+      // Top+bottom breathing room scaled to the biggest glyph, so Tableau's
+      // slightly larger metrics never clip the first/last row.
+      needH = Math.ceil(needH + maxLineSize * 0.6);
       if (rect.h < needH) {
-        // Grow CENTERED on the original text box so the extra height doesn't all
-        // push downward into the element below (a big title would otherwise
-        // overlap the subtitle beneath it).
+        // Grow CENTERED on the original box so the extra height doesn't all push
+        // downward into the element below (a big title would otherwise overlap
+        // the subtitle beneath it).
         rect.y = Math.max(0, rect.y - (needH - rect.h) / 2);
         rect.h = needH;
-      }
-      // Width safety: the emitted font is mapped to Segoe UI (see safeFont in the
-      // generator), whose average glyph advance is ~0.6× the point size — close
-      // to the design fonts (Inter/Roboto) the Figma box was sized for, so the
-      // text should already FIT its box. Only nudge the width up when the box is
-      // genuinely too small for that real Segoe UI width (a modest, only-grows
-      // cushion), so text no longer OVERFLOWS past its container. The old 1.15×
-      // factor assumed a much wider substituted fallback and over-grew massively.
-      // Short strings only (≤20 visible chars); long text keeps its Figma bbox.
-      const longestLine = chars.split("\n").reduce((a, b) => (b.length > a.length ? b : a), "");
-      if (longestLine.replace(/\s/g, "").length <= 20) {
-        const estW = Math.ceil(longestLine.length * maxPt * 0.62 + maxPt * 0.3);
-        if (rect.w < estW) rect.w = estW;
       }
       zones.push({
         id: node.id,

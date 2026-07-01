@@ -803,6 +803,18 @@ select {
 }
 
 /* ── Component Library tab ────────────────────────────────── */
+.fix-clip-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+.fix-clip-hint {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-dim, #8a8f98);
+}
+
 .library-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

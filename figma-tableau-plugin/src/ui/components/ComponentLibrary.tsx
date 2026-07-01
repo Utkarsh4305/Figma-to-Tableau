@@ -166,6 +166,20 @@ export default function ComponentLibrary() {
         Pre-built components with correct naming conventions. Click to insert beside
         your dashboard, or drag one straight onto the canvas.
       </div>
+
+      <div className="fix-clip-row">
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={() => toPlugin({ type: "fix-clipping" })}
+        >
+          Fix selected card
+        </button>
+        <span className="fix-clip-hint">
+          Select a KPI / text card on the canvas whose text is cut off, then click
+          — the text wraps to the card width and the card grows to fit (no clipping).
+        </span>
+      </div>
       {categories.map((cat) => (
         <div key={cat} style={{ marginBottom: 16 }}>
           <div className="section-label" style={{ marginBottom: 8 }}>{cat}</div>

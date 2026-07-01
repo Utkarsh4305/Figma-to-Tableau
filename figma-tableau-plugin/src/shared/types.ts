@@ -299,6 +299,10 @@ export interface MsgApplyTemplate {
   templateId: TemplateId;
 }
 
+export interface MsgFixClipping {
+  type: "fix-clipping";
+}
+
 export type PluginToUi = MsgModelReady | MsgFaithfulReady | MsgImportRestored;
 export type UiToPlugin =
   | MsgRequestParse
@@ -310,4 +314,5 @@ export type UiToPlugin =
   | MsgInsertDefault
   | MsgSaveImport
   | MsgInsertLibraryComponent
-  | MsgApplyTemplate;
+  | MsgApplyTemplate
+  | MsgFixClipping;

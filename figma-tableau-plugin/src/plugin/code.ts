@@ -234,6 +234,108 @@ const LIBRARY_COMPONENTS: Record<string, { name: string; w: number; h: number; f
   "web-object":         { name: "URL/example.com", w: 480, h: 320, fill: { r: 0.97, g: 0.98, b: 1.0 }, caption: "URL/example.com", capColor: { r: 0.25, g: 0.28, b: 0.42 }, stroke: true },
 };
 
+/** Card types whose whole body IS a single text caption (the Text Box). Laid out
+ * with `fillCaption` so it never clips. (KPI cards get their own multi-line
+ * builder — see `fillKpiRows` — so they're not listed here.) */
+const TEXT_CARD_IDS = new Set(["text-box"]);
+
+/**
+ * Lay a text-primary card out as a hug-height vertical Auto-Layout frame and drop
+ * a caption inside that fills the card width and wraps. This fixes the KPI/text
+ * clipping bug: a plain fixed-size frame clips content, so a caption taller than
+ * the frame (multi-line) or wider than it got cut off top/bottom and left/right.
+ * Here the caption stretches to the card width (wraps instead of clipping in X)
+ * and the card hugs its height to fit every line (no clipping in Y). Stays
+ * responsive — narrowing the card re-wraps the text and re-flows the height. */
+function fillCaption(
+  frame: FrameNode,
+  font: FontName,
+  caption: string,
+  fontSize: number,
+  color: RGB,
+  padX = 14,
+  padY = 12,
+): void {
+  frame.layoutMode            = "VERTICAL";
+  frame.counterAxisSizingMode = "FIXED"; // keep the card's width…
+  frame.primaryAxisSizingMode = "AUTO";  // …but hug its height to the text
+  frame.primaryAxisAlignItems = "CENTER";
+  frame.paddingLeft = frame.paddingRight = padX;
+  frame.paddingTop  = frame.paddingBottom = padY;
+  frame.itemSpacing = 2;
+
+  const txt = figma.createText();
+  txt.fontName   = font;
+  txt.characters = caption;
+  txt.fontSize   = fontSize;
+  txt.fills      = [{ type: "SOLID", color }];
+  // Order matters: switch OFF width-auto-resize BEFORE appending/stretching.
+  // While a text is WIDTH_AND_HEIGHT it sizes to its own content and Figma
+  // ignores layoutAlign="STRETCH", so it would keep clipping horizontally.
+  txt.textAutoResize = "HEIGHT";  // wrap and grow in height, never clip
+  frame.appendChild(txt);
+  txt.layoutAlign    = "STRETCH"; // fill the card width so long text wraps
+}
+
+/** Default KPI card rows: heading / value / change, per KPI size. Rendered as ONE
+ * text layer with a styled line per row (see `fillKpiRows`) so the user can just
+ * edit/delete lines to get a 2- or 1-row KPI, and it can never clip or overlap on
+ * export (a single Tableau text zone lays the lines out with correct spacing). */
+const KPI_ROWS: Record<string, Array<{ text: string; size: number; color: RGB }>> = {
+  "kpi-large": [
+    { text: "Metric",       size: 13, color: { r: 0.4,  g: 0.43, b: 0.55 } },
+    { text: "1,234",        size: 32, color: { r: 0.1,  g: 0.12, b: 0.2  } },
+    { text: "+12% vs last", size: 13, color: { r: 0.4,  g: 0.43, b: 0.55 } },
+  ],
+  "kpi-small": [
+    { text: "Metric", size: 11, color: { r: 0.4,  g: 0.43, b: 0.55 } },
+    { text: "56.7%",  size: 22, color: { r: 0.1,  g: 0.12, b: 0.2  } },
+    { text: "+3.2%",  size: 11, color: { r: 0.4,  g: 0.43, b: 0.55 } },
+  ],
+};
+
+/**
+ * Fill a KPI card with a heading / value / change stack, as ONE text layer whose
+ * three lines each carry their own size + color, inside a hug-height vertical
+ * Auto-Layout. One layer (not three) is deliberate: a single Tableau text zone
+ * lays the lines out with correct spacing, so it can never clip a descender or
+ * overlap a sibling zone on export (three separate zones could). It's still fully
+ * flexible — the user edits the text and can delete the heading or change line to
+ * drop to a 2- or 1-row KPI; the card re-hugs its height automatically. */
+function fillKpiRows(
+  frame: FrameNode,
+  font: FontName,
+  rows: Array<{ text: string; size: number; color: RGB }>,
+): void {
+  frame.layoutMode            = "VERTICAL";
+  frame.counterAxisSizingMode = "FIXED"; // keep the card's width…
+  frame.primaryAxisSizingMode = "AUTO";  // …but hug its height to the rows
+  frame.primaryAxisAlignItems = "CENTER";
+  frame.paddingLeft = frame.paddingRight = 14;
+  frame.paddingTop  = frame.paddingBottom = 12;
+  frame.itemSpacing = 2;
+
+  const txt = figma.createText();
+  txt.fontName   = font;
+  txt.characters = rows.map((r) => r.text).join("\n");
+  txt.fontSize   = rows[0].size;
+  txt.fills      = [{ type: "SOLID", color: rows[0].color }];
+  // Give each line its own size + color (same loaded font family/style, so no
+  // extra font load is needed). Skip the '\n' between lines.
+  let pos = 0;
+  for (const r of rows) {
+    const end = pos + r.text.length;
+    if (end > pos) {
+      txt.setRangeFontSize(pos, end, r.size);
+      txt.setRangeFills(pos, end, [{ type: "SOLID", color: r.color }]);
+    }
+    pos = end + 1;
+  }
+  txt.textAutoResize = "HEIGHT";          // set BEFORE stretch (see fillCaption)
+  frame.appendChild(txt);
+  txt.layoutAlign    = "STRETCH";         // fill card width, wrap, never clip
+}
+
 /** Build (but don't place) a library-component frame. Shared by click-insert and
  * drag-and-drop so both produce an identical, correctly-named layer. */
 function buildLibraryFrame(componentId: string, font: FontName | null): FrameNode | null {
@@ -248,15 +350,25 @@ function buildLibraryFrame(componentId: string, font: FontName | null): FrameNod
     f.strokes = [{ type: "SOLID", color: { r: 0.78, g: 0.8, b: 0.9 } }];
     f.strokeWeight = 1;
   }
-  if (font && t.caption) {
-    const txt = figma.createText();
-    txt.fontName = font;
-    txt.characters = t.caption;
-    txt.fontSize = t.fontSize ?? 14;
-    txt.fills = [{ type: "SOLID", color: t.capColor ?? { r: 0.25, g: 0.28, b: 0.42 } }];
-    f.appendChild(txt);
-    txt.x = 14;
-    txt.y = Math.max(8, (t.h - txt.height) / 2);
+  if (font && KPI_ROWS[componentId]) {
+    // KPI card: default heading / value / change rows (user can delete rows).
+    fillKpiRows(f, font, KPI_ROWS[componentId]);
+  } else if (font && t.caption) {
+    const fontSize = t.fontSize ?? 14;
+    const color = t.capColor ?? { r: 0.25, g: 0.28, b: 0.42 };
+    if (TEXT_CARD_IDS.has(componentId)) {
+      // Text Box: hug-height Auto-Layout so the caption never clips.
+      fillCaption(f, font, t.caption, fontSize, color);
+    } else {
+      const txt = figma.createText();
+      txt.fontName = font;
+      txt.characters = t.caption;
+      txt.fontSize = fontSize;
+      txt.fills = [{ type: "SOLID", color }];
+      f.appendChild(txt);
+      txt.x = 14;
+      txt.y = Math.max(8, (t.h - txt.height) / 2);
+    }
   }
   return f;
 }
@@ -409,14 +521,21 @@ async function applyTemplate(templateId: string): Promise<void> {
       child.strokeWeight = 1;
     }
     if (font && c.caption) {
-      const txt = figma.createText();
-      txt.fontName = font;
-      txt.characters = c.caption;
-      txt.fontSize = c.fontSize ?? 14;
-      txt.fills = [{ type: "SOLID", color: c.capColor ?? { r: 0.25, g: 0.28, b: 0.42 } }];
-      child.appendChild(txt);
-      txt.x = 10;
-      txt.y = Math.max(6, (c.h - txt.height) / 2);
+      const fontSize = c.fontSize ?? 14;
+      const color = c.capColor ?? { r: 0.25, g: 0.28, b: 0.42 };
+      if (c.name.startsWith("KPI/") || c.name.startsWith("TEXT/")) {
+        // KPI / Text zones: hug-height Auto-Layout so the caption never clips.
+        fillCaption(child, font, c.caption, fontSize, color, 10, 10);
+      } else {
+        const txt = figma.createText();
+        txt.fontName = font;
+        txt.characters = c.caption;
+        txt.fontSize = fontSize;
+        txt.fills = [{ type: "SOLID", color }];
+        child.appendChild(txt);
+        txt.x = 10;
+        txt.y = Math.max(6, (c.h - txt.height) / 2);
+      }
     }
     dash.appendChild(child);
   }
@@ -463,14 +582,21 @@ function buildDefaultFrame(kind: string, font: FontName | null): FrameNode | nul
     f.strokeWeight = 1;
   }
   if (font && t.caption) {
-    const txt = figma.createText();
-    txt.fontName = font;
-    txt.characters = t.caption;
-    txt.fontSize = kind === "kpi" ? 28 : 14;
-    txt.fills = [{ type: "SOLID", color: t.capColor ?? { r: 0.25, g: 0.28, b: 0.42 } }];
-    f.appendChild(txt);
-    txt.x = 14;
-    txt.y = Math.max(8, (t.h - txt.height) / 2);
+    const fontSize = kind === "kpi" ? 28 : 14;
+    const color = t.capColor ?? { r: 0.25, g: 0.28, b: 0.42 };
+    if (kind === "kpi" || kind === "text") {
+      // KPI / Text: hug-height Auto-Layout so the caption never clips.
+      fillCaption(f, font, t.caption, fontSize, color);
+    } else {
+      const txt = figma.createText();
+      txt.fontName = font;
+      txt.characters = t.caption;
+      txt.fontSize = fontSize;
+      txt.fills = [{ type: "SOLID", color }];
+      f.appendChild(txt);
+      txt.x = 14;
+      txt.y = Math.max(8, (t.h - txt.height) / 2);
+    }
   }
   return f;
 }
@@ -552,6 +678,82 @@ function handleDrop(event: DropEvent): void {
   figma.notify(`Added ${f.name}`);
 }
 
+/**
+ * Fix a clipped card the user already placed or hand-built (the "Fix selected
+ * card" button). Same idea as `fillCaption` but applied to an existing frame:
+ * make every text line wrap to the card width and let the card grow in height so
+ * nothing clips. If the card is just a vertical stack of text lines (the usual
+ * KPI / text-box case) we convert it to a hug-height vertical Auto-Layout so it
+ * also stays responsive; a mixed card (icons, shapes) is un-clipped + wrapped +
+ * grown in place so we don't reflow the user's design. Returns true if changed.
+ */
+function fixCardClipping(frame: FrameNode, texts: TextNode[]): boolean {
+  const kids = frame.children;
+  const INSET = 12;
+
+  if (kids.every((c) => c.type === "TEXT")) {
+    // Preserve the card's current inset and top→bottom reading order, then lay
+    // it out as a hug-height Auto-Layout with each line stretched (wraps to fill
+    // the width; the card grows to fit every line).
+    const minX = Math.max(0, Math.min(...kids.map((c) => c.x)));
+    const minY = Math.max(0, Math.min(...kids.map((c) => c.y)));
+    const ordered = [...kids].sort((a, b) => a.y - b.y);
+    for (const t of texts) t.textAutoResize = "HEIGHT";
+    frame.layoutMode            = "VERTICAL";
+    frame.counterAxisSizingMode = "FIXED";
+    frame.primaryAxisSizingMode = "AUTO";
+    frame.primaryAxisAlignItems = "CENTER";
+    frame.paddingLeft = frame.paddingRight = minX || INSET;
+    frame.paddingTop  = frame.paddingBottom = minY || INSET;
+    frame.itemSpacing = 2;
+    frame.clipsContent = false;
+    for (const c of ordered) frame.appendChild(c);      // restack top→bottom
+    for (const t of texts) t.layoutAlign = "STRETCH";   // fill width, wrap
+    return true;
+  }
+
+  // Mixed content: don't reflow. Just stop clipping, wrap each text to the space
+  // left of the card's right edge, and grow the card so the lowest child fits.
+  frame.clipsContent = false;
+  for (const t of texts) {
+    t.textAutoResize = "HEIGHT";
+    const avail = Math.max(24, frame.width - t.x - INSET);
+    t.resize(avail, t.height);
+  }
+  let bottom = 0;
+  for (const c of frame.children) bottom = Math.max(bottom, c.y + c.height);
+  if (bottom + INSET > frame.height) frame.resize(frame.width, Math.ceil(bottom + INSET));
+  return true;
+}
+
+/** Un-clip the text on the currently selected card(s). */
+async function fixSelectedClipping(): Promise<void> {
+  const sel = figma.currentPage.selection;
+  if (!sel.length) {
+    figma.notify("Select a card (a frame) on the canvas first, then click Fix.");
+    return;
+  }
+  let fixed = 0;
+  for (const node of sel) {
+    if (node.type !== "FRAME" && node.type !== "COMPONENT") continue;
+    const frame = node as FrameNode;
+    const texts = frame.children.filter((c): c is TextNode => c.type === "TEXT");
+    if (!texts.length) continue;
+    // Editing a text's layout needs its font(s) loaded (covers mixed formatting).
+    for (const t of texts) {
+      const len = Math.max(1, t.characters.length);
+      const fonts = t.getRangeAllFontNames(0, len);
+      await Promise.all(fonts.map((f) => figma.loadFontAsync(f)));
+    }
+    if (fixCardClipping(frame, texts)) fixed++;
+  }
+  figma.notify(
+    fixed
+      ? `Fixed text clipping on ${fixed} card(s) — text now wraps and the card grows to fit.`
+      : "No frame with text was selected. Select the card frame (not the text) and try again."
+  );
+}
+
 // Re-parse whenever the user changes their selection.
 figma.on("selectionchange", () => void parseAndSend());
 
@@ -601,6 +803,9 @@ figma.ui.onmessage = (msg: UiToPlugin) => {
       break;
     case "apply-template":
       void applyTemplate(msg.templateId);
+      break;
+    case "fix-clipping":
+      void fixSelectedClipping();
       break;
   }
 };

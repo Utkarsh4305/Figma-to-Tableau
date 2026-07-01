@@ -7,7 +7,6 @@
 
 import { parseSelection, attachImages, applyAutoTags } from "./parser";
 import { parseFaithfulAll, attachFaithfulImages, expandNavTargets } from "./faithful";
-import { analyzeDashboard, writeMetadata } from "./detection/pipeline";
 import type { UiToPlugin, PluginToUi } from "../shared/types";
 import { UI_SIZE } from "../shared/constants";
 
@@ -465,44 +464,6 @@ async function insertDefault(kind: string): Promise<void> {
   figma.notify(`Inserted ${t.name} beside your dashboard — drag it onto your design${hint}`);
 }
 
-/** Run the detection pipeline on the current selection and send results to UI. */
-function sendDetection(): void {
-  try {
-    const model = parseSelection();
-    const results = analyzeDashboard(model, { preferMetadata: true });
-    post({ type: "detection-ready", results });
-  } catch (e) {
-    post({ type: "detection-ready", results: [], error: (e as Error).message });
-  }
-}
-
-/** Depth-first search for a figma node by id inside a parent. */
-function findNodeById(parent: BaseNode, id: string): SceneNode | null {
-  if (parent.id === id && parent.type !== "DOCUMENT" && parent.type !== "PAGE") return parent as SceneNode;
-  if ("children" in parent) {
-    for (const child of parent.children) {
-      const found = findNodeById(child, id);
-      if (found) return found;
-    }
-  }
-  return null;
-}
-
-/** Apply a user override to a specific node's detection type and persist as metadata. */
-function handleOverride(nodeId: string, detectedType: string): void {
-  const frame = findDashboardFrame();
-  if (!frame) return;
-  const node = findNodeById(frame as unknown as BaseNode, nodeId);
-  if (!node || typeof (node as any).setPluginData !== "function") return;
-  writeMetadata(node as any, {
-    id: nodeId, name: node.name, figmaType: "",
-    rect: { x: (node as any).x, y: (node as any).y, w: (node as any).width, h: (node as any).height },
-    detectedType: detectedType as any, elementRole: "ignore", confidence: 1, reasons: ["User override"],
-    mappedTableauType: detectedType, region: "unknown",
-  });
-  figma.notify(`Tagged "${node.name}" as ${detectedType}`);
-}
-
 // Re-parse whenever the user changes their selection.
 figma.on("selectionchange", () => void parseAndSend());
 
@@ -525,19 +486,16 @@ figma.ui.onmessage = (msg: UiToPlugin) => {
       void insertDefault(msg.kind);
       break;
     case "save-import":
-      void figma.clientStorage.setAsync("ft-import", msg.data);
+      // Best-effort persistence: a large import (e.g. a .hyper extract) can
+      // exceed the clientStorage quota — swallow the rejection so it doesn't
+      // surface as an unhandled error; the user just re-uploads next session.
+      figma.clientStorage.setAsync("ft-import", msg.data).catch(() => {});
       break;
     case "resize":
       figma.ui.resize(Math.max(360, msg.width), Math.max(420, msg.height));
       break;
     case "notify":
       figma.notify(msg.message);
-      break;
-    case "request-analyze":
-      sendDetection();
-      break;
-    case "override-type":
-      handleOverride(msg.nodeId, msg.detectedType);
       break;
     case "insert-library-component":
       void insertLibraryComponent(msg.componentId);

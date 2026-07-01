@@ -3,8 +3,18 @@
 > Self-contained context for any AI/engineer picking this up, **including on a
 > device without the local Claude memory**. It folds in the essential facts from
 > the private memory files (the Tableau 2026.2 recipe, the reference-export
-> workflow, and project state). Last updated: **2026-06-30**, build
-> `swap-match-clone-48`.
+> workflow, and project state). Last updated: **2026-07-01**, build
+> `cleanup-simpleid-49`.
+>
+> **v13 merge (2026-07-01, PR #1 from "rishit") + cleanup done.** The merge added a
+> detection/analysis engine, a UI restructure (Dashboard/Library/Account tabs), and
+> cross-session import persistence, and introduced a duplicate worksheet
+> `<simple-id>` regression — now ✅ FIXED. Then a cleanup pass (`cleanup-simpleid-49`):
+> the detection engine was **deleted** (built but never wired — user's call), along
+> with the legacy `tableauGenerator`/`mapper`/`editor/*`/`DashboardPreview` dead code
+> and the never-written `backgroundImage` plumbing; a best-effort guard was added to
+> the clientStorage import-persistence write. `npm test` green + `tsc` clean + build
+> OK. See §15.
 >
 > ✅ **TABLEAU-2026.2-CONFIRMED by the user (2026-06-30): worksheet SWAP and
 > prototype-NAVIGATION both work end-to-end.** Uploading a `.twbx` and swapping in
@@ -804,13 +814,17 @@ src/plugin/        (sandbox: code/parser/faithful; UI: the rest)
   exporter.ts       generateSpecWorkbook/exportSpecTwbx + validateTwb (the load guards)
   twbxBuilder.ts    zip .twb + Data/ + Image/ → .twbx blob, download
   csv.ts / xlsx.ts  data upload/parse/type-infer/sample rows
-  tableauGenerator.ts / mapper.ts  OLD DashboardModel→.twb path (legacy, still tested)
+  twbImport.ts      parse an uploaded .twb/.twbx → ParsedImport (worksheet swap + clientStorage persistence)
 src/ui/
-  App.tsx           Export/Syntax/Defaults tabs, message handler, the export button + import-swap (title/filter injection), SyntaxTab/DefaultsTab, BUILD tag
-  editor/*          DataPanel, SheetsPanel, LayoutPanel, LayoutCanvas (legacy editor panels, not wired into the current App)
+  App.tsx           Dashboard/Library/Account tabs, message handler, the export button + import-swap (title/filter injection), SyntaxTab/DefaultsTab, BUILD tag
+  components/ComponentLibrary.tsx  Library ▸ Components (insert-library-component)
+  templates/DashboardTemplates.tsx Library ▸ Templates (apply-template)
   devMock.ts        browser stand-in for the Figma sandbox
   main.tsx/index.html/styles.css
 scripts/build-ui.mjs  the esbuild single-file UI build (do not use vite build for UI)
+(Removed in the cleanup-simpleid-49 cleanup — see §15: the legacy DashboardModel→.twb
+ path tableauGenerator.ts / mapper.ts, the unused editor/* panels + DashboardPreview.tsx,
+ and the whole just-merged detection engine detection/* + ui/analyze/*.)
 ```
 
 ---
@@ -855,3 +869,59 @@ and the "current state" sections).
 5. Tell the user the new build tag and that they must re-import the manifest in
    Figma (quit Figma, remove + re-import) before the change shows up.
 6. State clearly what is *Tableau-confirmed* vs *only generated/well-formed*.
+
+---
+
+## 15. v13 merge (PR #1) + `cleanup-simpleid-49` cleanup
+
+**The merge** (2026-07-01, from collaborator **"rishit"** `Utkarsh4305/rishit`,
+commits `4762fa9` + merge `f5c9466`, +2312 / −271) added three things:
+1. a multi-signal **detection/analysis engine** (`src/plugin/detection/*` +
+   `src/ui/analyze/AnalyzeTab`+`MappingPanel`) that classified each Figma element
+   into a Tableau component type — but it was **never wired into the UI**
+   (`AnalyzeTab` was never rendered), so the whole subsystem was dead code;
+2. a **UI restructure** (`App.tsx`): top-level **Dashboard / Library / Account**
+   tabs; *Dashboard* = the export flow (workbook-name, a "Dashboard details"
+   accordion, export-option toggles Dashboard-filters/Legends/Titles/Tooltips, the
+   single Export button); *Library* = **Components** (`ui/components/ComponentLibrary`)
+   / **Templates** (`ui/templates/DashboardTemplates`) / **Syntax** / **Defaults**;
+   *Account* = a "coming soon" placeholder. **KEPT.**
+3. **cross-session import persistence** — `code.ts` persists the uploaded workbook
+   via `figma.clientStorage` (`save-import` → key `ft-import`; on launch restores +
+   posts `import-restored`), closing the old "re-upload every session" gap. **KEPT.**
+
+**The simple-id regression fix (2026-07-01).** As merged, `npm test` FAILED at
+`twb_import_dupdash_smoke.ts` (*"Duplicate worksheet simple-id … D2E8DA72"*): the
+merge added a new `validateTwb` guard for duplicate worksheet-section `<simple-id>`
+uuids (pre-merge only *window* simple-ids were checked), which correctly exposed a
+real latent bug — `applyImportedSwap`'s `cloneNeeds` loop + `renameWorksheetXml`
+(`exporter.ts`) spliced a renamed CLONE (`X (copy)`) of an imported worksheet
+**verbatim, inner `<simple-id>` and all**, so the clone and original shared a uuid
+(the *same* imported sheet placed twice on *one* dashboard). Fix: `renameWorksheetXml`
+now also mints a fresh `{UPPERCASE-UUID}` for the clone's worksheet-level `<simple-id>`
+(new `newUuid()` helper; replaces the first `<simple-id>` in the block). The clone's
+*window* simple-id was already fresh (its `X (copy)` name isn't in the generator's
+`wsUuid` map → `uid()`).
+
+**The `cleanup-simpleid-49` cleanup (2026-07-01).** After the fix, per the user's
+call:
+- **Deleted the detection engine entirely** (built but never wired): `plugin/detection/*`,
+  `ui/analyze/*` (`AnalyzeTab`+`MappingPanel`), the `code.ts` handlers, and the
+  `request-analyze`/`override-type`/`detection-ready` messages + `DetectionResult`
+  type in `shared/types.ts`.
+- **Deleted legacy dead code**: the old DashboardModel→.twb path `plugin/tableauGenerator.ts`
+  + `plugin/mapper.ts` (its last test `smoke.ts` was already gone), the unused
+  `ui/editor/*` panels (DataPanel/SheetsPanel/LayoutPanel/LayoutCanvas), and
+  `ui/DashboardPreview.tsx` — all imported by nothing.
+- **Removed the never-written `backgroundImage`/`backgroundImageFile` spec fields**
+  (leftover from the removed background-image export) and their read-sites in
+  `exporter.collectImageAssets` + `workbookGenerator.dashboardXml`; dropped the now-
+  moot background assertions from `lds_smoke.ts`.
+- **Edge-case fix**: the `save-import` clientStorage write is now `.catch(() => {})`
+  (best-effort) — a large import (`.hyper` extract) can exceed the quota, and the
+  bare `void setAsync(...)` would have surfaced an unhandled rejection in the sandbox.
+
+**State:** `tsc --noEmit` clean, `npm test` fully green (16 tests), `npm run build`
+OK, UI single-file invariants pass. Build tag **`cleanup-simpleid-49`**. As always,
+the user must quit Figma + remove/re-import the manifest and confirm the footer
+reads the new tag before trusting a screenshot.

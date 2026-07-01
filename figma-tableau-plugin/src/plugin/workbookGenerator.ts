@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------
-// workbookGenerator.ts — generates the .twb XML from the editable WorkbookSpec.
+// workbookGenerator.ts — generates the .twb XML from the WorkbookSpec.
 //
-// This supersedes the simple tableauGenerator for the editor path. It keeps the
-// PROVEN load-safe base (CSV textscan datasource, <windows>, layout zones) and
+// It keeps the PROVEN load-safe base (CSV textscan datasource, <windows>,
+// layout zones) and
 // adds the patterns CONFIRMED from real reference workbooks
 // (Template.twbx / LGBTQ VOTD.twbx):
 //   - calculated fields            <column ...><calculation .../></column>
@@ -972,15 +972,6 @@ function dashboardXml(
   );
   x.push("        <zones>\n");
   x.push(`          <zone h='100000' id='2' type-v2='layout-basic' w='100000' x='0' y='0'>\n`);
-
-  // Full-frame background image sits behind everything (background-image mode).
-  if (dash.backgroundImage && dash.backgroundImageFile) {
-    x.push(
-      `        <zone h='100000' id='${nid()}' is-centered='0' is-scaled='1' param='Image/${esc(
-        dash.backgroundImageFile
-      )}' type-v2='bitmap' w='100000' x='0' y='0' />\n`
-    );
-  }
 
   if (dash.layoutMode === "tiled" && dash.root) {
     const placed = new Set<string>();

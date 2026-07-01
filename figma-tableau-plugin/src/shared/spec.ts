@@ -193,9 +193,6 @@ export interface DashboardSpec {
   // generator falls back to floating so a workbook is always produced.
   layoutMode?: LayoutMode;
   root?: ContainerSpec;
-  // base64 PNG used as a full-dashboard background image (background-image mode)
-  backgroundImage?: string;
-  backgroundImageFile?: string; // its packaged filename, e.g. "Dashboard-bg.png"
 }
 
 export interface DataSpec {

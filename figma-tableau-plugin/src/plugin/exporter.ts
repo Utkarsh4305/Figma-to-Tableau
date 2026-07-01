@@ -35,9 +35,30 @@ function normName(s: string): string {
 function xmlEscapeName(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/'/g, "&apos;");
 }
+/** A fresh Tableau-style `{UPPERCASE-UUID}` identity, matching workbookGenerator's uid(). */
+function newUuid(): string {
+  const g = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  const raw =
+    g && typeof g.randomUUID === "function"
+      ? g.randomUUID()
+      : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+          const r = (Math.random() * 16) | 0;
+          return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+        });
+  return `{${raw.toUpperCase()}}`;
+}
+/**
+ * Rename a spliced `<worksheet name='from'>` block to `name='to'` (opening tag
+ * only — a worksheet never references its own name elsewhere in its XML) AND mint
+ * a fresh worksheet-level `<simple-id>`. A clone reuses the imported worksheet's
+ * bytes verbatim, so without regenerating its inner simple-id the clone and the
+ * original share a uuid → the <worksheets> unique-identity constraint fails
+ * (D2E8DA72). The worksheet-level identity is the FIRST `<simple-id>` in the block;
+ * the clone's own window simple-id is minted separately by the generator. */
 function renameWorksheetXml(xml: string, from: string, to: string): string {
   const escFrom = xmlEscapeName(from).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return xml.replace(new RegExp(`(<worksheet\\b[^>]*\\bname=')${escFrom}(')`), `$1${xmlEscapeName(to)}$2`);
+  const renamed = xml.replace(new RegExp(`(<worksheet\\b[^>]*\\bname=')${escFrom}(')`), `$1${xmlEscapeName(to)}$2`);
+  return renamed.replace(/<simple-id uuid='[^']*'/, `<simple-id uuid='${newUuid()}'`);
 }
 
 /**
@@ -127,11 +148,10 @@ export function applyImportedSwap(spec: WorkbookSpec, imp: SwapSource): SwapResu
   return { swapped: matches.length, unmatched: [...unmatched] };
 }
 
-/** Gather every PNG referenced by the spec (logo zones + dashboard backgrounds). */
+/** Gather every PNG referenced by the spec (image/logo zones). */
 export function collectImageAssets(spec: WorkbookSpec): ImageAsset[] {
   const byFile = new Map<string, string>();
   for (const d of spec.dashboards) {
-    if (d.backgroundImage && d.backgroundImageFile) byFile.set(d.backgroundImageFile, d.backgroundImage);
     for (const z of d.zones) {
       if (z.kind === "image" && z.image && z.imageFile) byFile.set(z.imageFile, z.image);
     }

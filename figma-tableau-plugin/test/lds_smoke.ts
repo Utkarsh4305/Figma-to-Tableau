@@ -1,7 +1,7 @@
-// LaDataViz-feature smoke: tiled containers, bitmap (image) zones, and a
-// full-frame background image. Writes test-out/LDS_Test.twb(x) and asserts the
-// CONFIRMED Tableau 2026.2 schemas are emitted. Well-formedness is checked
-// separately by scripts/validate.py (python minidom).
+// LaDataViz-feature smoke: tiled containers and bitmap (image) zones.
+// Writes test-out/LDS_Test.twb(x) and asserts the CONFIRMED Tableau 2026.2
+// schemas are emitted. Well-formedness is checked separately by
+// scripts/validate.py (python minidom).
 import { writeFileSync, mkdirSync } from "fs";
 import { resolve } from "path";
 import { nextId } from "../src/shared/spec";
@@ -139,10 +139,6 @@ async function main() {
     scaled: true,
   });
 
-  // a full-frame background image
-  dash.backgroundImage = PNG;
-  dash.backgroundImageFile = "LDS-Test-bg.png";
-
   // tiled layout: wrap every zone in a vertical root container
   dash.layoutMode = "tiled";
   dash.root = {
@@ -157,7 +153,6 @@ async function main() {
   assert(xml.includes("type-v2='layout-flow'"), "no tiled layout-flow container");
   assert(xml.includes("param='vert'"), "container direction not emitted");
   assert(xml.includes("param='Image/logo.png' type-v2='bitmap'"), "logo bitmap zone not emitted");
-  assert(xml.includes("param='Image/LDS-Test-bg.png' type-v2='bitmap'"), "background bitmap not emitted");
   assert(xml.includes("is-scaled='1'"), "bitmap scaling attr not emitted");
   assert(xml.includes("<windows"), "missing <windows>");
 
@@ -170,7 +165,6 @@ async function main() {
   const zip = await JSZip.loadAsync(buf);
   const names = Object.keys(zip.files);
   assert(names.includes("Image/logo.png"), "logo.png not packaged: " + names.join(", "));
-  assert(names.includes("Image/LDS-Test-bg.png"), "background not packaged: " + names.join(", "));
 
   const outDir = resolve(__dirname, "..", "test-out");
   mkdirSync(outDir, { recursive: true });

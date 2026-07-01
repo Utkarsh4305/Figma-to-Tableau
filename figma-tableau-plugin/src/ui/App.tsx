@@ -9,7 +9,7 @@ import { parseImport, parsedImportFromStored, type ParsedImport } from "../plugi
 import ComponentLibrary from "./components/ComponentLibrary";
 import DashboardTemplates from "./templates/DashboardTemplates";
 
-const BUILD = "swap-match-clone-48";
+const BUILD = "cleanup-simpleid-49";
 
 type Status = { kind: "ok" | "err" | "warn"; text: string } | null;
 

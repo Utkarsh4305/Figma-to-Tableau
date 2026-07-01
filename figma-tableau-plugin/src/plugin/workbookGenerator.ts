@@ -26,6 +26,7 @@ import type {
   ZoneSpec,
   ContainerSpec,
   LayoutNode,
+  ExportOptions,
 } from "../shared/spec";
 import { aggPrefix, aggDerivation, isContainer } from "../shared/spec";
 import { TABLEAU, MANIFEST_ENTRIES, RT2026, AGG2026 } from "../shared/constants";
@@ -463,12 +464,16 @@ function worksheetXml(
     // marks-scaling-off + a large mark size = fat marks that FILL the plot area
     // (the LaDataViz look) instead of thin default bars floating in whitespace.
     x.push("            <mark-sizing mark-sizing-setting='marks-scaling-off' />\n");
-    if (colorInstance) {
+    const showLegend = spec.exportOptions?.showLegends ?? true;
+    if (colorInstance && showLegend) {
       x.push("            <encodings>\n");
       x.push(`              <color column='${colorInstance}' />\n`);
       x.push("            </encodings>\n");
     }
-    x.push(markPaneStyle(ws));
+    const paneOpts = spec.exportOptions
+      ? { showTooltips: spec.exportOptions.showTooltips }
+      : undefined;
+    x.push(markPaneStyle(ws, paneOpts));
     x.push("          </pane>\n");
   }
   x.push("        </panes>\n");
@@ -599,8 +604,9 @@ function worksheetStyleXml(
  *   - bold, color-matched data labels; bars label every mark, line/area only
  *     the line ends (the single end-of-series value in the reference)
  *   - line/area get point markers; area gets a translucent fill
+ *   - `opts` controls tooltip visibility per the export options.
  */
-function markPaneStyle(ws: WorksheetSpec): string {
+function markPaneStyle(ws: WorksheetSpec, opts?: { showTooltips?: boolean }): string {
   const isBar = ws.mark === "Bar";
   const isLine = ws.mark === "Line";
   const isArea = ws.mark === "Area";
@@ -625,6 +631,9 @@ function markPaneStyle(ws: WorksheetSpec): string {
   // Standalone area (no opaque line layered on top like the reference) needs a
   // higher opacity than the reference's 27 or it washes out to near-white.
   if (isArea) o.push("                <format attr='mark-transparency' value='65' />\n");
+  // Tooltip visibility (export option).
+  if (opts && opts.showTooltips === false)
+    o.push("                <format attr='tooltip-visibility' value='false' />\n");
   o.push("              </style-rule>\n");
   o.push("            </style>\n");
   return o.join("");
@@ -720,7 +729,8 @@ function cardStyle(bg = "#FFFFFF"): string {
 function dashboardXml(
   dash: DashboardSpec,
   dsName: string,
-  reg: Map<string, GenField>
+  reg: Map<string, GenField>,
+  opts?: ExportOptions
 ): { xml: string; sheetNames: string[] } {
   const fw = dash.widthPx || 1280;
   const fh = dash.heightPx || 800;
@@ -749,6 +759,8 @@ function dashboardXml(
   // non-flexible leaf pin its natural pixel size so it keeps its height in a
   // vert flow (width in a horz flow) instead of stretching.
   const emitZone = (z: ZoneSpec, tiled = false, parentDir?: "horz" | "vert"): string => {
+    // Skip filter zones when showFilters is disabled.
+    if (z.kind === "filter" && opts && !opts.showFilters) return "";
     const X = clampN(z.x, fw);
     const Y = clampN(z.y, fh);
     const W = Math.max(1, clampN(z.w, fw));
@@ -762,8 +774,10 @@ function dashboardXml(
     if (z.kind === "sheet" && z.worksheet) {
       sheetNames.push(z.worksheet);
       // ":showTitle" (LaDataViz) -> render the worksheet's own title bar; default
-      // hidden, since the design usually supplies its own heading text.
-      const showTitle = z.showTitle ? "true" : "false";
+      // hidden, since the design usually supplies its own heading text. The export
+      // option showTitles=false globally forces all titles off; when true (default)
+      // each zone's own showTitle setting is respected.
+      const showTitle = opts && opts.showTitles === false ? "false" : z.showTitle ? "true" : "false";
       if (tiled) {
         o.push(`        <zone${fn}${fix} h='${H}' id='${nid()}' name='${esc(z.worksheet)}' show-title='${showTitle}' w='${W}' x='${X}' y='${Y}'>\n`);
         o.push("          <layout-cache cell-count-h='1' cell-count-w='1' type-h='cell' type-w='cell' />\n");
@@ -986,18 +1000,36 @@ function dashboardXml(
 
 // --- windows -----------------------------------------------------------------
 
-const WS_CARDS =
-  "      <cards>\n        <edge name='left'>\n          <strip size='160'>\n            <card type='pages' />\n            <card type='filters' />\n            <card type='marks' />\n          </strip>\n        </edge>\n        <edge name='top'>\n          <strip size='2147483647'>\n            <card type='columns' />\n          </strip>\n          <strip size='2147483647'>\n            <card type='rows' />\n          </strip>\n          <strip size='30'>\n            <card type='title' />\n          </strip>\n        </edge>\n      </cards>\n";
+function wsCardsXml(filters: "left" | "right" | "hidden"): string {
+  const leftCards = ["pages", "marks"];
+  if (filters === "left") leftCards.splice(1, 0, "filters");
+  const rightCards: string[] = [];
+  if (filters === "right") rightCards.push("filters");
+  const edgeXml = (edge: string, cards: string[]) =>
+    cards.length
+      ? `        <edge name='${edge}'>\n          <strip size='160'>\n${cards
+          .map((c) => `            <card type='${c}' />\n`)
+          .join("")}          </strip>\n        </edge>\n`
+      : "";
+  return (
+    "      <cards>\n" +
+    edgeXml("left", leftCards) +
+    edgeXml("right", rightCards) +
+    "        <edge name='top'>\n          <strip size='2147483647'>\n            <card type='columns' />\n          </strip>\n          <strip size='2147483647'>\n            <card type='rows' />\n          </strip>\n          <strip size='30'>\n            <card type='title' />\n          </strip>\n        </edge>\n" +
+    "      </cards>\n"
+  );
+}
 
 function windowsXml(
   wsNames: string[],
   dashboards: { name: string; sheets: string[]; uuid: string }[],
-  wsUuid: Map<string, string>
+  wsUuid: Map<string, string>,
+  filterShelf: "left" | "right" | "hidden" = "right"
 ): string {
   const x: string[] = ["  <windows source-height='44'>\n"];
   for (const nm of wsNames) {
     x.push(`    <window class='worksheet' name='${esc(nm)}'>\n`);
-    x.push(WS_CARDS);
+    x.push(wsCardsXml(filterShelf));
     // The worksheet's own default fit = Entire View (the chart fills its pane
     // instead of sizing to content). Confirmed from DM_Dashboards.twb: a
     // <viewpoint> after <cards> carrying <zoom type='entire-view'/>.
@@ -1117,11 +1149,12 @@ export function generateWorkbookXml(spec: WorkbookSpec, dataDirectory: string): 
 
   // gather dashboard filter-card fields per bound worksheet
   const filtersByWs = new Map<string, Set<string>>();
+  const showFilters = spec.exportOptions?.showFilters ?? true;
   for (const d of spec.dashboards)
     for (const z of d.zones)
       // Imported filters (filterParam) already live inside their spliced
       // worksheet XML — only generated sample-data sheets need a filter block.
-      if (z.kind === "filter" && z.worksheet && z.field && !z.filterParam) {
+      if (showFilters && z.kind === "filter" && z.worksheet && z.field && !z.filterParam) {
         const s = filtersByWs.get(z.worksheet) ?? new Set<string>();
         s.add(z.field);
         filtersByWs.set(z.worksheet, s);
@@ -1145,7 +1178,7 @@ export function generateWorkbookXml(spec: WorkbookSpec, dataDirectory: string): 
   const wsUuid = new Map<string, string>();
   for (const n of wsNames) wsUuid.set(n, uid());
 
-  const dashOut = spec.dashboards.map((d) => dashboardXml(d, ds.dsName, reg));
+  const dashOut = spec.dashboards.map((d) => dashboardXml(d, ds.dsName, reg, spec.exportOptions));
 
   const out: string[] = [];
   out.push("<?xml version='1.0' encoding='utf-8' ?>\n");
@@ -1185,7 +1218,8 @@ export function generateWorkbookXml(spec: WorkbookSpec, dataDirectory: string): 
         sheets: dashOut[i].sheetNames,
         uuid: dashUuid.get(d.name)!,
       })),
-      wsUuid
+      wsUuid,
+      spec.exportOptions?.filterShelfPosition ?? "right"
     )
   );
   out.push("</workbook>\n");

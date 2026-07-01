@@ -3,8 +3,7 @@
 // Tableau XML generator, and the .twbx packager together, with validation.
 // ---------------------------------------------------------------------------
 
-import type { WorkbookSpec, ImportPayload, ImportedFilter } from "../shared/spec";
-import { nextId } from "../shared/spec";
+import type { WorkbookSpec, ImportPayload } from "../shared/spec";
 import { generateWorkbookXml } from "./workbookGenerator";
 import { rowsToCsv } from "./csv";
 import { buildTwbxBlob, downloadTwbx, DATA_DIR } from "./twbxBuilder";
@@ -14,12 +13,10 @@ import type { ImageAsset, RawAsset } from "./twbxBuilder";
 export interface SwapSource {
   worksheetNames: string[];
   payloadFor: (names: string[]) => ImportPayload;
-  filtersFor: (names: string[]) => ImportedFilter[];
 }
 
 export interface SwapResult {
   swapped: number; // how many imported worksheets were spliced in
-  importedFilters: number; // how many quick-filter cards were dropped on dashboards
   unmatched: string[]; // SHEET/ placeholder names that matched no imported worksheet
 }
 
@@ -91,8 +88,13 @@ export function applyImportedSwap(spec: WorkbookSpec, imp: SwapSource): SwapResu
       usedOnDash.add(real);
     }
   }
+  // Remove FILTER/ zones bound to the swapped sheets — Tableau provides its
+  // own filter UI, so the Figma-placed filter cards are redundant after swap.
+  for (const d of spec.dashboards) {
+    d.zones = d.zones.filter((z) => !(z.kind === "filter" && z.worksheet && swappedSet.has(z.worksheet)));
+  }
   const matches = [...swappedSet];
-  if (matches.length === 0) return { swapped: 0, importedFilters: 0, unmatched: [...unmatched] };
+  if (matches.length === 0) return { swapped: 0, unmatched: [...unmatched] };
 
   spec.imports = imp.payloadFor(matches);
 
@@ -119,39 +121,10 @@ export function applyImportedSwap(spec: WorkbookSpec, imp: SwapSource): SwapResu
   const referenced = new Set<string>();
   for (const d of spec.dashboards)
     for (const z of d.zones)
-      if ((z.kind === "sheet" || z.kind === "filter") && z.worksheet) referenced.add(z.worksheet);
+      if (z.kind === "sheet" && z.worksheet) referenced.add(z.worksheet);
   spec.worksheets = spec.worksheets.filter((w) => w.navButton || referenced.has(w.name));
 
-  // Lift each swapped sheet's own quick filters onto the dashboard as real filter
-  // cards (bound to the imported data via their verbatim param), above the sheet.
-  let importedFilters = 0;
-  const FW = 200, FH = 32, FGAP = 8;
-  const perSheet = new Map<string, number>();
-  for (const f of imp.filtersFor(matches)) {
-    const dash = spec.dashboards.find((d) =>
-      d.zones.some((z) => z.kind === "sheet" && z.worksheet === f.worksheet)
-    );
-    if (!dash) continue;
-    const sheet = dash.zones.find((z) => z.kind === "sheet" && z.worksheet === f.worksheet)!;
-    const idx = perSheet.get(f.worksheet) ?? 0;
-    perSheet.set(f.worksheet, idx + 1);
-    dash.zones.push({
-      id: nextId("z"),
-      kind: "filter",
-      friendlyName: `Filter ${f.field}`,
-      x: sheet.x + idx * (FW + FGAP),
-      y: Math.max(0, sheet.y - FH - 4),
-      w: Math.min(FW, Math.round(sheet.w)),
-      h: FH,
-      worksheet: f.worksheet,
-      field: f.field,
-      filterParam: f.param,
-      bg: "#FFFFFF",
-      fg: "#D7DAEC",
-    });
-    importedFilters++;
-  }
-  return { swapped: matches.length, importedFilters, unmatched: [...unmatched] };
+  return { swapped: matches.length, unmatched: [...unmatched] };
 }
 
 /** Gather every PNG referenced by the spec (logo zones + dashboard backgrounds). */
@@ -247,10 +220,11 @@ export function generateSpecWorkbook(spec: WorkbookSpec): ExportResult {
   }
   spec = dedupeWorksheetNames(spec); // auto-rename any duplicate sheet names
   const twbXml = generateWorkbookXml(spec, DATA_DIR);
-  const warnings = validateTwb(
-    twbXml,
-    spec.worksheets.map((w) => w.name)
-  );
+  const allWsNames = [
+    ...spec.worksheets.map((w) => w.name),
+    ...(spec.imports ? [...spec.imports.worksheetXml.keys()] : []),
+  ];
+  const warnings = validateTwb(twbXml, allWsNames);
   // soft checks specific to the editor
   if (spec.worksheets.length === 0 && !(spec.imports && spec.imports.worksheetXml.size))
     warnings.push("No worksheets defined.");
@@ -356,6 +330,25 @@ export function validateTwb(xml: string, worksheetNames: string[]): string[] {
     }
   }
 
+  // 2d. The <worksheets> section also enforces a unique-identity constraint:
+  // duplicate worksheet names OR duplicate <simple-id> uuids inside it trigger
+  // D2E8DA72 ("element 'worksheets' declares duplicate identity constraint").
+  // This is separate from the <windows> check — both must pass.
+  const wsMatch = xml.match(/<worksheets[\s\S]*?<\/worksheets>/);
+  if (wsMatch) {
+    const wsec = wsMatch[0];
+    const wsNames = [...wsec.matchAll(/<worksheet\b[^>]*name='([^']*)'/g)].map((m) => m[1]);
+    const dupWsName = wsNames.find((n, i) => wsNames.indexOf(n) !== i);
+    if (dupWsName != null) {
+      throw new Error(`Duplicate worksheet name "${dupWsName}" in <worksheets> — Tableau rejects this (D2E8DA72).`);
+    }
+    const wsUuids = [...wsec.matchAll(/<simple-id uuid='([^']+)'/g)].map((m) => m[1]);
+    const dupWsUuid = wsUuids.find((u, i) => wsUuids.indexOf(u) !== i);
+    if (dupWsUuid != null) {
+      throw new Error(`Duplicate worksheet simple-id ${dupWsUuid} — Tableau rejects this (D2E8DA72).`);
+    }
+  }
+
   // 3. Every worksheet must have a matching window + at least be referenced.
   for (const n of worksheetNames) {
     const needle = `class='worksheet' name='${n
@@ -367,10 +360,12 @@ export function validateTwb(xml: string, worksheetNames: string[]): string[] {
     }
   }
 
-  // 4. Duplicate worksheet names break the windows/viewpoints mapping.
+  // 4. Duplicate worksheet names break the windows/viewpoints mapping.  The
+  // XML-level check (2d) catches this from the generated XML; the spec-level
+  // check here provides a clearer error message that points at the source.
   const seen = new Set<string>();
   for (const n of worksheetNames) {
-    if (seen.has(n)) warnings.push(`Duplicate worksheet name "${n}" — names must be unique.`);
+    if (seen.has(n)) throw new Error(`Duplicate worksheet name "${n}" — names must be unique. Rename the colliding SHEET/ layer(s) in Figma.`);
     seen.add(n);
   }
 

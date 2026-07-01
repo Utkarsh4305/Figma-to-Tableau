@@ -16,7 +16,7 @@ import type {
   LayoutNode,
   ActionSpec,
 } from "../shared/spec";
-import { nextId, isContainer } from "../shared/spec";
+import { nextId, isContainer, DEFAULT_EXPORT_OPTIONS } from "../shared/spec";
 import { DOMAIN_KEYWORDS, DOMAIN_FIELDS } from "../shared/constants";
 import { generateSampleRows } from "./csv";
 
@@ -173,6 +173,7 @@ export function blankSpec(name = "Workbook"): WorkbookSpec {
     dashboards: [dash],
     actions: [],
     includeActions: false,
+    exportOptions: { ...DEFAULT_EXPORT_OPTIONS },
   };
 }
 
@@ -449,6 +450,23 @@ function buildFaithfulDashboard(model: FaithfulModel, ctx: FaithfulCtx, dashName
     };
   });
 
+  // Move all FILTER/ zones to a right-side sidebar so they don't interfere with
+  // the chart/table layout. Filters are stacked vertically from the top, right-
+  // aligned. Each keeps its original height; width is the max filter width.
+  const filterZones = zones.filter((z) => z.kind === "filter");
+  if (filterZones.length > 0) {
+    const gap = 8;
+    const sideW = Math.max(...filterZones.map((z) => z.w), 180);
+    const sideX = Math.round(model.width) - sideW - 12;
+    let accY = 12;
+    for (const fz of filterZones) {
+      fz.x = sideX;
+      fz.y = accY;
+      fz.w = sideW;
+      accY += fz.h + gap;
+    }
+  }
+
   return {
     id: nextId("db"),
     name: dashName,
@@ -693,6 +711,7 @@ function assembleFaithfulWorkbook(
     actions: ctx.actions,
     // tsc filter/highlight actions stay opt-in; navigate actions emit regardless.
     includeActions: ctx.actions.some((a) => a.kind !== "navigate"),
+    exportOptions: { ...DEFAULT_EXPORT_OPTIONS },
   };
 }
 
@@ -847,5 +866,6 @@ export function seedSpecFromModel(model: DashboardModel): WorkbookSpec {
     dashboards: [dash],
     actions: [],
     includeActions: false,
+    exportOptions: { ...DEFAULT_EXPORT_OPTIONS },
   };
 }

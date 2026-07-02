@@ -341,43 +341,54 @@ function styledRuns(tn: TextNode): FaithfulTextRun[] | undefined {
   return runs.length > 1 ? runs : undefined;
 }
 
+/** One visual line of a text layer: its text, the LARGEST font size (pt) on it,
+ * and its styled runs (newline-free — the line split consumes the breaks). */
+interface TextLine {
+  text: string;
+  size: number;
+  runs: FaithfulTextRun[];
+}
+
 /**
- * Break the text into its visual lines, each tagged with the LARGEST font size
- * (pt) that appears on that line. Tableau text zones don't auto-grow — they clip
- * overflow — so we size the zone per line: a KPI's big value line needs a tall
- * row while its small label/subtitle lines only need width for their own size.
- * Uses the styled runs when present (mixed-size KPI text), else the flat size.
+ * Break the text into its visual lines. Each line becomes its OWN text zone
+ * (see the TEXT branch in walk): Tableau renders a single-line zone reliably,
+ * but a multi-line <formatted-text> gets cut down to whatever lines fully fit —
+ * on the user's Tableau a 3-row KPI zone showed only the small first row and an
+ * ellipsis, swallowing the big value entirely. Splitting per line sidesteps
+ * Tableau's multi-line fitting completely. Uses the styled runs when present
+ * (mixed-size KPI text), else the flat size.
  */
 function linesWithSizes(
   chars: string,
   runs: FaithfulTextRun[] | undefined,
   flatPt: number
-): Array<{ text: string; size: number }> {
+): TextLine[] {
   const clean = chars.replace(/\n+$/, "");
   if (!runs || runs.length === 0) {
-    return (clean ? clean.split("\n") : [""]).map((text) => ({ text, size: flatPt }));
+    return (clean ? clean.split("\n") : [""]).map((text) => ({ text, size: flatPt, runs: [] }));
   }
   // Runs are character spans that may straddle newlines. Walk them, starting a
   // new line at every '\n', and track the max size of the actual (non-empty)
   // text on each line — a run boundary that lands at a '\n' must NOT carry its
   // size onto the empty end of the previous line, or a big value on line 2 would
   // wrongly inflate the label on line 1.
-  const lines: Array<{ text: string; size: number }> = [{ text: "", size: 0 }];
+  const lines: TextLine[] = [{ text: "", size: 0, runs: [] }];
   for (const r of runs) {
     const size = r.fontSize ?? flatPt;
     const parts = r.text.split("\n"); // keep every break, including trailing ones
     for (let i = 0; i < parts.length; i++) {
-      if (i > 0) lines.push({ text: "", size: 0 });
+      if (i > 0) lines.push({ text: "", size: 0, runs: [] });
       const cur = lines[lines.length - 1];
       if (parts[i]) {
         cur.text += parts[i];
         cur.size = Math.max(cur.size, size);
+        cur.runs.push({ ...r, text: parts[i] });
       }
     }
   }
   // A final '\n' in the last run leaves a trailing empty line — drop it.
   if (lines.length > 1 && lines[lines.length - 1].text === "") lines.pop();
-  return lines.map((l) => ({ text: l.text, size: l.size || flatPt }));
+  return lines.map((l) => ({ ...l, size: l.size || flatPt }));
 }
 
 function alignOf(node: TextNode): number {
@@ -530,60 +541,65 @@ function walk(node: SceneNode, origin: { x: number; y: number }, zones: Faithful
         flatPt = runs.reduce((a, b) => (b.text.length > a.text.length ? b : a)).fontSize;
       }
       const sizePt = flatPt ?? 14;
-      // Tableau text zones DON'T auto-grow — they clip whatever overflows — so we
-      // must size the zone to fit the text ourselves (a KPI card mixes a small
-      // label, a big value and a small subtitle, each on its own line). The
-      // emitted font is Segoe UI (see safeFont), whose average glyph advance is
-      // ~0.6× the point size. We only ever GROW the box, never shrink it.
       const lineInfo = linesWithSizes(chars, runs, sizePt);
-      const CHAR_W = 0.6; // Segoe UI average advance per point
-      // Width: fit the widest SHORT line (KPI label/value/subtitle) on one line so
-      // Tableau doesn't wrap+clip it. Genuinely long lines (paragraph body text)
-      // are left to wrap — growing them to one line would balloon the zone past
-      // the dashboard. Each line is measured at ITS OWN font size.
-      const oneLineW = (l: { text: string; size: number }) =>
-        l.text.length * l.size * CHAR_W;
-      const shortLines = lineInfo.filter((l) => l.text.replace(/\s/g, "").length <= 28);
-      if (shortLines.length) {
-        const needW = Math.ceil(Math.max(...shortLines.map(oneLineW)) + 12);
-        if (rect.w < needW) rect.w = needW;
+      const align = alignOf(tn);
+      const nodeColor = solidHex(node) || "#101828";
+      const nodeBold = isBoldStyle(style);
+
+      // Capture RAW zones here (exact Figma geometry); ALL size fitting happens
+      // afterwards in fitFaithfulText, which knows the whole dashboard (cards,
+      // neighbors) — growing a zone here in isolation pushed text past its card
+      // edge, and a floating text zone that PARTIALLY overlaps another zone gets
+      // mangled by Tableau (only the overhang renders: "Con..").
+      if (lineInfo.length <= 1) {
+        const l = lineInfo[0] || { text: chars, size: sizePt, runs: [] };
+        zones.push({
+          id: node.id,
+          name: node.name || "Text",
+          kind: "text",
+          ...rect,
+          text: l.text,
+          fontSize: l.size,
+          fontFamily: fam,
+          fontColor: nodeColor,
+          bold: nodeBold,
+          align,
+          runs: runs && runs.length > 1 ? runs : undefined,
+        });
+      } else {
+        // MULTI-LINE text (e.g. a KPI card's label / value / delta in one Figma
+        // node): one zone PER LINE. Tableau fits a multi-line <formatted-text>
+        // by whole lines and replaces the overflow with an ellipsis — on the
+        // user's machine a 3-row KPI zone rendered ONLY the small first row and
+        // "..", losing the big value. Single-line zones always draw their line.
+        // Slice the Figma bbox proportionally to each line's font size; the
+        // per-line ids share a `#L` suffix so fitFaithfulText can re-fit the
+        // stack as one block.
+        const sumSize = lineInfo.reduce((a, l) => a + l.size, 0) || 1;
+        let yCursor = rect.y;
+        for (let li = 0; li < lineInfo.length; li++) {
+          const l = lineInfo[li];
+          const lineH = rect.h * (l.size / sumSize);
+          const lrect: Rect = { x: rect.x, y: yCursor, w: rect.w, h: lineH };
+          yCursor += lineH;
+          if (!l.text.trim()) continue; // blank spacer line — keeps the offset
+          const lineRuns = l.runs.length > 1 ? l.runs : undefined;
+          const first = l.runs[0];
+          zones.push({
+            id: `${node.id}#L${li}`,
+            name: node.name || "Text",
+            kind: "text",
+            ...lrect,
+            text: l.text,
+            fontSize: l.size,
+            fontFamily: (first && first.fontFamily) || fam,
+            fontColor: (first && first.fontColor) || nodeColor,
+            bold: first ? !!first.bold : nodeBold,
+            align,
+            runs: lineRuns,
+          });
+        }
       }
-      // Height: sum each line's own line-box, counting how many visual rows it
-      // wraps into at the (now grown) width, plus a cushion. Using the real
-      // per-line size + wrap count fixes both the "big value clipped at the top"
-      // and "subtitle clipped at the bottom" cases. 1.7× the point size is
-      // Tableau's Segoe UI line box WITH room for descenders (y/g/p) — a tighter
-      // factor left the top row's descender clipped even though Figma showed it.
-      const innerW = Math.max(1, rect.w - 8);
-      const maxLineSize = Math.max(...lineInfo.map((l) => l.size));
-      let needH = 0;
-      for (const l of lineInfo) {
-        const rows = Math.max(1, Math.ceil(oneLineW(l) / innerW));
-        needH += l.size * 1.7 * rows;
-      }
-      // Top+bottom breathing room scaled to the biggest glyph, so Tableau's
-      // slightly larger metrics never clip the first/last row.
-      needH = Math.ceil(needH + maxLineSize * 0.6);
-      if (rect.h < needH) {
-        // Grow CENTERED on the original box so the extra height doesn't all push
-        // downward into the element below (a big title would otherwise overlap
-        // the subtitle beneath it).
-        rect.y = Math.max(0, rect.y - (needH - rect.h) / 2);
-        rect.h = needH;
-      }
-      zones.push({
-        id: node.id,
-        name: node.name || "Text",
-        kind: "text",
-        ...rect,
-        text: chars,
-        fontSize: sizePt,
-        fontFamily: fam,
-        fontColor: solidHex(node) || "#101828",
-        bold: isBoldStyle(style),
-        align: alignOf(tn),
-        runs,
-      });
     }
     return; // text has no children we care about
   }
@@ -642,6 +658,248 @@ function findFrame(): SceneNode | undefined {
 }
 
 /** Faithfully transpile ONE frame into a FaithfulModel (one dashboard). */
+// ── Text-fitting engine ─────────────────────────────────────────────────────
+// Per-character advance widths for Segoe UI (the font every export maps to),
+// in EM units (fraction of the point size), measured with GDI
+// (TextRenderer.MeasureText, NoPadding, 40-char runs) — chars 32..126.
+// prettier-ignore
+const SEGOE_EMS = [
+  0.292,0.299,0.412,0.607,0.554,0.839,0.415,0.247,0.314,0.314,0.434,0.704,0.232,0.419,0.232,0.404,
+  0.554,0.554,0.554,0.554,0.554,0.554,0.554,0.554,0.554,0.554,0.232,0.232,0.704,0.704,0.704,0.464,
+  0.974,0.659,0.592,0.607,0.719,0.524,0.502,0.704,0.727,0.284,0.337,0.599,0.487,0.914,0.764,0.772,
+  0.577,0.772,0.614,0.547,0.561,0.704,0.637,0.952,0.607,0.569,0.584,0.314,0.397,0.314,0.704,0.434,
+  0.284,0.524,0.607,0.479,0.607,0.539,0.329,0.607,0.584,0.254,0.254,0.517,0.254,0.877,0.584,0.607,
+  0.607,0.607,0.367,0.442,0.352,0.584,0.494,0.742,0.479,0.502,0.472,0.314,0.254,0.314,0.704,
+];
+const PX_PER_PT = 4 / 3; // 96 dpi
+// Tableau (on the user's machine) draws text ~1.5× the nominal 96-dpi size —
+// every measured truncation in their exports matches the factor (e.g.
+// "Overview" GDI 236px ×1.5 = 354 vs its 237px zone → "Overvi.."). Instead of
+// growing every box 1.5× (which runs out of room vertically and collides with
+// neighbors), we EMIT every font at designPt ÷ this scale: Tableau's oversized
+// rendering then lands at exactly the designed visual size, so text occupies
+// the same space it does in Figma and nothing clips or collides.
+const TABLEAU_TEXT_SCALE = 1.5;
+const LINE_BOX = 1.85; // zone height per text line, × the DESIGN point size
+
+/** Width (px) one line of text occupies at its DESIGN size (the visual size it
+ * renders at after the font normalization above). */
+function estLineWidthPx(text: string, pt: number, bold?: boolean): number {
+  let em = 0;
+  for (const ch of text) {
+    const c = ch.codePointAt(0) ?? 0;
+    em += c >= 32 && c <= 126 ? SEGOE_EMS[c - 32] : 1.0; // non-ASCII (emoji…) ≈ 1em
+  }
+  return em * pt * PX_PER_PT * (bold ? 1.08 : 1) + 8;
+}
+
+/** A text zone's one-line width need, honoring per-run sizes/weights. */
+function zoneNeedW(z: FaithfulZone): number {
+  if (z.runs && z.runs.length > 1) {
+    let w = 0;
+    for (const r of z.runs) w += estLineWidthPx(r.text, r.fontSize ?? z.fontSize ?? 14, r.bold) - 8;
+    return w + 8;
+  }
+  return estLineWidthPx(z.text || "", z.fontSize ?? 14, z.bold);
+}
+
+/** Scale a text zone's font (and each styled run) by `ratio`. */
+function scaleZoneFont(z: FaithfulZone, ratio: number): void {
+  const base = z.fontSize ?? 14;
+  z.fontSize = Math.max(6, base * ratio);
+  if (z.runs) for (const r of z.runs) r.fontSize = Math.max(6, (r.fontSize ?? base) * ratio);
+}
+
+/**
+ * Fit every text zone so it renders COMPLETELY in Tableau, for ANY design.
+ * Ground rules learned from the user's real exports:
+ *   1. Tableau draws text wider than the design (see TABLEAU_TEXT_SCALE) and
+ *      does NOT soft-wrap a text zone — an overflowing line is "…"-truncated.
+ *   2. A floating text zone may sit fully INSIDE another zone (a card) or fully
+ *      outside one, but a PARTIAL overlap breaks rendering (only the overhang
+ *      draws — "Con..", invisible "$1.24M"). So a zone must never be grown past
+ *      its enclosing card, or into a neighbor it didn't already touch.
+ * Strategy per text zone: grow the box (toward its alignment) up to the space
+ * its container and neighbors allow; if the text still can't fit on one line,
+ * SHRINK ITS FONT to the available width — a slightly smaller complete label
+ * beats a truncated one. Multi-line stacks (`#L` ids from one Figma node) are
+ * re-fit as one block so the lines stay adjacent.
+ */
+function fitFaithfulText(zones: FaithfulZone[], frameW: number, frameH: number): void {
+  type Box = { x: number; y: number; w: number; h: number };
+  const solids = zones.filter((z) => z.kind !== "text");
+  const contains = (r: Box, t: Box, tol = 2) =>
+    r.x <= t.x + tol && r.y <= t.y + tol && r.x + r.w >= t.x + t.w - tol && r.y + r.h >= t.y + t.h - tol;
+  const overlaps = (a: Box, b: Box) =>
+    a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  const vBand = (a: Box, b: Box) => a.y < b.y + b.h && b.y < a.y + a.h;
+  const hBand = (a: Box, b: Box) => a.x < b.x + b.w && b.x < a.x + a.w;
+
+  /** Tightest solid zone fully containing `orig` (its card), else the frame. */
+  const boundsFor = (orig: Box): Box => {
+    let best: Box = { x: 2, y: 2, w: frameW - 4, h: frameH - 4 };
+    let bestArea = Infinity;
+    for (const s of solids) {
+      if (s.w * s.h < bestArea && contains(s, orig)) {
+        best = { x: s.x + 3, y: s.y + 1, w: s.w - 6, h: s.h - 2 };
+        bestArea = s.w * s.h;
+      }
+    }
+    return best;
+  };
+
+  // Obstacles are ALL other zones — text zones clip each other exactly like
+  // cards do (the grown title clipped against the subtitle's zone). Zones are
+  // processed in document order and read via live geometry, so already-fitted
+  // neighbors are respected and two zones can never both grow into one gap.
+  /** Widen `z` toward its alignment up to what the container + previously-
+   * disjoint neighbors allow; returns the width actually available. */
+  const fitZoneWidth = (z: FaithfulZone, orig: Box, b: Box, needW: number, exclude: Set<FaithfulZone>): number => {
+    if (z.w >= needW) return z.w;
+    // Desired box by alignment.
+    let nx = z.x;
+    if (z.align === 1) nx = z.x - (needW - z.w) / 2;
+    else if (z.align === 2) nx = z.x - (needW - z.w);
+    let nRight = nx + needW;
+    // Stay inside the container.
+    if (nRight > b.x + b.w) nRight = b.x + b.w;
+    if (nx < b.x) nx = b.x;
+    // Never grow INTO a neighbor the original box didn't already touch — a new
+    // partial overlap is exactly what Tableau mangles.
+    const band = { x: nx, y: z.y, w: nRight - nx, h: z.h };
+    for (const s of zones) {
+      if (exclude.has(s) || contains(s, orig) || overlaps(s, orig) || !vBand(band, s)) continue;
+      if (s.x >= orig.x + orig.w) nRight = Math.min(nRight, s.x - 2);
+      else if (s.x + s.w <= orig.x) nx = Math.max(nx, s.x + s.w + 2);
+    }
+    const avail = Math.max(10, nRight - nx);
+    z.x = nx;
+    z.w = Math.min(needW, avail);
+    return avail;
+  };
+
+  /** Vertical room around `orig` (container + disjoint neighbors in the same
+   * horizontal band, live geometry). */
+  const vWindowFor = (xr: Box, orig: Box, b: Box, exclude: Set<FaithfulZone>): { top: number; bottom: number } => {
+    let top = b.y;
+    let bottom = b.y + b.h;
+    for (const s of zones) {
+      if (exclude.has(s) || contains(s, orig) || overlaps(s, orig) || !hBand(xr, s)) continue;
+      if (s.y >= orig.y + orig.h) bottom = Math.min(bottom, s.y - 2);
+      else if (s.y + s.h <= orig.y) top = Math.max(top, s.y + s.h + 2);
+    }
+    if (bottom < top + 8) bottom = top + 8;
+    return { top, bottom };
+  };
+
+  /** Give `z` height `needH` centered on the original position, kept fully
+   * inside the vertical window (no new partial overlap above or below). */
+  const placeV = (z: Box, orig: Box, needH: number, win: { top: number; bottom: number }): void => {
+    const h = Math.min(needH, win.bottom - win.top);
+    let y = orig.y + orig.h / 2 - h / 2;
+    if (y < win.top) y = win.top;
+    if (y + h > win.bottom) y = win.bottom - h;
+    z.y = y;
+    z.h = h;
+  };
+
+  // ── Group split lines (ids "<node>#L<i>") into blocks; keep singles alone.
+  const groups = new Map<string, FaithfulZone[]>();
+  const singles: FaithfulZone[] = [];
+  for (const z of zones) {
+    if (z.kind !== "text") continue;
+    const m = /^(.*)#L\d+$/.exec(z.id);
+    if (m) {
+      const g = groups.get(m[1]);
+      if (g) g.push(z);
+      else groups.set(m[1], [z]);
+    } else singles.push(z);
+  }
+
+  for (const z of singles) {
+    const orig: Box = { x: z.x, y: z.y, w: z.w, h: z.h };
+    const excl = new Set([z]);
+    const b = boundsFor(orig);
+    const needW = zoneNeedW(z);
+    const avail = fitZoneWidth(z, orig, b, needW, excl);
+    if (avail < needW - 1) {
+      // Can't fit at this size even using all available room — shrink the font
+      // so the WHOLE text renders (floor 0.45× keeps it legible; beyond that
+      // truncation is unavoidable).
+      scaleZoneFont(z, Math.max(0.45, avail / needW));
+    }
+    // Full line box so glyph tops/descenders don't clip — never past a neighbor.
+    const needH = Math.max(orig.h, Math.ceil((z.fontSize ?? 14) * LINE_BOX));
+    placeV(z, orig, needH, vWindowFor({ x: z.x, y: z.y, w: z.w, h: z.h }, orig, b, excl));
+  }
+
+  for (const g of groups.values()) {
+    const union: Box = {
+      x: Math.min(...g.map((z) => z.x)),
+      y: Math.min(...g.map((z) => z.y)),
+      w: Math.max(...g.map((z) => z.x + z.w)) - Math.min(...g.map((z) => z.x)),
+      h: Math.max(...g.map((z) => z.y + z.h)) - Math.min(...g.map((z) => z.y)),
+    };
+    const excl = new Set(g);
+    const b = boundsFor(union);
+    // Width: fit each line independently (they share the node box, but a big
+    // value may need more room than its small label).
+    let shrink = 1;
+    for (const z of g) {
+      const orig: Box = { x: z.x, y: z.y, w: z.w, h: z.h };
+      const needW = zoneNeedW(z);
+      const avail = fitZoneWidth(z, orig, b, needW, excl);
+      if (avail < needW - 1) shrink = Math.min(shrink, Math.max(0.45, avail / needW));
+    }
+    // One shrink ratio for the whole block, so the stack keeps its hierarchy.
+    if (shrink < 1) for (const z of g) scaleZoneFont(z, shrink);
+    // Height: the block needs a full line box per line; grow it centered on the
+    // Figma position, clamped inside the card and away from neighbors, then
+    // re-slice proportionally.
+    const sizes = g.map((z) => z.fontSize ?? 14);
+    const sumSize = sizes.reduce((a, s) => a + s, 0) || 1;
+    const needBlockH = Math.max(union.h, Math.ceil(sumSize * LINE_BOX));
+    const fitted: Box = {
+      x: Math.min(...g.map((z) => z.x)),
+      y: union.y,
+      w: Math.max(...g.map((z) => z.x + z.w)) - Math.min(...g.map((z) => z.x)),
+      h: union.h,
+    };
+    const block: Box = { ...fitted };
+    placeV(block, union, needBlockH, vWindowFor(fitted, union, b, excl));
+    let yCursor = block.y;
+    for (let i = 0; i < g.length; i++) {
+      const lineH = block.h * (sizes[i] / sumSize);
+      g[i].y = yCursor;
+      g[i].h = lineH;
+      yCursor += lineH;
+    }
+  }
+
+  // Normalize every font for Tableau's oversized text rendering (see
+  // TABLEAU_TEXT_SCALE): emitting designPt ÷ scale makes the drawn text land at
+  // the DESIGNED visual size, so it fits the boxes fitted above.
+  for (const z of zones) {
+    if (z.kind !== "text") continue;
+    const base = z.fontSize ?? 14;
+    if (z.runs) {
+      for (const r of z.runs)
+        r.fontSize = Math.max(6, Math.round(((r.fontSize ?? base) / TABLEAU_TEXT_SCALE) * 2) / 2);
+    }
+    z.fontSize = Math.max(6, Math.round((base / TABLEAU_TEXT_SCALE) * 2) / 2);
+  }
+
+  // Round everything (Tableau coords are integers anyway; avoids drift).
+  for (const z of zones) {
+    if (z.kind !== "text") continue;
+    z.x = Math.max(0, Math.round(z.x));
+    z.y = Math.max(0, Math.round(z.y));
+    z.w = Math.max(1, Math.round(z.w));
+    z.h = Math.max(1, Math.round(z.h));
+    if (z.fontSize != null) z.fontSize = Math.round(z.fontSize * 2) / 2; // keep .5pt
+  }
+}
+
 function buildModelForFrame(frame: SceneNode): FaithfulModel {
   const bb =
     (frame as SceneNode & { absoluteBoundingBox?: Rect | null }).absoluteBoundingBox ?? {
@@ -682,11 +940,21 @@ function buildModelForFrame(frame: SceneNode): FaithfulModel {
     for (const c of (frame as ChildrenMixin).children) walk(c as SceneNode, origin, zones);
   }
 
+  // Fit every captured text zone (grow within its card / shrink font to fit) —
+  // must run AFTER the whole walk so it can see cards and neighbors.
+  const fw = bb.w || frame.width;
+  const fh = bb.h || frame.height;
+  try {
+    fitFaithfulText(zones, fw, fh);
+  } catch {
+    /* fitting is best-effort — raw zones still export */
+  }
+
   return {
     id: frame.id,
     title: frame.name || "Dashboard",
-    width: bb.w || frame.width,
-    height: bb.h || frame.height,
+    width: fw,
+    height: fh,
     background: bg?.hex,
     zones,
   };

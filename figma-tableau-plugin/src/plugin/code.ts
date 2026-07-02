@@ -8,7 +8,7 @@
 import { parseSelection, attachImages, applyAutoTags } from "./parser";
 import { parseFaithfulAll, attachFaithfulImages, expandNavTargets } from "./faithful";
 import type { UiToPlugin, PluginToUi } from "../shared/types";
-import { UI_SIZE } from "../shared/constants";
+import { UI_SIZE, DOMAIN_ACCENTS } from "../shared/constants";
 
 figma.showUI(__html__, { width: UI_SIZE.width, height: UI_SIZE.height, themeColors: true });
 
@@ -749,10 +749,27 @@ const TEMPLATES: Record<string, { name: string; w: number; h: number; bg?: RGB; 
   },
 };
 
+/** The template's field accent as a Figma RGB. Template ids match the
+ * DOMAIN_ACCENTS keys except "operations" (the domain key is "ops"). */
+function templateAccent(templateId: string): RGB | undefined {
+  const hex = DOMAIN_ACCENTS[templateId === "operations" ? "ops" : templateId];
+  if (!hex) return undefined;
+  return {
+    r: parseInt(hex.slice(1, 3), 16) / 255,
+    g: parseInt(hex.slice(3, 5), 16) / 255,
+    b: parseInt(hex.slice(5, 7), 16) / 255,
+  };
+}
+
 async function applyTemplate(templateId: string): Promise<void> {
   const font = await loadLabelFont();
   const t = TEMPLATES[templateId];
   if (!t) return;
+  // Field accent: colors the KPI values + SHEET/ captions so each template reads
+  // as its own domain. The caption color also drives the EXPORT — the faithful
+  // transpiler samples the most vivid fill inside a SHEET/ layer as the chart's
+  // mark color, so a clinical template exports cyan charts, sales green, etc.
+  const accent = templateAccent(templateId);
 
   const frame = findDashboardFrame();
   const parent: BaseNode & ChildrenMixin =
@@ -789,10 +806,11 @@ async function applyTemplate(templateId: string): Promise<void> {
       if (c.name.startsWith("KPI/") && c.label) {
         // Rich KPI card: small label / big value / change line, as ONE styled
         // text layer in a hug-height Auto-Layout (reuses fillKpiRows so it never
-        // clips and stays editable, exactly like the library KPI cards).
+        // clips and stays editable, exactly like the library KPI cards). The
+        // value line takes the template's field accent.
         const rows: Array<{ text: string; size: number; color: RGB }> = [
           { text: c.label, size: 13, color: { r: 0.4, g: 0.43, b: 0.55 } },
-          { text: c.caption ?? "", size: fontSize, color },
+          { text: c.caption ?? "", size: fontSize, color: accent ?? color },
         ];
         if (c.delta) rows.push({ text: c.delta, size: 12, color: c.deltaColor ?? T_UP });
         fillKpiRows(child, font, rows);
@@ -804,7 +822,10 @@ async function applyTemplate(templateId: string): Promise<void> {
         txt.fontName = font;
         txt.characters = c.caption ?? "";
         txt.fontSize = fontSize;
-        txt.fills = [{ type: "SOLID", color }];
+        // SHEET/ captions carry the field accent — visible in Figma AND sampled
+        // by the exporter as that chart's mark color (see dominantChartColor).
+        const capCol = accent && c.name.startsWith("SHEET/") ? accent : color;
+        txt.fills = [{ type: "SOLID", color: capCol }];
         child.appendChild(txt);
         txt.x = 10;
         txt.y = Math.max(6, (c.h - txt.height) / 2);

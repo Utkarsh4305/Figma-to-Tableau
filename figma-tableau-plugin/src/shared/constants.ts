@@ -118,6 +118,31 @@ export const DOMAIN_KEYWORDS: Array<{ domain: string; words: string[] }> = [
   { domain: "executive", words: ["executive", "exec", "leadership", "overview", "scorecard", "board"] },
 ];
 
+/**
+ * Per-domain accent color (#hex, dark + saturated so it's legible on the light
+ * template cards AND reads as a good Tableau mark color). Used twice, so the
+ * two stay in sync: the templates color their KPI values / sheet captions with
+ * it in Figma, and the exporter uses it as the default chart mark-color for a
+ * dashboard detected as that domain.
+ */
+export const DOMAIN_ACCENTS: Record<string, string> = {
+  clinical: "#0E7490",      // cyan — vitals / medical
+  sales: "#15803D",         // green — revenue
+  finance: "#4338CA",       // indigo — corporate finance
+  executive: "#6D28D9",     // violet — leadership
+  ops: "#C2410C",           // orange — operations / monitoring
+  marketing: "#BE185D",     // pink — campaigns / brand
+  hr: "#7E22CE",            // purple — people
+  supplychain: "#0F766E",   // teal — logistics
+  support: "#0369A1",       // sky — service desk
+  product: "#5B21B6",       // deep violet — product analytics
+  itops: "#1D4ED8",         // blue — infrastructure
+  manufacturing: "#B45309", // amber — shop floor
+  retail: "#B91C1C",        // red — storefront
+  project: "#1E40AF",       // navy — delivery
+  esg: "#047857",           // emerald — sustainability
+};
+
 /** Per-domain placeholder data fields (dimension + measures). */
 export const DOMAIN_FIELDS: Record<string, { dims: [string, FieldType][]; meas: [string, FieldType][] }> = {
   clinical: {

@@ -98,14 +98,16 @@ async function main() {
 
   const t = model.zones.find((z) => z.name === "title")!;
   assert(!!t, "title zone captured");
-  // 1. px->pt: 50px * 0.75 = 37.5pt (not 50)
-  assert(Math.abs((t.fontSize ?? 0) - 37.5) < 0.01, "font px->pt converted (50->37.5), got " + t.fontSize);
-  // 3. short box grown so glyph tops aren't clipped (>= ~37.5*1.5)
+  // 1. px -> design pt (50px × 0.75 = 37.5pt) then ÷ TABLEAU_TEXT_SCALE (1.5):
+  // the user's Tableau draws text ~1.5× the nominal size, so we emit 25 and it
+  // RENDERS at the designed 37.5pt visual size.
+  assert(Math.abs((t.fontSize ?? 0) - 25) < 0.01, "font normalized for Tableau's oversized text (50px->25pt), got " + t.fontSize);
+  // 3. short box grown so glyph tops aren't clipped (~1.85× the design pt)
   assert((t.h ?? 0) >= 55, "short title box grown to fit line, got h=" + t.h);
-  // Width FITS the text (Segoe UI ~0.6×pt) but is NOT over-grown past the Figma
-  // box — "Overview" @37.5pt needs ~198px, the 300px box is enough, so no grow
-  // and crucially no OVERFLOW beyond the container.
-  assert((t.w ?? 0) >= 198 && (t.w ?? 0) <= 300, "title width fits without overflowing its box, got w=" + t.w);
+  // Width: "Overview" @37.5pt design-visual needs ~259px (GDI per-char table) —
+  // the 300px Figma box already fits it, so NO growth (growth past a neighbor
+  // is what Tableau mangles into fragments).
+  assert((t.w ?? 0) >= 259 && (t.w ?? 0) <= 300, "title width fits at design size without ballooning, got w=" + t.w);
   assert(t.bold === true, "true Bold weight stays bold");
 
   // SemiBold KPI value must NOT be bold (else it widens and truncates)

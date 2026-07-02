@@ -4,9 +4,110 @@
 > device without the local Claude memory**. It folds in the essential facts from
 > the private memory files (the Tableau 2026.2 recipe, the reference-export
 > workflow, and project state). Last updated: **2026-07-02**, build
-> `multi-ds-15-templates-61`.
+> `visual-scale-fit-66`.
 >
-> **Latest (build 61, 2026-07-02):** (1) **Pie load-error fixed** — a pie sizes
+> **Latest (build 66, 2026-07-02): FONT NORMALIZATION — the vertical fix.**
+> Build 65 fixed horizontal fitting, but vertically the physics couldn't close:
+> at Tableau's ~1.5× oversized text rendering, tall glyphs need 2.66×pt of
+> height while design slots give ~1.6×pt — the grown title clipped against the
+> subtitle's zone, values against labels (text zones clip each other on partial
+> overlap just like cards). Growing can't help when there's no room. The clean
+> inversion in `fitFaithfulText`: **emit every text fontsize at designPt ÷
+> `TABLEAU_TEXT_SCALE` (1.5)** — Tableau's oversized draw then lands at exactly
+> the DESIGNED visual size, so text occupies the same space as in Figma and
+> nothing clips or collides, horizontally or vertically. Consequently
+> `estLineWidthPx` now measures at design size (no ×1.5) so most zones need no
+> growth at all, and shrink-to-fit rarely triggers. Also added: text zones are
+> now collision obstacles for each other (live geometry, document order — two
+> zones can never both grow into one gap), and vertical placement uses a
+> collision window (`vWindowFor`/`placeV`) so height growth stops 2px before any
+> disjoint neighbor. Verified on a replica of the Overview title/subtitle/KPI
+> stack: title h 60→70 stops above the subtitle, fonts 37.5→25 / 21→14 / 15→10
+> nominal (render at design visual size), ZERO partial overlaps. capture-smoke
+> title assertions updated (fontSize 25, w fits ≤300 without ballooning). tsc
+> clean, 18 OK checks, build OK. Not committed; needs re-export (footer
+> `visual-scale-fit-66`). KNOB: if text renders too small on a 100%-scaling
+> machine, `TABLEAU_TEXT_SCALE` in faithful.ts is the dial.
+>
+> **Build 65 (2026-07-02): TEXT-FITTING ENGINE — the general fix for any
+> design.** The user's "Tableau Analytics" export revealed the killer rule:
+> **a floating text zone that PARTIALLY overlaps another zone gets mangled by
+> Tableau** (only the overhang renders — "Con.." fragments, invisible "$1.24M"),
+> while FULL containment is fine. Builds 63/64 grew text zones in isolation, so
+> grown zones poked past their KPI cards → partial overlaps → the mess. Also
+> confirmed from the export: Tableau does NOT soft-wrap text zones (overflow is
+> "…"-truncated), and draws text ~1.4–1.5× the 96-dpi GDI width. New
+> architecture in `faithful.ts`: `walk()` captures text zones RAW (exact Figma
+> geometry, multi-line still split per line with `#L` ids); a post-pass
+> `fitFaithfulText(zones, frameW, frameH)` then fits every text zone with full
+> knowledge of the dashboard: (1) accurate width need from a GDI-measured
+> per-char advance table (`SEGOE_EMS`, chars 32-126, em units) ×
+> `TABLEAU_TEXT_SCALE=1.5` (+8px pad, ×1.08 bold); (2) grow toward the text's
+> alignment but CLAMPED to the tightest enclosing solid zone (the card, inset)
+> and never INTO a previously-disjoint neighbor; (3) if the text still can't
+> fit, SHRINK THE FONT to the available width (floor 0.45×) — a smaller complete
+> label beats a truncated one; (4) `#L` line groups re-fit as one block (one
+> shrink ratio for the stack, height = Σsize×1.9 centered, clamped inside the
+> card, re-sliced). Verified on a replica of the failing design: heading grows
+> to 2px before the chart panel then shrinks 30→22pt and renders complete;
+> "Conversion Rate" fits inside its 160px card at 9pt; ZERO partial overlaps.
+> tsc clean, 18 OK checks, build OK. Not committed; needs user re-export
+> (footer `text-fit-engine-65`).
+>
+> **Build 64 (2026-07-02):** vertical glyph clipping fix on the build-63
+> split-line zones. The per-line zones sliced the raw Figma text bbox (~1.57× the
+> point size per line) but Tableau's Segoe UI line box needs ~1.77×pt-in-px plus
+> zone margins, so KPI values shaved their digit tops ("1,284") and labels their
+> descenders ("Occupancy"). `faithful.ts` now grows the whole line stack to
+> `Σ size × 1.9` CENTERED on the Figma bbox before slicing (each slice stays
+> proportional to its font size), and the single-line path uses the same 1.9
+> factor. For the clinical template KPI: 66px block → 80px, still inside the
+> 100px card. tsc clean, 18 OK checks, build OK. Not committed; not yet
+> Tableau-confirmed (footer must read `lineheight-fit-64`).
+>
+> **Build 63 (2026-07-02):** two text-rendering fixes, diagnosed from the
+> user's actual export (`Downloads/Dashboard.twbx`) + GDI measurements. (1)
+> **Multi-line text zones lost every line after the first** — a template KPI card
+> (ONE Figma text node, "label\nvalue\ndelta") exported as one multi-line
+> `<formatted-text>`; the user's Tableau rendered the small first row + ".." and
+> swallowed the big value. Tableau fits multi-line zones by whole lines and
+> ellipsizes the rest, while SINGLE-line zones always draw their line (evidence:
+> the user's per-layer KPI lines all rendered). Fix: `faithful.ts` now splits a
+> multi-line text node into ONE ZONE PER VISUAL LINE (`linesWithSizes` carries
+> per-line runs; each line gets a height slice proportional to its font size,
+> its own width fit, and its first run's color/size). Emitted zones now match
+> the LaDataViz reference pattern (single-line, ≤1 run, no newlines in runs).
+> (2) **Horizontal ellipsis truncation ("Overvi..", "67/..", "Filter Pan..")** —
+> measured Segoe UI via GDI and compared with the export's zone widths: the
+> user's Tableau needs ~1.4–1.5× the 96-dpi GDI width, and every truncation in
+> their screenshots matches that factor quantitatively. `CHAR_W` 0.75 → **1.1**
+> px per point per char (the text-fit-19-era empirically proven constant);
+> long single lines also get row-estimated height so Tableau can wrap them.
+> capture-smoke updated (title now asserts GROWTH past the Figma box, w≥330).
+> tsc clean, 18 OK checks, build OK. Not committed; needs the user to reload
+> (footer `textfit-splitlines-63`) and re-export both the template and their
+> Overview design.
+>
+> **Build 62 (2026-07-02):** three user-reported fixes. (1) **Per-field
+> template colors** — new `DOMAIN_ACCENTS` in `shared/constants.ts` (one dark,
+> saturated hex per domain). Templates color their KPI values + `SHEET/` captions
+> with it (`templateAccent` in `code.ts`), and because the exporter samples the
+> most vivid fill inside a `SHEET/` layer (`dominantChartColor`), each template's
+> charts export in that same color; `seed.ts` also uses `data.accent` as the
+> mark-color fallback (before `#898989`) for any dashboard whose domain is
+> detected. (2) **Export text clipping fixed** — `faithful.ts` measured line
+> width as `chars × sizePt × 0.6` but the zone rect is in PIXELS, so the box was
+> ~25% too narrow (missing the 4/3 px-per-pt factor) and Tableau wrapped/clipped
+> text that fit in Figma; `CHAR_W` is now 0.75 px-per-pt and width growth honors
+> the text's alignment (centered grows both ways, right-aligned grows leftward).
+> (3) **UI no longer self-toggles on Ctrl/Space** — a clicked tab/checkbox kept
+> browser focus, so a later Space landing in the plugin iframe re-activated it;
+> `App.tsx` now blurs non-typing controls after a pointer click and swallows
+> stray Space keydowns outside text fields (keyboard-driven clicks keep focus
+> for accessibility). `tsc` clean, tests green, build OK. Not committed. Not yet
+> Tableau-confirmed by the user.
+>
+> **Build 61 (2026-07-02):** (1) **Pie load-error fixed** — a pie sizes
 > wedges with **`<wedge-size>`**, NOT `<angle>` (D2E8DA72 "no declaration found for
 > element 'angle'"; valid encodings: color|size|text|shape|wedge-size|lod|geometry|
 > image|tooltip|path|level|edge). `validateTwb` now guards `<angle>`. (2)
@@ -432,7 +533,7 @@ It sends `request-faithful`; the `faithful-ready` handler builds `faithfulSpec` 
 (`exportRealComponents`, `handleExport`) were **removed**, along with the
 background-image export mode and all its plumbing. The Export tab still has:
 workbook name, Tableau version, a re-read/auto-tag source card, and a summary
-table. Build tag is in `App.tsx` `const BUILD` (currently `swap-match-clone-48`).
+table. Build tag is in `App.tsx` `const BUILD` (currently `visual-scale-fit-66`).
 The export covers **all selected frames** (one dashboard each), **always
 pixel-exact floating**. The **"Responsive layout (flow containers)"** checkbox was
 **REMOVED from the UI** (`floating-only-42`): flow mode reflows the design via the

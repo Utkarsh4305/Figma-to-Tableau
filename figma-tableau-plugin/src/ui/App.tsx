@@ -9,7 +9,7 @@ import { parseImport, parsedImportFromStored, type ParsedImport } from "../plugi
 import ComponentLibrary from "./components/ComponentLibrary";
 import DashboardTemplates from "./templates/DashboardTemplates";
 
-const BUILD = "multi-ds-15-templates-61";
+const BUILD = "visual-scale-fit-66";
 
 type Status = { kind: "ok" | "err" | "warn"; text: string } | null;
 
@@ -70,6 +70,38 @@ export default function App() {
     const timer = setTimeout(() => setStatus(null), 4000);
     return () => clearTimeout(timer);
   }, [status]);
+
+  // A clicked button/checkbox/tab keeps browser focus, so a LATER keypress that
+  // lands in the plugin iframe (Space, Enter — e.g. the user reaching for
+  // Figma's ctrl/space canvas shortcuts) re-activates it and the control seems
+  // to toggle by itself. Two guards: blur non-typing controls right after a
+  // pointer click, and swallow stray Space presses when focus isn't in a text
+  // field (keyboard-driven clicks — e.detail === 0 — keep focus, so tabbing +
+  // Space/Enter still works for accessibility).
+  useEffect(() => {
+    const isTyping = (el: Element | null) => {
+      if (!el) return false;
+      const tag = el.tagName;
+      if (tag === "TEXTAREA") return true;
+      if (tag !== "INPUT") return false;
+      const type = (el as HTMLInputElement).type;
+      return type !== "checkbox" && type !== "radio" && type !== "button" && type !== "file";
+    };
+    const blurAfterClick = (e: MouseEvent) => {
+      if (e.detail === 0) return; // keyboard "click" — leave focus alone
+      const el = document.activeElement as HTMLElement | null;
+      if (el && el !== document.body && !isTyping(el) && el.tagName !== "SELECT") el.blur();
+    };
+    const swallowSpace = (e: KeyboardEvent) => {
+      if (e.key === " " && !isTyping(e.target as Element | null)) e.preventDefault();
+    };
+    document.addEventListener("click", blurAfterClick);
+    document.addEventListener("keydown", swallowSpace, true);
+    return () => {
+      document.removeEventListener("click", blurAfterClick);
+      document.removeEventListener("keydown", swallowSpace, true);
+    };
+  }, []);
 
   // Show the "copy" drag cursor (not the ⃠ not-allowed one) while dragging a
   // component over the plugin UI. HTML5 marks any element that doesn't handle

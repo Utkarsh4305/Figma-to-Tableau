@@ -17,7 +17,7 @@ import type {
   ActionSpec,
 } from "../shared/spec";
 import { nextId, isContainer, DEFAULT_EXPORT_OPTIONS } from "../shared/spec";
-import { DOMAIN_KEYWORDS, DOMAIN_FIELDS } from "../shared/constants";
+import { DOMAIN_KEYWORDS, DOMAIN_FIELDS, DOMAIN_ACCENTS } from "../shared/constants";
 import { generateSampleRows } from "./csv";
 
 function detectDomain(model: DashboardModel): string {
@@ -225,6 +225,7 @@ interface DomainDataset {
   catDim: string;
   trendDim: string;
   meas: [string, string];
+  accent?: string; // domain accent (#hex) — default chart mark color
 }
 
 /** Per-domain placeholder data: realistic category members, time periods and two
@@ -424,7 +425,9 @@ function domainDatasetFor(domain: string): DomainDataset {
     const { fields, rows } = sampleData();
     return { fields, rows, catDim: "Region", trendDim: "Period", meas: ["Sales", "Profit"] };
   }
-  return buildDomainDataset(cfg);
+  const ds = buildDomainDataset(cfg);
+  ds.accent = DOMAIN_ACCENTS[domain];
+  return ds;
 }
 
 /** Detect the dashboard domain from the frame title + layer/sheet/text names, so
@@ -583,11 +586,11 @@ function buildFaithfulDashboard(
         dualAxis: false,
         // Mark color: prefer the DESIGN's own chart color (sampled from the most
         // vivid fill inside the SHEET/ layer) so a blue mock exports a blue chart;
-        // fall back to the LaDataViz neutral gray (#898989, used for every sheet
-        // in multi.twbx) when the design had no confident colored fill. Value
-        // labels are on for all marks; the pane chooses "all" for bars and
-        // "line-ends" for line/area so only the end value shows.
-        markColor: z.markColor || "#898989",
+        // then the detected domain's accent (a clinical dashboard gets cyan charts,
+        // sales gets green…); finally the LaDataViz neutral gray (#898989, used for
+        // every sheet in multi.twbx). Value labels are on for all marks; the pane
+        // chooses "all" for bars and "line-ends" for line/area.
+        markColor: z.markColor || data.accent || "#898989",
         showLabels: true,
         // Bind to this dashboard's own datasource so each domain's charts show
         // their own data (primary domain leaves dsName undefined = federated.fig).
@@ -858,7 +861,7 @@ function materializeSheetOnly(model: FaithfulModel, ctx: FaithfulCtx, data: Doma
       dimension: isTrend ? data.trendDim : data.catDim,
       measures,
       dualAxis: false,
-      markColor: z.markColor || "#898989",
+      markColor: z.markColor || data.accent || "#898989",
       showLabels: true,
       dsName: dsName === PRIMARY_DS ? undefined : dsName,
     });

@@ -4,9 +4,176 @@
 > device without the local Claude memory**. It folds in the essential facts from
 > the private memory files (the Tableau 2026.2 recipe, the reference-export
 > workflow, and project state). Last updated: **2026-07-02**, build
-> `visual-scale-fit-66`.
+> `colored-canvas-74`.
 >
-> **Latest (build 66, 2026-07-02): FONT NORMALIZATION — the vertical fix.**
+> **Latest (build 74, 2026-07-02): canvas fix, take 2** — user's TABLEAU
+> exports still showed black canvases at 0.42 (screenshots confirmed; the
+> accents are dark, and applying a template BAKES the colors into the Figma
+> frame, so old frames keep old colors — templates must be RE-APPLIED after a
+> palette change). `bg` mix now **0.6**: clinical #084656, sales #0D4D25,
+> finance #282279, retail #6F1111, manufacturing #6C3205, esg #024834 — rich,
+> unmistakably hued, light cards keep contrast. Note from the screenshots:
+> worksheet (SHEET) zones render with Tableau's white pane regardless of card
+> tint; only KPI/text/rect zones carry the tint — expected. tsc/tests/build
+> green. Not committed.
+>
+> **Latest (build 72, 2026-07-02): DOMAIN-DIFFERENTIATED TEMPLATES** — user:
+> "everything looks way too similar" (all 15 shared the same lavender cards and
+> most reused the same KPI-strip + hero + bottom-row skeleton).
+> 1. **Per-domain palette, derived from `DOMAIN_ACCENTS` at apply time** (new
+>    `mix()` + WHITE/BLACK in code.ts; T_BG_* constants deleted): canvas =
+>    `mix(accent, black, .18)` (dark, domain-hued), sheet cards =
+>    `mix(accent, white, .07)`, KPI cards = `.12`, strokes = `.35`. Tints stay
+>    under the exporter's saturation cutoff (dominantChartColor skips s<0.18 —
+>    and only samples CHILDREN fills anyway), so the accent captions still
+>    drive the exported mark color.
+> 2. **10 layouts reworked into distinct archetypes** (clinical/sales/finance/
+>    executive/operations kept — already distinct): marketing = FUNNEL TOWER
+>    (tall funnel left + 2×2 right); hr = RIGHT SIDEBAR (mirror of clinical);
+>    supplychain = STACKED FULL-WIDTH BANDS; support = QUADRANT 2×2 w/ KPI
+>    strip on the BOTTOM; product = SPLIT HERO (wide trend + tall pie);
+>    itops = STATUS BOARD (tall heatmap left rail + 2×2 KPI block); mfg = 2×2
+>    left + tall defect heatmap RIGHT rail; retail = ASYMMETRIC wide/narrow
+>    columns; project = 3 KANBAN lanes (KPI over tall chart each); esg = MIX
+>    SPOTLIGHT (big pie + 2×2 KPI block left, stacked charts right).
+> 3. Template-card descs/counts in `DashboardTemplates.tsx` updated to match;
+>    all 15 layouts machine-checked: no overlaps, all children in bounds.
+> tsc clean, 16 smoke tests green, build OK. Not committed.
+>
+> **Latest (build 71, 2026-07-02): TEMPLATE POLISH + empty-space placement.**
+> 1. **Templates land in EMPTY space**: `applyTemplate` no longer drops the new
+>    dashboard at `frame.x + width + 80` (could overlap other frames) — new
+>    `emptyPlacement()` in code.ts puts it just past the RIGHTMOST top-level
+>    node on the page (+160px, top-aligned with the selected frame), appended
+>    to the page, so it can never cover an existing design.
+> 2. **Template cards refined**: 36px tinted icon chip (blue wash + border),
+>    pill-shaped Apply button (blue accent on hover), hover elevation
+>    (shadow + 1px lift), padding 14×16, grid gap 12.
+> 3. **Proper accordion chevrons**: the text "▶" glyphs everywhere (syntax
+>    accordions, Dashboard-details + import accordions) replaced with
+>    CSS-drawn border chevrons that rotate right→down on open.
+> 4. **Top-right size-preset button REMOVED** (user request) — resizing is the
+>    corner ↖↘ grip only; `MsgResize`/sandbox clamp stay.
+> 5. **Finish pass**: blue focus rings on inputs/selects (soft 2px glow),
+>    btn-secondary + link-btn hover states, library cards get the same hover
+>    elevation as template cards, section labels letter-spacing 0.7.
+> tsc clean, 16 smoke tests green, build OK. Not committed.
+>
+> **Latest (build 70, 2026-07-02): LIBRARY TAB DE-CONGESTION + resize arrow.**
+> 1. **Syntax tab → accordions**: the 9 prefix entries and the three modifier
+>    sections (Chart types `[type]`, Sheet options `:option`, Navigation
+>    targets `> Target`) are now `<details>` rows — icon + tag + short title
+>    visible, full description/tables only on click (`.syntax-acc*` CSS). The
+>    tab reads as ~12 calm rows instead of a wall of text; the real-data tip
+>    card stays visible.
+> 2. **Airier text everywhere in Library**: line-heights 1.5→1.6/1.65
+>    (syntax-intro/desc/table cells, template descriptions), Components
+>    category blocks 16→22px apart.
+> 3. **Resize arrow**: the corner chip is now 26px with a double-headed ↖↘
+>    arrow glyph, floating card look (shadow + focus border, blue on hover) so
+>    it unmistakably reads "drag to resize"; free drag unchanged, size-preset
+>    button unchanged.
+> tsc clean, 16 smoke tests green, build OK. Not committed.
+>
+> **Latest (build 69, 2026-07-02): RESIZE RESTORED (discoverable) + spacing
+> de-congestion (UI-only).** User feedback on build 68: cards too congested, and
+> the resize arrow was invisible ("only visible when I go outside the UI…
+> arrow doesn't appear") — i.e. build 68 misread the earlier complaint; the user
+> DOES want resizing, the old handle was just undiscoverable (bare 16px
+> cursor-only zone flush against the iframe edge). Two ways to resize now:
+> 1. **Size-preset button** at the right end of the main tab bar — one click
+>    cycles Compact 420×580 → Comfortable 500×720 → Large 600×860 (tooltip names
+>    the next preset). Guaranteed to work, no hover-hunting.
+> 2. **Visible corner grip** — a 22px chip (bg + border + diagonal-grip glyph,
+>    inset 2px from the corner so pointer events stay inside the iframe) with
+>    pointer-capture drag; `resize` msg (`MsgResize`) + code.ts
+>    `figma.ui.resize` clamp (≥360×420) reinstated from build 67.
+> 3. **Spacing pass** — scroll-area gap 14→18/padding 18, section labels mb 6→8,
+>    frame/export/account cards padding 12×14→14×16, account card gap 10→12,
+>    library grid gap 8→10 + card padding up, template cards 10×12→12×14,
+>    syntax items 10→12 + section gaps 14→20, stat cells, onboarding, toggles,
+>    import rows all loosened.
+> tsc clean, 16 smoke tests green, build OK. Not committed.
+>
+> **Build 68 (2026-07-02): ACCOUNT TAB + COMPLETE SYNTAX REFERENCE +
+> shared SVG icon module (export pipeline untouched).**
+> 1. **"Fix selected card" button REMOVED completely** — the ComponentLibrary
+>    button/hint row, the `fix-clipping` message (`MsgFixClipping` in types.ts),
+>    and the sandbox `fixSelectedClipping`/`fixCardClipping` functions are all
+>    deleted (superseded: library/template cards are built clip-proof via
+>    `fillCaption`/`fillKpiRows`, and export-side fitting lives in
+>    `fitFaithfulText`). `.fix-clip-*` CSS dropped.
+> 2. **UI is no longer resizable** — the corner drag handle, the `resize`
+>    message (`MsgResize`), code.ts's `figma.ui.resize` case and `.resize-handle`
+>    CSS are removed; the plugin window is fixed at `UI_SIZE` 420×580.
+> 3. **Syntax tab completed** (Library ▸ Syntax) — now documents the FULL
+>    transpiler contract, verified against `constants.ts LAYER_PREFIXES` +
+>    `faithful.ts markFromTag/parseLayerOptions`: all 9 prefixes (SHEET/, KPI/,
+>    FILTER/, Nav/, BUTTON/ > Target, TEXT/, Image|IMG|LOGO/, URL|WEB/,
+>    CONTAINER|GROUP/), the full `[type]` chart-tag table with every alias
+>    (bar=default/column/bar-hor/bar-vert, line/trend, area, pie/donut/doughnut,
+>    scatter/bubble/circle→Circle, heatmap/square/map→Square,
+>    table/text/crosstab→Text) and the Tableau mark each maps to, the stackable
+>    `:showTitle`/`:filter`/`:highlight` sheet options, a "Navigation targets"
+>    explainer (Nav/ prototype link vs BUTTON/ named target, nav-to-SHEET), and
+>    a real-data-swap tip. Each entry carries an icon.
+> 4. **Account tab is now a full section** (was a "coming soon" placeholder):
+>    Profile card (initials avatar + `figma.currentUser` name — needed the new
+>    `"permissions": ["currentuser"]` in manifest.json → **re-import the
+>    manifest in Figma**), Free-plan card with feature list, Usage stats strip
+>    (all-time export count persisted in `clientStorage("ft-export-count")`,
+>    imported-sheet count, selected-frame count), Data & storage card (stored
+>    workbook summary + "Clear stored workbook" → new `clear-import` msg deletes
+>    `clientStorage("ft-import")` and clears UI state; feedback via
+>    figma.notify), local-only privacy note, About card with build tag. New
+>    messages: `request-account`/`account-info` (userName + exportCount),
+>    `log-export` (UI sends it after a successful export; sandbox increments the
+>    counter and re-posts account-info), `clear-import`.
+> 5. **SVG icons** — new shared module `src/ui/icons.tsx`: `svgProps(size)`
+>    factory (24-grid stroke glyphs, currentColor) now also used by
+>    ComponentLibrary + DashboardTemplates (their local svgProps consts
+>    deduped); `TAB_ICONS` on the main Dashboard/Library/Account tabs,
+>    `SUBTAB_ICONS` on Components/Templates/Syntax, `SYNTAX_ICONS` (12 glyphs)
+>    on every Syntax entry, `ACCOUNT_ICONS` on the Account rows.
+> tsc clean, 16 smoke tests green, `npm run build` OK. Not committed.
+>
+> **Build 67 (2026-07-02): UI/UX POLISH pass (UI-only + tiny sandbox
+> plumbing; export pipeline untouched).**
+> 1. **Toast rework** — warnings/errors no longer single-line-ellipsized and
+>    auto-vanishing (they carry the actionable swap guidance!): text wraps
+>    (`overflow-wrap:anywhere`, scrollable at 45vh max), warn/err persist until
+>    the user hits the ✕ dismiss button; only `ok` auto-dismisses (5s).
+> 2. **Live Selection card** on the Dashboard tab — reuses the previously
+>    orphaned `.frame-card` CSS; shows the selected frame name(s) and
+>    "N frames → N Tableau dashboards" (multi) or "W × H · n layers → 1
+>    dashboard". Plumbing: `collectFrames()` exported from `faithful.ts`,
+>    `code.ts parseAndSend` adds `frameNames` to `model-ready`
+>    (`MsgModelReady.frameNames?: string[]`), so the card tracks
+>    `selectionchange` live and reflects the REAL multi-dashboard export scope.
+>    The duplicate Frame/Dimensions rows were dropped from the details accordion.
+> 3. **Drag-to-resize** — corner handle (bottom-right, all tabs) sends the
+>    already-supported-but-never-used `resize` message (code.ts clamps ≥360×420);
+>    pointer capture keeps the drag alive while the iframe resizes. Default
+>    `UI_SIZE` bumped 400×500 → 420×580.
+> 4. **Onboarding empty state** — a "no frame" parse failure now renders a
+>    3-step "Design → Tableau" card (select frame(s) → name layers / use
+>    Library → export) instead of a raw error string; real parse errors still
+>    show the error card. "Start from scratch" stays in both branches.
+> 5. **Import UX** — native file input replaced by a hidden input + styled
+>    dashed upload button ("Upload/Replace workbook (.twb / .twbx)"); the
+>    accordion summary shows a blue "N loaded" pill when real sheets are armed
+>    (or a quiet "optional" hint when not).
+> 6. **Templates tab** — search box (filters label+desc) + compact cards
+>    (32px icon, name + "5 sheets · 4 KPIs · 2 filters" meta line, small Apply
+>    button in the header row, description clamped to 2 lines with full text in
+>    `title`), plus a friendly no-match state.
+> 7. **A11y/polish** — `:focus-visible` outlines for buttons/summaries, toast
+>    `role="status"`, template-card hover states.
+> tsc clean, 16 smoke tests (18 OK checks) green, `npm run build` OK (both
+> `dist/index.html` + `dist/code.js`). Not committed; needs a re-import in Figma
+> to pick up the new manifest-less UI (footer `ui-polish-67`).
+>
+> **Build 66 (2026-07-02): FONT NORMALIZATION — the vertical fix.**
 > Build 65 fixed horizontal fitting, but vertically the physics couldn't close:
 > at Tableau's ~1.5× oversized text rendering, tall glyphs need 2.66×pt of
 > height while design slots give ~1.6×pt — the grown title clipped against the
@@ -533,7 +700,7 @@ It sends `request-faithful`; the `faithful-ready` handler builds `faithfulSpec` 
 (`exportRealComponents`, `handleExport`) were **removed**, along with the
 background-image export mode and all its plumbing. The Export tab still has:
 workbook name, Tableau version, a re-read/auto-tag source card, and a summary
-table. Build tag is in `App.tsx` `const BUILD` (currently `visual-scale-fit-66`).
+table. Build tag is in `App.tsx` `const BUILD` (currently `colored-canvas-74`).
 The export covers **all selected frames** (one dashboard each), **always
 pixel-exact floating**. The **"Responsive layout (flow containers)"** checkbox was
 **REMOVED from the UI** (`floating-only-42`): flow mode reflows the design via the

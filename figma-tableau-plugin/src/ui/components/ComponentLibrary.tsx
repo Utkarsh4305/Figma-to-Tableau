@@ -1,20 +1,12 @@
 import type { ReactNode } from "react";
 import type { LibraryComponentId, UiToPlugin } from "../../shared/types";
+import { svgProps as sharedSvgProps } from "../icons";
 
 function toPlugin(msg: UiToPlugin) {
   parent.postMessage({ pluginMessage: msg }, "*");
 }
 
-const svgProps = {
-  width: 22,
-  height: 22,
-  viewBox: "0 0 24 24",
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: 1.75,
-  strokeLinecap: "round" as const,
-  strokeLinejoin: "round" as const,
-};
+const svgProps = sharedSvgProps(22);
 
 const ICONS: Record<LibraryComponentId, ReactNode> = {
   // ── Worksheets
@@ -167,22 +159,9 @@ export default function ComponentLibrary() {
         your dashboard, or drag one straight onto the canvas.
       </div>
 
-      <div className="fix-clip-row">
-        <button
-          type="button"
-          className="btn-secondary"
-          onClick={() => toPlugin({ type: "fix-clipping" })}
-        >
-          Fix selected card
-        </button>
-        <span className="fix-clip-hint">
-          Select a KPI / text card on the canvas whose text is cut off, then click
-          — the text wraps to the card width and the card grows to fit (no clipping).
-        </span>
-      </div>
       {categories.map((cat) => (
-        <div key={cat} style={{ marginBottom: 16 }}>
-          <div className="section-label" style={{ marginBottom: 8 }}>{cat}</div>
+        <div key={cat} style={{ marginBottom: 22 }}>
+          <div className="section-label" style={{ marginBottom: 10 }}>{cat}</div>
           <div className="library-grid">
             {COMPONENTS.filter((c) => c.category === cat).map((c) => (
               <div

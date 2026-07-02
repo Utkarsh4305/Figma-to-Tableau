@@ -6,6 +6,7 @@
   "ui": "dist/index.html",
   "editorType": ["figma"],
   "documentAccess": "dynamic-page",
+  "permissions": ["currentuser"],
   "networkAccess": {
     "allowedDomains": ["none"],
     "reasoning": "All parsing and .twbx generation happen locally; the plugin makes no network requests."

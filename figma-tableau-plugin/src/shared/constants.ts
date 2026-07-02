@@ -170,5 +170,5 @@ export const DOMAIN_FIELDS: Record<string, { dims: [string, FieldType][]; meas: 
 /** Default dashboard pixel size when a frame size can't be read. */
 export const DEFAULT_SIZE = { width: 1280, height: 800 };
 
-/** UI iframe size. */
-export const UI_SIZE = { width: 400, height: 500 };
+/** UI iframe size (initial — the corner grip / size button let the user resize). */
+export const UI_SIZE = { width: 420, height: 580 };

@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import { parseSelection, attachImages, applyAutoTags } from "./parser";
-import { parseFaithfulAll, attachFaithfulImages, expandNavTargets } from "./faithful";
+import { parseFaithfulAll, attachFaithfulImages, expandNavTargets, collectFrames } from "./faithful";
 import type { UiToPlugin, PluginToUi } from "../shared/types";
 import { UI_SIZE, DOMAIN_ACCENTS } from "../shared/constants";
 
@@ -25,7 +25,15 @@ async function parseAndSend(): Promise<void> {
     } catch {
       /* images just won't render as bitmaps */
     }
-    post({ type: "model-ready", model });
+    // Every selected frame becomes its own Tableau dashboard on export — tell
+    // the UI their names so the Selection card can reflect the real export scope.
+    let frameNames: string[] | undefined;
+    try {
+      frameNames = collectFrames().map((f) => f.name || "Frame");
+    } catch {
+      /* selection card just falls back to the parsed model's title */
+    }
+    post({ type: "model-ready", model, frameNames });
   } catch (e) {
     post({ type: "model-ready", model: null, error: (e as Error).message });
   }
@@ -439,30 +447,26 @@ const tSheet = (name: string, x: number, y: number, w: number, h: number, captio
 const tFilter = (name: string, x: number, y: number, w: number, h: number, caption: string): TChild =>
   ({ name, x, y, w, h, fill: T_FIL, caption, capColor: T_SHCAP, radius: 8 });
 
-// Per-category dashboard background (dark, distinctly hued) so each template
-// reads as its own category at a glance \u2014 e.g. deep blue for clinical, green for
-// sales. Light cards (T_SH / T_KPI) keep their contrast on every one.
-const T_BG_CLINICAL: RGB = { r: 0.04, g: 0.09, b: 0.16 };
-const T_BG_SALES: RGB = { r: 0.04, g: 0.12, b: 0.08 };
-const T_BG_FINANCE: RGB = { r: 0.05, g: 0.07, b: 0.13 };
-const T_BG_EXEC: RGB = { r: 0.08, g: 0.07, b: 0.12 };
-const T_BG_OPS: RGB = { r: 0.12, g: 0.08, b: 0.03 };
-const T_BG_MARKETING: RGB = { r: 0.13, g: 0.05, b: 0.10 };
-const T_BG_HR: RGB = { r: 0.09, g: 0.05, b: 0.13 };
-const T_BG_SUPPLY: RGB = { r: 0.03, g: 0.11, b: 0.11 };
-const T_BG_SUPPORT: RGB = { r: 0.03, g: 0.10, b: 0.14 };
-const T_BG_PRODUCT: RGB = { r: 0.07, g: 0.05, b: 0.14 };
-const T_BG_ITOPS: RGB = { r: 0.05, g: 0.08, b: 0.12 };
-const T_BG_MFG: RGB = { r: 0.09, g: 0.09, b: 0.10 };
-const T_BG_RETAIL: RGB = { r: 0.14, g: 0.05, b: 0.05 };
-const T_BG_PROJECT: RGB = { r: 0.06, g: 0.06, b: 0.14 };
-const T_BG_ESG: RGB = { r: 0.03, g: 0.10, b: 0.06 };
+// Per-template palette is DERIVED from the domain accent at apply time (see
+// applyTemplate): a dark accent-hued canvas plus accent-TINTED cards and
+// strokes, so each template reads unmistakably as its own domain \u2014 not the
+// same lavender cards recolored. Tints stay far below the exporter's
+// vividness threshold (dominantChartColor skips fills with saturation < 0.18),
+// so the accent-colored captions remain the sampled chart mark color.
+const WHITE: RGB = { r: 1, g: 1, b: 1 };
+const BLACK: RGB = { r: 0, g: 0, b: 0 };
+/** Blend `f` of color `c` into `base` (f=0 \u2192 base, f=1 \u2192 c). */
+const mix = (c: RGB, base: RGB, f: number): RGB => ({
+  r: c.r * f + base.r * (1 - f),
+  g: c.g * f + base.g * (1 - f),
+  b: c.b * f + base.b * (1 - f),
+});
 
 const TEMPLATES: Record<string, { name: string; w: number; h: number; bg?: RGB; children: TChild[] }> = {
   // \u2500\u2500 Clinical \u2014 LEFT SIDEBAR: KPI/filter rail on the left, charts fill the right.
   "clinical": {
     name: "Clinical Dashboard",
-    w: 1300, h: 820, bg: T_BG_CLINICAL,
+    w: 1300, h: 820,
     children: [
       tTitle("TEXT/Title", 24, 20, 520, "Clinical Performance Dashboard"),
       tKpi("KPI/Total Patients", 24, 64, 250, 100, "1,284", "Total Patients", "+4.2% MoM"),
@@ -480,7 +484,7 @@ const TEMPLATES: Record<string, { name: string; w: number; h: number; bg?: RGB; 
   // \u2500\u2500 Sales \u2014 HERO + RAIL: big trend hero with a region rail, then a 3-up row.
   "sales": {
     name: "Sales Dashboard",
-    w: 1280, h: 800, bg: T_BG_SALES,
+    w: 1280, h: 800,
     children: [
       tTitle("TEXT/Title", 24, 20, 460, "Sales Performance Dashboard"),
       tFilter("FILTER/Region", 944, 22, 150, 36, "Region \u25BE"),
@@ -499,7 +503,7 @@ const TEMPLATES: Record<string, { name: string; w: number; h: number; bg?: RGB; 
   // \u2500\u2500 Finance \u2014 TWO BIG COLUMNS under a 5-KPI strip (P&L left, breakdown right).
   "finance": {
     name: "Finance Dashboard",
-    w: 1260, h: 860, bg: T_BG_FINANCE,
+    w: 1260, h: 860,
     children: [
       tTitle("TEXT/Title", 24, 20, 460, "Financial Overview Dashboard"),
       tFilter("FILTER/Quarter", 980, 22, 130, 36, "Quarter \u25BE"),
@@ -518,7 +522,7 @@ const TEMPLATES: Record<string, { name: string; w: number; h: number; bg?: RGB; 
   // \u2500\u2500 Executive \u2014 HERO TREND across the top, KPI row, then a 3-up scorecard.
   "executive": {
     name: "Executive Dashboard",
-    w: 1280, h: 780, bg: T_BG_EXEC,
+    w: 1280, h: 780,
     children: [
       tTitle("TEXT/Title", 24, 20, 420, "Executive Overview"),
       tSheet("SHEET/Revenue Trend[line]", 24, 60, 1232, 256, "Revenue Trend"),
@@ -534,7 +538,7 @@ const TEMPLATES: Record<string, { name: string; w: number; h: number; bg?: RGB; 
   // \u2500\u2500 Operations \u2014 MONITORING GRID: KPI strip + a 2-up and a 3-up chart grid.
   "operations": {
     name: "Operations Dashboard",
-    w: 1320, h: 860, bg: T_BG_OPS,
+    w: 1320, h: 860,
     children: [
       tTitle("TEXT/Title", 24, 20, 420, "Operations Monitoring"),
       tFilter("FILTER/Department", 1050, 22, 128, 36, "Department \u25BE"),
@@ -551,128 +555,126 @@ const TEMPLATES: Record<string, { name: string; w: number; h: number; bg?: RGB; 
       tSheet("SHEET/Output by Department[bar]", 896, 490, 400, 340, "Output by Department"),
     ],
   },
-  // ── Marketing — FUNNEL HERO: KPI row, big channel-performance hero + funnel rail,
-  // then a 3-up of leads trend / conversions by channel / spend mix.
+  // ── Marketing — FUNNEL TOWER: a tall conversion funnel fills the LEFT column,
+  // a 2×2 performance grid on the right, KPI row on top.
   "marketing": {
     name: "Marketing Dashboard",
-    w: 1300, h: 820, bg: T_BG_MARKETING,
+    w: 1300, h: 840,
     children: [
       tTitle("TEXT/Title", 24, 20, 480, "Marketing Campaign Performance"),
-      tFilter("FILTER/Channel", 980, 22, 150, 36, "Channel ▾"),
+      tFilter("FILTER/Channel", 1000, 22, 130, 36, "Channel ▾"),
       tFilter("FILTER/Week", 1142, 22, 134, 36, "Week ▾"),
       tKpi("KPI/Leads", 24, 74, 296, 92, "18.2K", "Leads (MQLs)", "+14% WoW"),
       tKpi("KPI/CTR", 336, 74, 296, 92, "3.6%", "Click-Through", "+0.5 pts"),
       tKpi("KPI/CAC", 648, 74, 296, 92, "$42", "Cost per Lead", "-$6 WoW"),
       tKpi("KPI/ROAS", 960, 74, 296, 92, "4.8x", "Return on Ad Spend", "+0.4x"),
-      tSheet("SHEET/Leads Trend[area]", 24, 182, 830, 300, "Leads Trend"),
-      tSheet("SHEET/Conversion Funnel[bar]", 872, 182, 404, 300, "Conversion Funnel"),
-      tSheet("SHEET/Leads by Channel[bar]", 24, 500, 400, 300, "Leads by Channel"),
-      tSheet("SHEET/Channel Mix[pie]", 448, 500, 400, 300, "Channel Mix"),
-      tSheet("SHEET/Conversions vs Leads[scatter]", 872, 500, 404, 300, "Conversions vs Leads"),
+      tSheet("SHEET/Conversion Funnel[bar]", 24, 182, 420, 634, "Conversion Funnel"),
+      tSheet("SHEET/Leads Trend[area]", 468, 182, 390, 302, "Leads Trend"),
+      tSheet("SHEET/Leads by Channel[bar]", 874, 182, 402, 302, "Leads by Channel"),
+      tSheet("SHEET/Channel Mix[pie]", 468, 500, 390, 316, "Channel Mix"),
+      tSheet("SHEET/Conversions vs Leads[scatter]", 874, 500, 402, 316, "Conversions vs Leads"),
     ],
   },
-  // ── HR — PEOPLE OVERVIEW: KPI strip, headcount trend + attrition, then a
-  // department bar and diversity pie.
+  // ── HR — RIGHT SIDEBAR (the mirror of Clinical): charts fill the left, a rail
+  // of people KPIs + filters runs down the right.
   "hr": {
     name: "HR Dashboard",
-    w: 1260, h: 820, bg: T_BG_HR,
+    w: 1300, h: 820,
     children: [
-      tTitle("TEXT/Title", 24, 20, 460, "People & Workforce Analytics"),
-      tFilter("FILTER/Department", 980, 22, 130, 36, "Department ▾"),
-      tFilter("FILTER/Month", 1122, 22, 114, 36, "Month ▾"),
-      tKpi("KPI/Headcount", 24, 74, 232, 90, "1,204", "Headcount", "+38 MoM"),
-      tKpi("KPI/Attrition", 268, 74, 232, 90, "7.2%", "Attrition Rate", "-0.8% MoM"),
-      tKpi("KPI/Time to Hire", 512, 74, 232, 90, "28 d", "Time to Hire", "-3 d"),
-      tKpi("KPI/eNPS", 756, 74, 232, 90, "41", "Employee NPS", "+6 pts"),
-      tKpi("KPI/Offer Rate", 1000, 74, 236, 90, "82%", "Offer Accept", "+3 pts"),
-      tSheet("SHEET/Headcount Trend[line]", 24, 176, 720, 300, "Headcount Trend"),
-      tSheet("SHEET/Attrition by Department[bar]", 764, 176, 472, 300, "Attrition by Department"),
-      tSheet("SHEET/Headcount by Department[bar]", 24, 492, 590, 308, "Headcount by Department"),
-      tSheet("SHEET/Workforce Mix[pie]", 646, 492, 590, 308, "Workforce Mix"),
+      tTitle("TEXT/Title", 24, 20, 520, "People & Workforce Analytics"),
+      tSheet("SHEET/Headcount Trend[line]", 24, 64, 978, 280, "Headcount Trend"),
+      tSheet("SHEET/Attrition by Department[bar]", 24, 360, 478, 200, "Attrition by Department"),
+      tSheet("SHEET/Workforce Mix[pie]", 518, 360, 484, 200, "Workforce Mix"),
+      tSheet("SHEET/Headcount by Department[bar]", 24, 576, 978, 224, "Headcount by Department"),
+      tKpi("KPI/Headcount", 1026, 64, 250, 100, "1,204", "Headcount", "+38 MoM"),
+      tKpi("KPI/Attrition", 1026, 176, 250, 100, "7.2%", "Attrition Rate", "-0.8% MoM"),
+      tKpi("KPI/Time to Hire", 1026, 288, 250, 100, "28 d", "Time to Hire", "-3 d"),
+      tKpi("KPI/eNPS", 1026, 400, 250, 100, "41", "Employee NPS", "+6 pts"),
+      tFilter("FILTER/Department", 1026, 512, 250, 44, "Department ▾"),
+      tFilter("FILTER/Month", 1026, 568, 250, 44, "Month ▾"),
     ],
   },
-  // ── Supply Chain — FLOW: KPI strip, shipments trend hero + on-time rail, then
-  // warehouse bar, backorders and a fulfillment scatter.
+  // ── Supply Chain — STACKED BANDS: two full-width flow charts stacked (trend,
+  // then on-time by warehouse), a 3-up detail row at the bottom.
   "supplychain": {
     name: "Supply Chain Dashboard",
-    w: 1320, h: 840, bg: T_BG_SUPPLY,
+    w: 1280, h: 880,
     children: [
       tTitle("TEXT/Title", 24, 20, 480, "Supply Chain & Logistics"),
-      tFilter("FILTER/Warehouse", 1044, 22, 140, 36, "Warehouse ▾"),
-      tFilter("FILTER/Week", 1196, 22, 100, 36, "Week ▾"),
-      tKpi("KPI/Shipments", 24, 74, 300, 90, "42.1K", "Shipments", "+5.2% WoW"),
-      tKpi("KPI/On-Time", 336, 74, 300, 90, "94.6%", "On-Time Delivery", "+1.1%"),
-      tKpi("KPI/Backorders", 648, 74, 300, 90, "312", "Backorders", "-48 WoW"),
-      tKpi("KPI/Inventory Turns", 960, 74, 300, 90, "8.4", "Inventory Turns", "+0.3"),
-      tSheet("SHEET/Shipments Trend[line]", 24, 178, 860, 300, "Shipments Trend"),
-      tSheet("SHEET/On-Time by Warehouse[bar]", 900, 178, 396, 300, "On-Time by Warehouse"),
-      tSheet("SHEET/Shipments by Warehouse[bar]", 24, 496, 400, 320, "Shipments by Warehouse"),
-      tSheet("SHEET/Backorder Mix[pie]", 448, 496, 400, 320, "Backorder Mix"),
-      tSheet("SHEET/Backorders vs Shipments[scatter]", 872, 496, 424, 320, "Backorders vs Shipments"),
+      tFilter("FILTER/Warehouse", 1004, 22, 130, 36, "Warehouse ▾"),
+      tFilter("FILTER/Week", 1146, 22, 110, 36, "Week ▾"),
+      tKpi("KPI/Shipments", 24, 74, 296, 90, "42.1K", "Shipments", "+5.2% WoW"),
+      tKpi("KPI/On-Time", 336, 74, 296, 90, "94.6%", "On-Time Delivery", "+1.1%"),
+      tKpi("KPI/Backorders", 648, 74, 296, 90, "312", "Backorders", "-48 WoW"),
+      tKpi("KPI/Inventory Turns", 960, 74, 296, 90, "8.4", "Inventory Turns", "+0.3"),
+      tSheet("SHEET/Shipments Trend[line]", 24, 180, 1232, 250, "Shipments Trend"),
+      tSheet("SHEET/On-Time by Warehouse[bar]", 24, 446, 1232, 200, "On-Time by Warehouse"),
+      tSheet("SHEET/Shipments by Warehouse[bar]", 24, 662, 396, 194, "Shipments by Warehouse"),
+      tSheet("SHEET/Backorder Mix[pie]", 436, 662, 396, 194, "Backorder Mix"),
+      tSheet("SHEET/Backorders vs Shipments[scatter]", 848, 662, 408, 194, "Backorders vs Shipments"),
     ],
   },
-  // ── Customer Support — SERVICE DESK: KPI strip, tickets trend hero + CSAT rail,
-  // then channel bar, backlog pie.
+  // ── Customer Support — QUADRANT: four equal service-desk charts in a 2×2, the
+  // five KPIs as a summary strip along the BOTTOM.
   "support": {
     name: "Customer Support Dashboard",
-    w: 1260, h: 820, bg: T_BG_SUPPORT,
+    w: 1280, h: 860,
     children: [
       tTitle("TEXT/Title", 24, 20, 500, "Customer Support Performance"),
-      tFilter("FILTER/Channel", 980, 22, 130, 36, "Channel ▾"),
-      tFilter("FILTER/Week", 1122, 22, 114, 36, "Week ▾"),
-      tKpi("KPI/Tickets", 24, 74, 232, 90, "6,842", "Tickets", "+3.1% WoW"),
-      tKpi("KPI/CSAT", 268, 74, 232, 90, "4.6", "CSAT (of 5)", "+0.2"),
-      tKpi("KPI/First Response", 512, 74, 232, 90, "1.2 h", "First Response", "-0.3 h"),
-      tKpi("KPI/Resolution", 756, 74, 232, 90, "8.4 h", "Resolution Time", "-1.1 h"),
-      tKpi("KPI/SLA", 1000, 74, 236, 90, "97%", "SLA Met", "+2 pts"),
-      tSheet("SHEET/Tickets Trend[line]", 24, 176, 720, 300, "Tickets Trend"),
-      tSheet("SHEET/Tickets by Channel[bar]", 764, 176, 472, 300, "Tickets by Channel"),
-      tSheet("SHEET/Resolved vs Open[bar]", 24, 492, 590, 308, "Resolved vs Open"),
-      tSheet("SHEET/Channel Mix[pie]", 646, 492, 590, 308, "Channel Mix"),
+      tFilter("FILTER/Channel", 1000, 22, 130, 36, "Channel ▾"),
+      tFilter("FILTER/Week", 1142, 22, 114, 36, "Week ▾"),
+      tSheet("SHEET/Tickets Trend[line]", 24, 70, 610, 300, "Tickets Trend"),
+      tSheet("SHEET/Tickets by Channel[bar]", 650, 70, 606, 300, "Tickets by Channel"),
+      tSheet("SHEET/Resolved vs Open[bar]", 24, 386, 610, 300, "Resolved vs Open"),
+      tSheet("SHEET/Channel Mix[pie]", 650, 386, 606, 300, "Channel Mix"),
+      tKpi("KPI/Tickets", 24, 702, 232, 134, "6,842", "Tickets", "+3.1% WoW"),
+      tKpi("KPI/CSAT", 268, 702, 232, 134, "4.6", "CSAT (of 5)", "+0.2"),
+      tKpi("KPI/First Response", 512, 702, 232, 134, "1.2 h", "First Response", "-0.3 h"),
+      tKpi("KPI/Resolution", 756, 702, 232, 134, "8.4 h", "Resolution Time", "-1.1 h"),
+      tKpi("KPI/SLA", 1000, 702, 256, 134, "97%", "SLA Met", "+2 pts"),
     ],
   },
-  // ── Product Analytics — GROWTH: hero DAU trend across the top, KPI row, then a
-  // feature-adoption bar, retention pie and a usage scatter.
+  // ── Product Analytics — SPLIT HERO: a wide users trend beside a tall adoption
+  // pie up top, KPI row through the middle, a 2-up detail row below.
   "product": {
     name: "Product Analytics Dashboard",
-    w: 1280, h: 800, bg: T_BG_PRODUCT,
+    w: 1280, h: 820,
     children: [
       tTitle("TEXT/Title", 24, 20, 460, "Product Analytics"),
-      tSheet("SHEET/Active Users Trend[area]", 24, 60, 1232, 250, "Active Users Trend"),
-      tKpi("KPI/DAU", 24, 330, 296, 96, "42.5K", "Daily Active Users", "+8.3% WoW"),
-      tKpi("KPI/Retention", 332, 330, 296, 96, "68%", "30-Day Retention", "+2 pts"),
-      tKpi("KPI/Sessions", 640, 330, 296, 96, "128K", "Sessions", "+11%"),
-      tKpi("KPI/Churn", 948, 330, 296, 96, "3.1%", "Churn Rate", "-0.4 pts"),
-      tSheet("SHEET/Usage by Feature[bar]", 24, 446, 396, 314, "Usage by Feature"),
-      tSheet("SHEET/Feature Adoption Mix[pie]", 436, 446, 396, 314, "Feature Adoption Mix"),
-      tSheet("SHEET/Sessions vs Users[scatter]", 848, 446, 408, 314, "Sessions vs Users"),
+      tSheet("SHEET/Active Users Trend[area]", 24, 64, 820, 300, "Active Users Trend"),
+      tSheet("SHEET/Feature Adoption Mix[pie]", 860, 64, 396, 300, "Feature Adoption Mix"),
+      tKpi("KPI/DAU", 24, 380, 296, 96, "42.5K", "Daily Active Users", "+8.3% WoW"),
+      tKpi("KPI/Retention", 332, 380, 296, 96, "68%", "30-Day Retention", "+2 pts"),
+      tKpi("KPI/Sessions", 640, 380, 296, 96, "128K", "Sessions", "+11%"),
+      tKpi("KPI/Churn", 948, 380, 296, 96, "3.1%", "Churn Rate", "-0.4 pts"),
+      tSheet("SHEET/Usage by Feature[bar]", 24, 492, 610, 304, "Usage by Feature"),
+      tSheet("SHEET/Sessions vs Users[scatter]", 650, 492, 606, 304, "Sessions vs Users"),
     ],
   },
-  // ── IT Operations — NOC: KPI strip, requests trend hero + error rail, then a
-  // service heatmap, latency bar and an errors scatter.
+  // ── IT Operations — STATUS BOARD: a tall service-health heatmap owns the LEFT
+  // rail, a 2×2 KPI block + stacked traffic charts on the right.
   "itops": {
     name: "IT Operations Dashboard",
-    w: 1320, h: 840, bg: T_BG_ITOPS,
+    w: 1320, h: 860,
     children: [
       tTitle("TEXT/Title", 24, 20, 460, "IT Operations & Reliability"),
       tFilter("FILTER/Service", 1044, 22, 140, 36, "Service ▾"),
       tFilter("FILTER/Day", 1196, 22, 100, 36, "Day ▾"),
-      tKpi("KPI/Uptime", 24, 74, 300, 90, "99.95%", "Uptime", "+0.02%"),
-      tKpi("KPI/Requests", 336, 74, 300, 90, "48.2M", "Requests / day", "+6.1%"),
-      tKpi("KPI/Error Rate", 648, 74, 300, 90, "0.12%", "Error Rate", "-0.03 pts"),
-      tKpi("KPI/Latency", 960, 74, 300, 90, "142 ms", "p95 Latency", "-8 ms"),
-      tSheet("SHEET/Requests Trend[line]", 24, 178, 860, 300, "Requests Trend"),
-      tSheet("SHEET/Errors by Service[bar]", 900, 178, 396, 300, "Errors by Service"),
-      tSheet("SHEET/Service Health[heatmap]", 24, 496, 410, 320, "Service Health"),
-      tSheet("SHEET/Requests by Service[bar]", 450, 496, 430, 320, "Requests by Service"),
-      tSheet("SHEET/Errors vs Requests[scatter]", 896, 496, 400, 320, "Errors vs Requests"),
+      tSheet("SHEET/Service Health[heatmap]", 24, 74, 420, 742, "Service Health"),
+      tKpi("KPI/Uptime", 468, 74, 400, 100, "99.95%", "Uptime", "+0.02%"),
+      tKpi("KPI/Requests", 884, 74, 412, 100, "48.2M", "Requests / day", "+6.1%"),
+      tKpi("KPI/Error Rate", 468, 186, 400, 100, "0.12%", "Error Rate", "-0.03 pts"),
+      tKpi("KPI/Latency", 884, 186, 412, 100, "142 ms", "p95 Latency", "-8 ms"),
+      tSheet("SHEET/Requests Trend[line]", 468, 302, 828, 250, "Requests Trend"),
+      tSheet("SHEET/Errors by Service[bar]", 468, 568, 406, 248, "Errors by Service"),
+      tSheet("SHEET/Errors vs Requests[scatter]", 890, 568, 406, 248, "Errors vs Requests"),
     ],
   },
-  // ── Manufacturing — SHOP FLOOR: KPI strip, output trend hero + yield rail, then
-  // a defect heatmap, units bar and a defects scatter.
+  // ── Manufacturing — SHOP FLOOR: KPI strip, a tall defect heatmap owns the
+  // RIGHT rail, production charts in a 2×2 on the left.
   "manufacturing": {
     name: "Manufacturing Dashboard",
-    w: 1320, h: 840, bg: T_BG_MFG,
+    w: 1320, h: 860,
     children: [
       tTitle("TEXT/Title", 24, 20, 460, "Manufacturing & Production"),
       tFilter("FILTER/Line", 1044, 22, 140, 36, "Line ▾"),
@@ -681,18 +683,18 @@ const TEMPLATES: Record<string, { name: string; w: number; h: number; bg?: RGB; 
       tKpi("KPI/Units", 336, 74, 300, 90, "94.2K", "Units Produced", "+4.1% WoW"),
       tKpi("KPI/Defect Rate", 648, 74, 300, 90, "1.8%", "Defect Rate", "-0.3 pts"),
       tKpi("KPI/Yield", 960, 74, 300, 90, "96.5%", "First-Pass Yield", "+0.7%"),
-      tSheet("SHEET/Output Trend[line]", 24, 178, 860, 300, "Output Trend"),
-      tSheet("SHEET/Units by Line[bar]", 900, 178, 396, 300, "Units by Line"),
-      tSheet("SHEET/Defect Heatmap[heatmap]", 24, 496, 410, 320, "Defect Heatmap"),
-      tSheet("SHEET/Yield by Line[bar]", 450, 496, 430, 320, "Yield by Line"),
-      tSheet("SHEET/Defects vs Units[scatter]", 896, 496, 400, 320, "Defects vs Units"),
+      tSheet("SHEET/Output Trend[line]", 24, 180, 420, 310, "Output Trend"),
+      tSheet("SHEET/Units by Line[bar]", 460, 180, 424, 310, "Units by Line"),
+      tSheet("SHEET/Yield by Line[bar]", 24, 506, 420, 310, "Yield by Line"),
+      tSheet("SHEET/Defects vs Units[scatter]", 460, 506, 424, 310, "Defects vs Units"),
+      tSheet("SHEET/Defect Heatmap[heatmap]", 900, 180, 396, 636, "Defect Heatmap"),
     ],
   },
-  // ── Retail / E-commerce — STOREFRONT: KPI row, revenue trend hero + category rail,
-  // then category mix pie, units bar and a basket scatter.
+  // ── Retail / E-commerce — ASYMMETRIC COLUMNS: a wide storefront column (trend
+  // + units) beside a narrow merchandising column (mix, category, basket).
   "retail": {
     name: "Retail Dashboard",
-    w: 1280, h: 820, bg: T_BG_RETAIL,
+    w: 1280, h: 840,
     children: [
       tTitle("TEXT/Title", 24, 20, 500, "Retail & E-commerce Overview"),
       tFilter("FILTER/Category", 978, 22, 140, 36, "Category ▾"),
@@ -701,50 +703,47 @@ const TEMPLATES: Record<string, { name: string; w: number; h: number; bg?: RGB; 
       tKpi("KPI/AOV", 336, 74, 296, 92, "$68", "Avg Order Value", "+$4"),
       tKpi("KPI/Conversion", 648, 74, 296, 92, "3.1%", "Checkout Conversion", "+0.3 pts"),
       tKpi("KPI/Returns", 960, 74, 296, 92, "4.2%", "Return Rate", "-0.5 pts"),
-      tSheet("SHEET/Revenue Trend[area]", 24, 182, 830, 300, "Revenue Trend"),
-      tSheet("SHEET/Revenue by Category[bar]", 872, 182, 404, 300, "Revenue by Category"),
-      tSheet("SHEET/Category Mix[pie]", 24, 500, 400, 300, "Category Mix"),
-      tSheet("SHEET/Units by Category[bar]", 448, 500, 400, 300, "Units by Category"),
-      tSheet("SHEET/Units vs Revenue[scatter]", 872, 500, 404, 300, "Units vs Revenue"),
+      tSheet("SHEET/Revenue Trend[area]", 24, 182, 800, 330, "Revenue Trend"),
+      tSheet("SHEET/Units by Category[bar]", 24, 528, 800, 288, "Units by Category"),
+      tSheet("SHEET/Category Mix[pie]", 840, 182, 416, 240, "Category Mix"),
+      tSheet("SHEET/Revenue by Category[bar]", 840, 438, 416, 180, "Revenue by Category"),
+      tSheet("SHEET/Units vs Revenue[scatter]", 840, 634, 416, 182, "Units vs Revenue"),
     ],
   },
-  // ── Project Management — DELIVERY: KPI strip, burn-up (completed) trend hero +
-  // open rail, then a team bar and a status pie.
+  // ── Project Management — KANBAN COLUMNS: three equal delivery lanes, each a
+  // KPI over its tall chart (velocity/burn-up · open items · status mix).
   "project": {
     name: "Project Management Dashboard",
-    w: 1260, h: 820, bg: T_BG_PROJECT,
+    w: 1300, h: 840,
     children: [
       tTitle("TEXT/Title", 24, 20, 500, "Project Delivery & Velocity"),
-      tFilter("FILTER/Team", 980, 22, 130, 36, "Team ▾"),
-      tFilter("FILTER/Sprint", 1122, 22, 114, 36, "Sprint ▾"),
-      tKpi("KPI/Velocity", 24, 74, 232, 90, "48", "Velocity (pts)", "+5 pts"),
-      tKpi("KPI/Completed", 268, 74, 232, 90, "312", "Stories Done", "+18 sprint"),
-      tKpi("KPI/Open", 512, 74, 232, 90, "74", "Open Items", "-11"),
-      tKpi("KPI/On-Track", 756, 74, 232, 90, "86%", "On-Track", "+4 pts"),
-      tKpi("KPI/Cycle Time", 1000, 74, 236, 90, "3.4 d", "Cycle Time", "-0.6 d"),
-      tSheet("SHEET/Completed Trend[line]", 24, 176, 720, 300, "Completed by Sprint"),
-      tSheet("SHEET/Open by Team[bar]", 764, 176, 472, 300, "Open Items by Team"),
-      tSheet("SHEET/Throughput by Team[bar]", 24, 492, 590, 308, "Throughput by Team"),
-      tSheet("SHEET/Status Mix[pie]", 646, 492, 590, 308, "Status Mix"),
+      tFilter("FILTER/Team", 1020, 22, 120, 36, "Team ▾"),
+      tFilter("FILTER/Sprint", 1152, 22, 124, 36, "Sprint ▾"),
+      tKpi("KPI/Velocity", 24, 74, 404, 96, "48", "Velocity (pts)", "+5 pts"),
+      tSheet("SHEET/Completed Trend[line]", 24, 186, 404, 630, "Completed by Sprint"),
+      tKpi("KPI/Open", 452, 74, 404, 96, "74", "Open Items", "-11"),
+      tSheet("SHEET/Open by Team[bar]", 452, 186, 404, 630, "Open Items by Team"),
+      tKpi("KPI/On-Track", 880, 74, 396, 96, "86%", "On-Track", "+4 pts"),
+      tSheet("SHEET/Status Mix[pie]", 880, 186, 396, 630, "Status Mix"),
     ],
   },
-  // ── ESG / Sustainability — IMPACT: KPI strip, emissions trend hero + renewable
-  // rail, then a facility bar and an energy-mix pie.
+  // ── ESG / Sustainability — MIX SPOTLIGHT: a big energy-mix pie + 2×2 impact
+  // KPI block on the left, stacked emissions charts on the right.
   "esg": {
     name: "ESG Dashboard",
-    w: 1260, h: 820, bg: T_BG_ESG,
+    w: 1280, h: 820,
     children: [
       tTitle("TEXT/Title", 24, 20, 500, "ESG & Sustainability"),
-      tFilter("FILTER/Facility", 980, 22, 130, 36, "Facility ▾"),
-      tFilter("FILTER/Quarter", 1122, 22, 114, 36, "Quarter ▾"),
-      tKpi("KPI/Emissions", 24, 74, 296, 92, "12.4K t", "CO₂ Emissions", "-6.2% YoY"),
-      tKpi("KPI/Renewable", 336, 74, 296, 92, "58%", "Renewable Energy", "+7 pts"),
-      tKpi("KPI/Water", 648, 74, 296, 92, "-9%", "Water Intensity", "vs baseline"),
-      tKpi("KPI/Diversion", 960, 74, 296, 92, "74%", "Waste Diversion", "+5 pts"),
-      tSheet("SHEET/Emissions Trend[line]", 24, 182, 720, 300, "Emissions Trend"),
-      tSheet("SHEET/Emissions by Facility[bar]", 764, 182, 472, 300, "Emissions by Facility"),
-      tSheet("SHEET/Renewable by Facility[bar]", 24, 498, 590, 302, "Renewable by Facility"),
-      tSheet("SHEET/Energy Mix[pie]", 646, 498, 590, 302, "Energy Mix"),
+      tFilter("FILTER/Facility", 1000, 22, 130, 36, "Facility ▾"),
+      tFilter("FILTER/Quarter", 1142, 22, 114, 36, "Quarter ▾"),
+      tSheet("SHEET/Energy Mix[pie]", 24, 74, 500, 452, "Energy Mix"),
+      tKpi("KPI/Emissions", 24, 542, 242, 122, "12.4K t", "CO₂ Emissions", "-6.2% YoY"),
+      tKpi("KPI/Renewable", 282, 542, 242, 122, "58%", "Renewable Energy", "+7 pts"),
+      tKpi("KPI/Water", 24, 680, 242, 116, "-9%", "Water Intensity", "vs baseline"),
+      tKpi("KPI/Diversion", 282, 680, 242, 116, "74%", "Waste Diversion", "+5 pts"),
+      tSheet("SHEET/Emissions Trend[line]", 548, 74, 708, 350, "Emissions Trend"),
+      tSheet("SHEET/Emissions by Facility[bar]", 548, 440, 708, 170, "Emissions by Facility"),
+      tSheet("SHEET/Renewable by Facility[bar]", 548, 626, 708, 170, "Renewable by Facility"),
     ],
   },
 };
@@ -761,6 +760,25 @@ function templateAccent(templateId: string): RGB | undefined {
   };
 }
 
+/**
+ * A guaranteed-EMPTY page position for a new dashboard: just past the
+ * rightmost top-level node on the page (nothing extends beyond it, so the spot
+ * can never overlap an existing design), top-aligned with the selected
+ * dashboard frame when there is one (else with the topmost node).
+ */
+function emptyPlacement(): { x: number; y: number } {
+  const nodes = figma.currentPage.children;
+  if (!nodes.length) return { x: 0, y: 0 };
+  const frame = findDashboardFrame();
+  let maxRight = -Infinity;
+  let minY = Infinity;
+  for (const n of nodes) {
+    maxRight = Math.max(maxRight, n.x + n.width);
+    minY = Math.min(minY, n.y);
+  }
+  return { x: Math.ceil(maxRight + 160), y: Math.round(frame ? frame.y : minY) };
+}
+
 async function applyTemplate(templateId: string): Promise<void> {
   const font = await loadLabelFont();
   const t = TEMPLATES[templateId];
@@ -771,22 +789,35 @@ async function applyTemplate(templateId: string): Promise<void> {
   // mark color, so a clinical template exports cyan charts, sales green, etc.
   const accent = templateAccent(templateId);
 
-  const frame = findDashboardFrame();
-  const parent: BaseNode & ChildrenMixin =
-    frame && frame.parent && "appendChild" in frame.parent
-      ? (frame.parent as BaseNode & ChildrenMixin)
-      : figma.currentPage;
-  const originX = frame ? frame.x + frame.width + 80 : 0;
-  const pageH = (figma.currentPage as any).height || 1200;
-  const originY = frame ? frame.y : Math.max(0, (pageH - t.h) / 2);
+  // Domain palette derived from the accent: dark accent-hued canvas plus
+  // accent-tinted cards and strokes. The card tints are pale on purpose (their
+  // saturation stays under the exporter's 0.18 vividness cutoff), so the
+  // accent-colored captions — not the cards — remain the sampled mark color.
+  // Canvas keeps 60% of the accent: the accents are dark colors to begin with,
+  // so anything below ~0.5 reads as black once Tableau renders it (confirmed on
+  // the user's exports at 0.18 and 0.42). 0.6 gives a rich, unmistakably hued
+  // canvas — dark red for retail, forest green for sales, indigo for finance —
+  // while the light cards keep full contrast.
+  const pal = accent
+    ? {
+        bg: mix(accent, BLACK, 0.6),
+        sheet: mix(accent, WHITE, 0.07),
+        kpi: mix(accent, WHITE, 0.12),
+        stroke: mix(accent, WHITE, 0.35),
+      }
+    : undefined;
+
+  // Always place the new dashboard in EMPTY page space (past everything on the
+  // page) so it can never land on top of an existing design.
+  const spot = emptyPlacement();
 
   const dash = figma.createFrame();
   dash.name = t.name;
   dash.resize(t.w, t.h);
-  dash.x = originX;
-  dash.y = originY;
+  dash.x = spot.x;
+  dash.y = spot.y;
   dash.cornerRadius = 10;
-  dash.fills = [{ type: "SOLID", color: t.bg ?? T_BG }];
+  dash.fills = [{ type: "SOLID", color: pal ? pal.bg : T_BG }];
 
   for (const c of t.children) {
     const child = figma.createFrame();
@@ -795,9 +826,16 @@ async function applyTemplate(templateId: string): Promise<void> {
     child.x = c.x;
     child.y = c.y;
     child.cornerRadius = c.radius ?? 10;
-    child.fills = [{ type: "SOLID", color: c.fill }];
+    // Swap the shared placeholder colors for the domain tint (matched by
+    // reference: every builder uses the same T_SH/T_KPI/T_BG constants).
+    const fill =
+      pal && c.fill === T_SH ? pal.sheet
+      : pal && c.fill === T_KPI ? pal.kpi
+      : pal && c.fill === T_BG ? pal.bg
+      : c.fill;
+    child.fills = [{ type: "SOLID", color: fill }];
     if (c.name.startsWith("SHEET/") || c.name.startsWith("URL/") || c.name.startsWith("Image/") || c.name.startsWith("FILTER/")) {
-      child.strokes = [{ type: "SOLID", color: { r: 0.78, g: 0.8, b: 0.9 } }];
+      child.strokes = [{ type: "SOLID", color: pal ? pal.stroke : { r: 0.78, g: 0.8, b: 0.9 } }];
       child.strokeWeight = 1;
     }
     if (font && (c.caption || c.label)) {
@@ -834,10 +872,10 @@ async function applyTemplate(templateId: string): Promise<void> {
     dash.appendChild(child);
   }
 
-  parent.appendChild(dash);
+  figma.currentPage.appendChild(dash);
   figma.currentPage.selection = [dash];
   figma.viewport.scrollAndZoomIntoView([dash]);
-  figma.notify(`Created "${t.name}" template with ${t.children.length} components.`);
+  figma.notify(`Created "${t.name}" (${t.children.length} components) in empty space beside your designs.`);
 }
 
 /**
@@ -972,80 +1010,43 @@ function handleDrop(event: DropEvent): void {
   figma.notify(`Added ${f.name}`);
 }
 
-/**
- * Fix a clipped card the user already placed or hand-built (the "Fix selected
- * card" button). Same idea as `fillCaption` but applied to an existing frame:
- * make every text line wrap to the card width and let the card grow in height so
- * nothing clips. If the card is just a vertical stack of text lines (the usual
- * KPI / text-box case) we convert it to a hug-height vertical Auto-Layout so it
- * also stays responsive; a mixed card (icons, shapes) is un-clipped + wrapped +
- * grown in place so we don't reflow the user's design. Returns true if changed.
- */
-function fixCardClipping(frame: FrameNode, texts: TextNode[]): boolean {
-  const kids = frame.children;
-  const INSET = 12;
-
-  if (kids.every((c) => c.type === "TEXT")) {
-    // Preserve the card's current inset and top→bottom reading order, then lay
-    // it out as a hug-height Auto-Layout with each line stretched (wraps to fill
-    // the width; the card grows to fit every line).
-    const minX = Math.max(0, Math.min(...kids.map((c) => c.x)));
-    const minY = Math.max(0, Math.min(...kids.map((c) => c.y)));
-    const ordered = [...kids].sort((a, b) => a.y - b.y);
-    for (const t of texts) t.textAutoResize = "HEIGHT";
-    frame.layoutMode            = "VERTICAL";
-    frame.counterAxisSizingMode = "FIXED";
-    frame.primaryAxisSizingMode = "AUTO";
-    frame.primaryAxisAlignItems = "CENTER";
-    frame.paddingLeft = frame.paddingRight = minX || INSET;
-    frame.paddingTop  = frame.paddingBottom = minY || INSET;
-    frame.itemSpacing = 2;
-    frame.clipsContent = false;
-    for (const c of ordered) frame.appendChild(c);      // restack top→bottom
-    for (const t of texts) t.layoutAlign = "STRETCH";   // fill width, wrap
-    return true;
+/** Send the Account-tab info: the Figma user's name + the persisted export count. */
+async function sendAccountInfo(): Promise<void> {
+  let exportCount = 0;
+  try {
+    const stored = await figma.clientStorage.getAsync("ft-export-count");
+    if (typeof stored === "number" && isFinite(stored)) exportCount = stored;
+  } catch {
+    /* counter is cosmetic — default to 0 */
   }
-
-  // Mixed content: don't reflow. Just stop clipping, wrap each text to the space
-  // left of the card's right edge, and grow the card so the lowest child fits.
-  frame.clipsContent = false;
-  for (const t of texts) {
-    t.textAutoResize = "HEIGHT";
-    const avail = Math.max(24, frame.width - t.x - INSET);
-    t.resize(avail, t.height);
-  }
-  let bottom = 0;
-  for (const c of frame.children) bottom = Math.max(bottom, c.y + c.height);
-  if (bottom + INSET > frame.height) frame.resize(frame.width, Math.ceil(bottom + INSET));
-  return true;
+  post({
+    type: "account-info",
+    userName: figma.currentUser ? figma.currentUser.name : null,
+    exportCount,
+  });
 }
 
-/** Un-clip the text on the currently selected card(s). */
-async function fixSelectedClipping(): Promise<void> {
-  const sel = figma.currentPage.selection;
-  if (!sel.length) {
-    figma.notify("Select a card (a frame) on the canvas first, then click Fix.");
-    return;
+/** Bump the persisted export counter, then refresh the Account tab. */
+async function logExport(): Promise<void> {
+  let count = 0;
+  try {
+    const stored = await figma.clientStorage.getAsync("ft-export-count");
+    if (typeof stored === "number" && isFinite(stored)) count = stored;
+    await figma.clientStorage.setAsync("ft-export-count", count + 1);
+  } catch {
+    /* counter is cosmetic — never block the export flow */
   }
-  let fixed = 0;
-  for (const node of sel) {
-    if (node.type !== "FRAME" && node.type !== "COMPONENT") continue;
-    const frame = node as FrameNode;
-    const texts = frame.children.filter((c): c is TextNode => c.type === "TEXT");
-    if (!texts.length) continue;
-    // Editing a text's layout needs its font(s) loaded (covers mixed formatting).
-    for (const t of texts) {
-      const len = Math.max(1, t.characters.length);
-      const fonts = t.getRangeAllFontNames(0, len);
-      await Promise.all(fonts.map((f) => figma.loadFontAsync(f)));
-    }
-    if (fixCardClipping(frame, texts)) fixed++;
+  void sendAccountInfo();
+}
+
+/** Forget the imported workbook persisted across sessions. */
+async function clearImport(): Promise<void> {
+  try {
+    await figma.clientStorage.deleteAsync("ft-import");
+    figma.notify("Stored Tableau workbook cleared — charts will use demo data until you upload again.");
+  } catch {
+    figma.notify("Couldn't clear the stored workbook — try again.");
   }
-  figma.notify(
-    fixed
-      ? `Fixed text clipping on ${fixed} card(s) — text now wraps and the card grows to fit.`
-      : "No frame with text was selected. Select the card frame (not the text) and try again."
-  );
 }
 
 // Re-parse whenever the user changes their selection.
@@ -1098,8 +1099,14 @@ figma.ui.onmessage = (msg: UiToPlugin) => {
     case "apply-template":
       void applyTemplate(msg.templateId);
       break;
-    case "fix-clipping":
-      void fixSelectedClipping();
+    case "request-account":
+      void sendAccountInfo();
+      break;
+    case "log-export":
+      void logExport();
+      break;
+    case "clear-import":
+      void clearImport();
       break;
   }
 };

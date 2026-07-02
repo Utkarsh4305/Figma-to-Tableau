@@ -198,12 +198,15 @@ export interface MsgModelReady {
   type: "model-ready";
   model: DashboardModel | null;
   error?: string;
+  /** Titles of every selected frame (one Tableau dashboard each on export). */
+  frameNames?: string[];
 }
 
 export interface MsgRequestParse {
   type: "request-parse";
 }
 
+/** Resize the plugin window (corner grip drag or the size-preset button). */
 export interface MsgResize {
   type: "resize";
   width: number;
@@ -314,11 +317,31 @@ export interface MsgApplyTemplate {
   templateId: TemplateId;
 }
 
-export interface MsgFixClipping {
-  type: "fix-clipping";
+// --- Account tab ---------------------------------------------------------------
+
+/** Ask the sandbox for the Account-tab info (Figma user + usage counters). */
+export interface MsgRequestAccount {
+  type: "request-account";
 }
 
-export type PluginToUi = MsgModelReady | MsgFaithfulReady | MsgImportRestored;
+/** Account-tab info: the Figma user's name and the persisted export counter. */
+export interface MsgAccountInfo {
+  type: "account-info";
+  userName: string | null;
+  exportCount: number;
+}
+
+/** A .twbx export finished — bump the persisted export counter. */
+export interface MsgLogExport {
+  type: "log-export";
+}
+
+/** Forget the imported workbook persisted in figma.clientStorage. */
+export interface MsgClearImport {
+  type: "clear-import";
+}
+
+export type PluginToUi = MsgModelReady | MsgFaithfulReady | MsgImportRestored | MsgAccountInfo;
 export type UiToPlugin =
   | MsgRequestParse
   | MsgResize
@@ -330,4 +353,6 @@ export type UiToPlugin =
   | MsgSaveImport
   | MsgInsertLibraryComponent
   | MsgApplyTemplate
-  | MsgFixClipping;
+  | MsgRequestAccount
+  | MsgLogExport
+  | MsgClearImport;

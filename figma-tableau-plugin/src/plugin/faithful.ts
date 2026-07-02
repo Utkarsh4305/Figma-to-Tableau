@@ -1000,7 +1000,7 @@ function bbTopLeft(n: SceneNode): { x: number; y: number } {
  * order) so dashboards come out in a predictable sequence. With nothing usable
  * selected we fall back to the single-frame behaviour (first frame on the page).
  */
-function collectFrames(): SceneNode[] {
+export function collectFrames(): SceneNode[] {
   const out: SceneNode[] = [];
   const seen = new Set<string>();
   for (const n of figma.currentPage.selection) {

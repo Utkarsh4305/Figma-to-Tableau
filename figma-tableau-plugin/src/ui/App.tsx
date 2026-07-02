@@ -8,8 +8,9 @@ import { exportSpecTwbx, applyImportedSwap } from "../plugin/exporter";
 import { parseImport, parsedImportFromStored, type ParsedImport } from "../plugin/twbImport";
 import ComponentLibrary from "./components/ComponentLibrary";
 import DashboardTemplates from "./templates/DashboardTemplates";
+import { TAB_ICONS, SUBTAB_ICONS, SYNTAX_ICONS, ACCOUNT_ICONS, type SyntaxIconName } from "./icons";
 
-const BUILD = "visual-scale-fit-66";
+const BUILD = "colored-canvas-74";
 
 type Status = { kind: "ok" | "err" | "warn"; text: string } | null;
 
@@ -19,36 +20,149 @@ function toPlugin(msg: UiToPlugin) {
 
 
 
-/** Documentation of the layer-name conventions the transpiler understands. */
-const SYNTAX: Array<{ tag: string; title: string; desc: string }> = [
-  { tag: "SHEET/Name[type]", title: "Worksheet", desc: "A real Tableau worksheet. type = bar · line · area · pie · scatter. Add :showTitle to show its title, :filter or :highlight to make clicks act on the dashboard." },
-  { tag: "Nav/Label", title: "Navigation (interaction)", desc: "A native nav button. Its destination comes from the layer's Figma prototype link — wire a “Navigate to” connection to the target frame (or to a SHEET/ layer to open that worksheet). Unselected destinations are pulled into the export automatically." },
-  { tag: "BUTTON/Label > Target", title: "Navigation (named)", desc: "A nav button whose target dashboard is named after the “>”. With two dashboards and no “>”, it toggles to the other one." },
-  { tag: "FILTER/Field", title: "Quick filter", desc: "A Tableau quick-filter card on that dimension, bound to a chart on the same dashboard." },
-  { tag: "KPI/Label", title: "KPI big number", desc: "A single-number worksheet (Text mark, one measure, no dimension)." },
-  { tag: "Image/Name", title: "Image", desc: "Rasterized to a bitmap. IMG/ and LOGO/ work too. Vectors/icons are auto-rasterized even without the prefix." },
-  { tag: "URL/page", title: "Web page object", desc: "A Tableau web-page object that loads the URL. WEB/ works too; bare hosts get https://." },
-  { tag: "TEXT/Heading", title: "Text", desc: "A text zone with the layer's real text, font, size and color." },
-  { tag: "CONTAINER/Name", title: "Layout container", desc: "A layout group. GROUP/ works too. Auto-Layout frames are also reconstructed as flow containers." },
+/** Documentation of the layer-name prefixes the transpiler understands. */
+const SYNTAX_PREFIXES: Array<{ icon: SyntaxIconName; tag: string; title: string; desc: string }> = [
+  { icon: "sheet", tag: "SHEET/Name[type]", title: "Worksheet", desc: "A real Tableau worksheet named after the prefix. The optional [type] tag picks the chart (see Chart types below); :options make clicks act on the dashboard (see Sheet options). If a workbook is uploaded, a SHEET/ whose name matches an imported worksheet swaps in that real sheet and its data." },
+  { icon: "kpi", tag: "KPI/Label", title: "KPI card", desc: "A metric card. Its label, value and change lines are recreated pixel-faithfully as fitted Tableau text zones — they never clip or overlap on export." },
+  { icon: "filter", tag: "FILTER/Field", title: "Quick filter", desc: "A Tableau quick-filter card on that dimension, bound to a chart on the same dashboard." },
+  { icon: "nav", tag: "Nav/Label", title: "Navigation (interaction)", desc: "A native nav button. Its destination comes from the layer's Figma prototype link — wire a “Navigate to” connection to the target frame (or to a SHEET/ layer to open that worksheet). Unselected destinations are pulled into the export automatically." },
+  { icon: "button", tag: "BUTTON/Label > Target", title: "Navigation (named)", desc: "A nav button whose target dashboard is named after the “>” (“->” works too). With two dashboards and no “>”, it toggles to the other one. The caption is the text you drew inside the button." },
+  { icon: "text", tag: "TEXT/Heading", title: "Text", desc: "A text zone with the layer's real text, font, size and color. Multi-line and mixed-style text is split and fitted so every line renders." },
+  { icon: "image", tag: "Image/Name", title: "Image", desc: "Rasterized to a bitmap. IMG/ and LOGO/ work too. Vectors/icons are auto-rasterized even without the prefix." },
+  { icon: "web", tag: "URL/page", title: "Web page object", desc: "A Tableau web-page object that loads the URL. WEB/ works too; bare hosts get https://." },
+  { icon: "container", tag: "CONTAINER/Name", title: "Layout container", desc: "A layout group. GROUP/ works too. Auto-Layout frames are also reconstructed as flow containers." },
+];
+
+/** The chart-type tags a SHEET/ name accepts, and the Tableau mark each maps to. */
+const CHART_TAGS: Array<{ tag: string; mark: string; note?: string }> = [
+  { tag: "[bar]", mark: "Bar", note: "also column, bar-hor, bar-vert — and the default when no tag is given" },
+  { tag: "[line]", mark: "Line", note: "also trend" },
+  { tag: "[area]", mark: "Area" },
+  { tag: "[pie]", mark: "Pie", note: "also donut, doughnut" },
+  { tag: "[scatter]", mark: "Circle", note: "also bubble, circle" },
+  { tag: "[heatmap]", mark: "Square", note: "also square, map" },
+  { tag: "[table]", mark: "Text table", note: "also text, crosstab" },
+];
+
+/** The confirmed-safe :option suffixes a SHEET/ name accepts (stackable). */
+const SHEET_OPTIONS: Array<{ tag: string; desc: string }> = [
+  { tag: ":showTitle", desc: "Render the worksheet's title inside its zone." },
+  { tag: ":filter", desc: "Clicking a mark in this sheet filters the other sheets on the dashboard." },
+  { tag: ":highlight", desc: "Clicking a mark highlights the matching marks in the other sheets." },
 ];
 
 function SyntaxTab() {
   return (
     <div>
-      <div className="section-label">Layer-name conventions</div>
+      <div className="section-label">Layer prefixes</div>
       <div className="syntax-intro">
-        Name a Figma layer with one of these prefixes and it becomes the matching
-        Tableau object on export. Matching is case-insensitive; spaces around the
-        “/” are fine.
+        Name a layer with a prefix and it becomes that Tableau object on export.
+        Click a row for details.
       </div>
       <div className="syntax-list">
-        {SYNTAX.map((s) => (
-          <div key={s.tag} className="syntax-item">
-            <code className="syntax-tag">{s.tag}</code>
-            <div className="syntax-title">{s.title}</div>
-            <div className="syntax-desc">{s.desc}</div>
-          </div>
+        {SYNTAX_PREFIXES.map((s) => (
+          <details key={s.tag} className="syntax-acc">
+            <summary className="syntax-acc-summary">
+              <span className="syntax-icon">{SYNTAX_ICONS[s.icon]}</span>
+              <span className="syntax-acc-main">
+                <code className="syntax-tag">{s.tag}</code>
+                <span className="syntax-acc-title">{s.title}</span>
+              </span>
+              <span className="syntax-chev" aria-hidden="true" />
+            </summary>
+            <div className="syntax-acc-body">{s.desc}</div>
+          </details>
         ))}
+      </div>
+
+      <div className="section-label syntax-section-gap">Modifiers &amp; navigation</div>
+      <div className="syntax-list">
+        <details className="syntax-acc">
+          <summary className="syntax-acc-summary">
+            <span className="syntax-icon">{SYNTAX_ICONS["chart-tag"]}</span>
+            <span className="syntax-acc-main">
+              <code className="syntax-tag">[type]</code>
+              <span className="syntax-acc-title">Chart types</span>
+            </span>
+            <span className="syntax-chev" aria-hidden="true" />
+          </summary>
+          <div className="syntax-acc-body">
+            <div className="syntax-acc-lead">
+              Append a tag to a <code className="syntax-inline-code">SHEET/</code>{" "}
+              name — e.g.{" "}
+              <code className="syntax-inline-code">SHEET/Sales Trend[line]</code> —
+              to pick the worksheet's mark type.
+            </div>
+            <div className="syntax-table">
+              {CHART_TAGS.map((c) => (
+                <div key={c.tag} className="syntax-table-row">
+                  <code className="syntax-tag">{c.tag}</code>
+                  <div className="syntax-table-cell">
+                    <span className="syntax-mark">{c.mark} marks</span>
+                    {c.note ? <span className="syntax-note"> · {c.note}</span> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </details>
+
+        <details className="syntax-acc">
+          <summary className="syntax-acc-summary">
+            <span className="syntax-icon">{SYNTAX_ICONS.options}</span>
+            <span className="syntax-acc-main">
+              <code className="syntax-tag">:option</code>
+              <span className="syntax-acc-title">Sheet options</span>
+            </span>
+            <span className="syntax-chev" aria-hidden="true" />
+          </summary>
+          <div className="syntax-acc-body">
+            <div className="syntax-acc-lead">
+              Suffixes stack after the name/tag — e.g.{" "}
+              <code className="syntax-inline-code">
+                SHEET/Trend[line]:showTitle:filter
+              </code>
+              .
+            </div>
+            <div className="syntax-table">
+              {SHEET_OPTIONS.map((o) => (
+                <div key={o.tag} className="syntax-table-row">
+                  <code className="syntax-tag">{o.tag}</code>
+                  <div className="syntax-table-cell">{o.desc}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </details>
+
+        <details className="syntax-acc">
+          <summary className="syntax-acc-summary">
+            <span className="syntax-icon">{SYNTAX_ICONS.target}</span>
+            <span className="syntax-acc-main">
+              <code className="syntax-tag">&gt; Target</code>
+              <span className="syntax-acc-title">Navigation targets</span>
+            </span>
+            <span className="syntax-chev" aria-hidden="true" />
+          </summary>
+          <div className="syntax-acc-body">
+            <b>Nav/</b> reads the layer's Figma prototype interaction — wire a
+            “Navigate to” connection from the button (or anything inside it) to the
+            destination frame. If the destination frame isn't selected for export,
+            it's pulled in automatically; pointing at a <b>SHEET/</b> layer opens
+            that worksheet instead of a dashboard. <b>BUTTON/</b> names its target
+            after “&gt;” or “-&gt;”; the name must match another exported dashboard
+            (the frame's name). Both export as native Tableau navigation actions.
+          </div>
+        </details>
+      </div>
+
+      <div className="syntax-item syntax-tip">
+        <div className="syntax-desc">
+          <b>Tip — real data:</b> upload your .twb/.twbx on the Dashboard tab, then
+          name SHEET/ layers to match your worksheet names. Matching ignores case
+          and extra spaces; a sheet placed twice on one dashboard is cloned
+          automatically.
+        </div>
       </div>
     </div>
   );
@@ -63,11 +177,20 @@ export default function App() {
   const [importedNames, setImportedNames] = useState<string[]>([]);
   const [checkedSheets, setCheckedSheets] = useState<Record<string, boolean>>({});
   const [tab, setTab] = useState<"dashboard" | "library" | "account">("dashboard");
+  const [frameNames, setFrameNames] = useState<string[]>([]);
+  // Account tab: the Figma user's name + the persisted all-time export counter,
+  // both read in the sandbox (figma.currentUser / figma.clientStorage).
+  const [account, setAccount] = useState<{ userName: string | null; exportCount: number }>({
+    userName: null,
+    exportCount: 0,
+  });
 
-  // Auto-dismiss status toasts after 4 seconds
+  // Auto-dismiss SUCCESS toasts only. Warnings and errors carry actionable
+  // guidance (which SHEET/ names to use, why charts are demo data…) — they stay
+  // until the user dismisses them.
   useEffect(() => {
-    if (!status) return;
-    const timer = setTimeout(() => setStatus(null), 4000);
+    if (!status || status.kind !== "ok") return;
+    const timer = setTimeout(() => setStatus(null), 5000);
     return () => clearTimeout(timer);
   }, [status]);
 
@@ -221,12 +344,19 @@ export default function App() {
               text: `Exported — ${dashes} dashboard(s), ${res.zoneCount} zones, ${sheets} worksheet(s)${extra}. Download started.${swapWarn}`,
             });
             toPlugin({ type: "notify", message: ".twbx downloaded — check your downloads." });
+            // Bump the persisted export counter shown on the Account tab.
+            toPlugin({ type: "log-export" });
           } catch (e) {
             setStatus({ kind: "err", text: (e as Error).message });
           } finally {
             setBusy(false);
           }
         })();
+        return;
+      }
+
+      if (msg.type === "account-info") {
+        setAccount({ userName: msg.userName, exportCount: msg.exportCount });
         return;
       }
 
@@ -255,12 +385,14 @@ export default function App() {
 
       if (msg.error || !msg.model) {
         setModel(null);
+        setFrameNames([]);
         setParseError(msg.error ?? "Nothing to parse.");
         return;
       }
 
       setParseError(null);
       setModel(msg.model);
+      setFrameNames(msg.frameNames?.length ? msg.frameNames : [msg.model.title]);
 
       const fid    = msg.model.id ?? "frame";
       const forced = forceReseedRef.current;
@@ -289,6 +421,7 @@ export default function App() {
 
     window.addEventListener("message", handler);
     toPlugin({ type: "request-parse" });
+    toPlugin({ type: "request-account" });
     return () => window.removeEventListener("message", handler);
   }, []);
 
@@ -362,9 +495,72 @@ export default function App() {
           className={`sub-tab-btn ${librarySubTab === id ? "active" : ""}`}
           onClick={() => setLibrarySubTab(id)}
         >
+          <span className="tab-icon">{SUBTAB_ICONS[id]}</span>
           {label}
         </button>
       ))}
+    </div>
+  );
+
+  // Forget the imported workbook: clear the sandbox's persisted copy AND this
+  // session's in-memory copy, so the next export goes back to demo data.
+  // Feedback comes via figma.notify (the Account tab has no toast area).
+  const clearStoredImport = () => {
+    toPlugin({ type: "clear-import" });
+    importedRef.current = null;
+    setImportedNames([]);
+    setCheckedSheets({});
+  };
+
+  // ── Window size: free drag-resize via the always-visible corner grip chip
+  // (the bare iframe edge never shows a resize cursor inside Figma). The
+  // sandbox clamps to ≥360×420.
+  // Corner grip: pointer capture keeps the drag alive even though the iframe is
+  // resizing under the cursor. Rendered as a visible chip (not a bare cursor
+  // zone) so it's discoverable inside the plugin window.
+  const resizingRef = useRef(false);
+  const resizeHandle = (
+    <div
+      className="resize-handle"
+      title="Drag to resize the plugin window"
+      onPointerDown={(e) => {
+        e.preventDefault();
+        resizingRef.current = true;
+        e.currentTarget.setPointerCapture(e.pointerId);
+      }}
+      onPointerMove={(e) => {
+        if (!resizingRef.current) return;
+        toPlugin({
+          type: "resize",
+          width: Math.round(e.clientX + 8),
+          height: Math.round(e.clientY + 8),
+        });
+      }}
+      onPointerUp={(e) => {
+        resizingRef.current = false;
+        try {
+          e.currentTarget.releasePointerCapture(e.pointerId);
+        } catch {
+          /* capture already released */
+        }
+      }}
+    >
+      {/* Double-headed ↖↘ arrow so the chip unmistakably reads "drag to resize". */}
+      <svg
+        width="13"
+        height="13"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M7 7l10 10" />
+        <path d="M7 13V7h6" />
+        <path d="M17 11v6h-6" />
+      </svg>
     </div>
   );
 
@@ -381,6 +577,7 @@ export default function App() {
           className={`tab-btn ${tab === id ? "active" : ""}`}
           onClick={() => setTab(id)}
         >
+          <span className="tab-icon">{TAB_ICONS[id]}</span>
           {label}
         </button>
       ))}
@@ -392,11 +589,19 @@ export default function App() {
     const dashboardFooter = spec ? (
       <div className="plugin-footer">
         {status && (
-          <div className={`toast ${status.kind}`}>
+          <div className={`toast ${status.kind}`} role="status">
             <span className="toast-icon">
-              {status.kind === "ok" ? "✓" : status.kind === "err" ? "✕" : "–"}
+              {status.kind === "ok" ? "✓" : status.kind === "err" ? "✕" : "!"}
             </span>
-            <span>{status.text}</span>
+            <span className="toast-text">{status.text}</span>
+            <button
+              type="button"
+              className="toast-close"
+              aria-label="Dismiss"
+              onClick={() => setStatus(null)}
+            >
+              ✕
+            </button>
           </div>
         )}
 
@@ -416,6 +621,24 @@ export default function App() {
     const body = spec ? (
       <>
         <div>
+          <div className="section-label">Selection</div>
+          <div className="frame-card" title={frameNames.join(", ")}>
+            <span className="frame-dot" />
+            <div className="frame-info">
+              <div className="frame-name">
+                {frameNames.join("  ·  ") || model?.title || "—"}
+              </div>
+              <div className="frame-meta">
+                {frameNames.length > 1
+                  ? `${frameNames.length} frames → ${frameNames.length} Tableau dashboards`
+                  : model
+                  ? `${Math.round(model.width)} × ${Math.round(model.height)} · ${model.elements.length} layers → 1 dashboard`
+                  : "1 dashboard"}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div>
           <div className="section-label">Export</div>
           <div className="export-card">
             <div className="export-row">
@@ -434,20 +657,6 @@ export default function App() {
                 Dashboard details
               </summary>
               <div className="spec-details-body">
-                {model ? (
-                  <div className="spec-detail-row">
-                    <span className="spec-detail-label">Frame</span>
-                    <span className="spec-detail-value">{model.title}</span>
-                  </div>
-                ) : null}
-                {model ? (
-                  <div className="spec-detail-row">
-                    <span className="spec-detail-label">Dimensions</span>
-                    <span className="spec-detail-value">
-                      {Math.round(model.width)} × {Math.round(model.height)} · {model.elements.length} layers
-                    </span>
-                  </div>
-                ) : null}
                 <div className="spec-detail-row">
                   <span className="spec-detail-label">Worksheets</span>
                   <span className="spec-detail-value">{spec.worksheets.length}</span>
@@ -519,10 +728,28 @@ export default function App() {
 
             <details className="spec-details import-accordion">
               <summary className="field-label import-summary">
-                Use my real Tableau sheets (optional)
+                Use my real Tableau sheets
+                {importedNames.length > 0 ? (
+                  <span className="import-badge">{importedNames.length} loaded</span>
+                ) : (
+                  <span className="import-optional">optional</span>
+                )}
               </summary>
               <div className="spec-details-body">
-                <input type="file" accept=".twbx,.twb" onChange={onImportFile} />
+                <input
+                  id="twb-upload"
+                  className="file-input-hidden"
+                  type="file"
+                  accept=".twbx,.twb"
+                  onChange={onImportFile}
+                />
+                <label htmlFor="twb-upload" className="upload-btn">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 16V4m0 0L7 9m5-5 5 5" />
+                    <path d="M4 17v2a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19v-2" />
+                  </svg>
+                  {importedNames.length ? "Replace workbook (.twb / .twbx)" : "Upload workbook (.twb / .twbx)"}
+                </label>
                 {importedNames.length > 0 && (
                   <div className="import-list" style={{ marginTop: 8 }}>
                     <div className="import-list-head">
@@ -565,17 +792,35 @@ export default function App() {
       </>
     ) : (
       <>
-        {parseError ? (
-          <>
-            <div className="error-card">{parseError}</div>
-            <button
-              className="scratch-btn"
-              onClick={() => { manualRef.current = true; setSpec(blankSpec()); }}
-            >
-              Start from scratch
-            </button>
-          </>
-        ) : null}
+        {/* A "no frame" parse failure is a fresh-start situation, not an error —
+            show how the plugin works instead of a raw error string. */}
+        {parseError && !/select (a|one or more) frame/i.test(parseError) ? (
+          <div className="error-card">{parseError}</div>
+        ) : (
+          <div className="onboard">
+            <div className="onboard-title">Design → Tableau in three steps</div>
+            <ol className="onboard-steps">
+              <li>
+                <b>Select a frame</b> on the canvas. Select several and each
+                becomes its own Tableau dashboard.
+              </li>
+              <li>
+                <b>Name layers</b> with prefixes like <code>SHEET/</code>,{" "}
+                <code>KPI/</code>, <code>FILTER/</code> — or drag ready-made
+                pieces from the Library tab.
+              </li>
+              <li>
+                <b>Export</b> — a .twbx downloads, ready to open in Tableau.
+              </li>
+            </ol>
+          </div>
+        )}
+        <button
+          className="scratch-btn"
+          onClick={() => { manualRef.current = true; setSpec(blankSpec()); }}
+        >
+          Start from scratch
+        </button>
       </>
     );
 
@@ -586,6 +831,7 @@ export default function App() {
           {body}
         </div>
         {dashboardFooter}
+        {resizeHandle}
       </>
     );
   }
@@ -604,21 +850,126 @@ export default function App() {
         <div className="scroll-area">
           {content}
         </div>
+        {resizeHandle}
       </>
     );
   }
 
-  // ── Tab: Account (payment & account) ──────────────────────────────────────
+  // ── Tab: Account (profile, plan, usage, data & storage, about) ────────────
   if (tab === "account") {
+    const initials =
+      (account.userName || "")
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((w) => w[0])
+        .slice(0, 2)
+        .join("")
+        .toUpperCase() || "?";
+
     return (
       <>
         {tabBar}
         <div className="scroll-area">
-          <div className="empty-state">
-            <div className="empty-title">Account</div>
-            <div className="empty-sub">Payment &amp; account settings coming soon.</div>
+          <div>
+            <div className="section-label">Profile</div>
+            <div className="account-card account-profile">
+              <div className="avatar" aria-hidden="true">{initials}</div>
+              <div className="account-profile-info">
+                <div className="account-name">{account.userName ?? "Figma user"}</div>
+                <div className="account-sub">Signed in via Figma</div>
+              </div>
+              <span className="plan-pill">Free</span>
+            </div>
+          </div>
+
+          <div>
+            <div className="section-label">Plan</div>
+            <div className="account-card">
+              <div className="account-row-head">
+                <span className="account-row-icon">{ACCOUNT_ICONS.plan}</span>
+                <div>
+                  <div className="account-name">Free — everything included</div>
+                  <div className="account-sub">
+                    While the plugin is in beta, every feature is free. No payment needed.
+                  </div>
+                </div>
+              </div>
+              <ul className="plan-features">
+                <li>Multi-dashboard export — one Tableau dashboard per selected frame</li>
+                <li>Real worksheet swap from your uploaded .twb / .twbx</li>
+                <li>Native navigation buttons from Figma prototype links</li>
+                <li>{`15 domain templates + the component library`}</li>
+              </ul>
+            </div>
+          </div>
+
+          <div>
+            <div className="section-label">Usage</div>
+            <div className="account-card account-stats">
+              <div className="stat-cell">
+                <div className="stat-val">{account.exportCount}</div>
+                <div className="stat-key">Exports</div>
+              </div>
+              <div className="stat-cell">
+                <div className="stat-val">{importedNames.length}</div>
+                <div className="stat-key">Imported sheets</div>
+              </div>
+              <div className="stat-cell">
+                <div className="stat-val">{frameNames.length}</div>
+                <div className="stat-key">Frames selected</div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="section-label">Data &amp; storage</div>
+            <div className="account-card">
+              <div className="account-row-head">
+                <span className="account-row-icon">{ACCOUNT_ICONS.storage}</span>
+                <div>
+                  <div className="account-name">Imported workbook</div>
+                  <div className="account-sub">
+                    {importedNames.length
+                      ? `${importedNames.length} worksheet(s) stored for the real-data swap — kept between plugin sessions.`
+                      : "Nothing stored. Upload a .twb/.twbx on the Dashboard tab to swap real sheets into your exports."}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn-secondary account-clear-btn"
+                disabled={importedNames.length === 0}
+                onClick={clearStoredImport}
+              >
+                Clear stored workbook
+              </button>
+            </div>
+            <div className="account-card account-note">
+              <span className="account-row-icon">{ACCOUNT_ICONS.shield}</span>
+              <div className="account-sub">
+                Everything runs locally inside Figma. Your designs and workbooks never
+                leave this machine — the plugin makes no network requests.
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="section-label">About</div>
+            <div className="account-card">
+              <div className="account-row-head">
+                <span className="account-row-icon">{ACCOUNT_ICONS.info}</span>
+                <div>
+                  <div className="account-name">Figma to Tableau</div>
+                  <div className="account-sub">
+                    Exports .twbx workbooks for Tableau 2026.2 · build {BUILD}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
+        {resizeHandle}
       </>
     );
   }
@@ -632,6 +983,7 @@ export default function App() {
           <div className="empty-sub">Select a tab above.</div>
         </div>
       </div>
+      {resizeHandle}
     </>
   );
 }

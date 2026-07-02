@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { TemplateId, UiToPlugin } from "../../shared/types";
+import { svgProps as sharedSvgProps } from "../icons";
 
 function toPlugin(msg: UiToPlugin) {
   parent.postMessage({ pluginMessage: msg }, "*");
@@ -10,16 +11,7 @@ type IconName =
   | "marketing" | "hr" | "supplychain" | "support" | "product"
   | "itops" | "manufacturing" | "retail" | "project" | "esg";
 
-const svgProps = {
-  width: 24,
-  height: 24,
-  viewBox: "0 0 24 24",
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: 1.75,
-  strokeLinecap: "round" as const,
-  strokeLinejoin: "round" as const,
-};
+const svgProps = sharedSvgProps(24);
 
 const ICONS: Record<IconName, ReactNode> = {
   // Clinical — activity / vitals pulse
@@ -202,7 +194,7 @@ const TEMPLATES: TemplateDef[] = [
   {
     id: "marketing",
     label: "Marketing Dashboard",
-    desc: "Campaign KPIs (leads, CTR, CAC, ROAS) with a leads trend, conversion funnel, leads by channel, channel mix, and a conversions-vs-leads scatter.",
+    desc: "Funnel tower: a tall conversion funnel fills the left column, with a 2×2 grid of leads trend, channel bars, channel mix and a conversions scatter beside it. Campaign KPIs on top.",
     icon: "marketing",
     components: 12,
     worksheets: 5,
@@ -212,17 +204,17 @@ const TEMPLATES: TemplateDef[] = [
   {
     id: "hr",
     label: "HR / People Dashboard",
-    desc: "Workforce KPIs (headcount, attrition, time-to-hire, eNPS) with headcount trend, attrition by department, headcount by department, and a workforce mix.",
+    desc: "Right sidebar: charts fill the left (headcount trend, attrition, workforce mix, department bars) with a rail of people KPIs and filters down the right.",
     icon: "hr",
-    components: 12,
+    components: 11,
     worksheets: 4,
-    kpis: 5,
+    kpis: 4,
     filters: 2,
   },
   {
     id: "supplychain",
     label: "Supply Chain Dashboard",
-    desc: "Logistics KPIs (shipments, on-time, backorders, turns) with shipments trend, on-time by warehouse, shipments by warehouse, backorder mix, and a scatter.",
+    desc: "Stacked bands: two full-width flow charts (shipments trend, then on-time by warehouse) over a 3-up detail row of warehouse bars, backorder mix and a scatter.",
     icon: "supplychain",
     components: 12,
     worksheets: 5,
@@ -232,7 +224,7 @@ const TEMPLATES: TemplateDef[] = [
   {
     id: "support",
     label: "Customer Support Dashboard",
-    desc: "Service-desk KPIs (tickets, CSAT, first response, resolution, SLA) with tickets trend, tickets by channel, resolved-vs-open, and a channel mix.",
+    desc: "Quadrant: four equal service-desk charts in a 2×2 (tickets trend, channel bars, resolved-vs-open, channel mix) with five KPIs as a summary strip along the bottom.",
     icon: "support",
     components: 12,
     worksheets: 4,
@@ -242,7 +234,7 @@ const TEMPLATES: TemplateDef[] = [
   {
     id: "product",
     label: "Product Analytics Dashboard",
-    desc: "A full-width active-users trend hero, growth KPIs (DAU, retention, sessions, churn), then usage by feature, adoption mix, and a sessions-vs-users scatter.",
+    desc: "Split hero: a wide active-users trend beside a tall adoption pie, growth KPIs through the middle, then usage-by-feature and a sessions scatter below.",
     icon: "product",
     components: 9,
     worksheets: 4,
@@ -252,17 +244,17 @@ const TEMPLATES: TemplateDef[] = [
   {
     id: "itops",
     label: "IT Operations Dashboard",
-    desc: "Reliability KPIs (uptime, requests, error rate, latency) with requests trend, errors by service, a service-health heatmap, requests by service, and a scatter.",
+    desc: "Status board: a tall service-health heatmap owns the left rail; beside it a 2×2 reliability KPI block, the requests trend, and error charts.",
     icon: "itops",
-    components: 12,
-    worksheets: 5,
+    components: 11,
+    worksheets: 4,
     kpis: 4,
     filters: 2,
   },
   {
     id: "manufacturing",
     label: "Manufacturing Dashboard",
-    desc: "Shop-floor KPIs (OEE, units, defect rate, yield) with output trend, units by line, a defect heatmap, yield by line, and a defects-vs-units scatter.",
+    desc: "Shop floor: KPI strip, a 2×2 of production charts on the left, and a tall defect heatmap running down the right rail.",
     icon: "manufacturing",
     components: 12,
     worksheets: 5,
@@ -272,7 +264,7 @@ const TEMPLATES: TemplateDef[] = [
   {
     id: "retail",
     label: "Retail / E-commerce Dashboard",
-    desc: "Storefront KPIs (revenue, AOV, conversion, returns) with revenue trend, revenue by category, category mix, units by category, and a units-vs-revenue scatter.",
+    desc: "Asymmetric columns: a wide storefront column (revenue trend + units by category) beside a narrow merchandising column (category mix, revenue bars, basket scatter).",
     icon: "retail",
     components: 12,
     worksheets: 5,
@@ -282,17 +274,17 @@ const TEMPLATES: TemplateDef[] = [
   {
     id: "project",
     label: "Project Management Dashboard",
-    desc: "Delivery KPIs (velocity, done, open, on-track, cycle time) with completed-by-sprint, open by team, throughput by team, and a status mix.",
+    desc: "Kanban lanes: three equal delivery columns — velocity over the burn-up trend, open items over the team bars, on-track over the status mix.",
     icon: "project",
-    components: 12,
-    worksheets: 4,
-    kpis: 5,
+    components: 9,
+    worksheets: 3,
+    kpis: 3,
     filters: 2,
   },
   {
     id: "esg",
     label: "ESG / Sustainability Dashboard",
-    desc: "Impact KPIs (emissions, renewable, water, waste) with emissions trend, emissions by facility, renewable by facility, and an energy mix.",
+    desc: "Mix spotlight: a big energy-mix pie with a 2×2 impact KPI block beneath it, and stacked emissions charts (trend + facility bars) on the right.",
     icon: "esg",
     components: 11,
     worksheets: 4,
@@ -302,33 +294,53 @@ const TEMPLATES: TemplateDef[] = [
 ];
 
 export default function DashboardTemplates() {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const shown = q
+    ? TEMPLATES.filter((t) => `${t.label} ${t.desc}`.toLowerCase().includes(q))
+    : TEMPLATES;
+
   return (
     <div>
       <div className="section-label">Dashboard Templates</div>
       <div className="syntax-intro">
         Pre-built dashboard layouts with KPI cards, worksheets, and filters already positioned.
-        Click to create the full dashboard beside your design.
+        Apply one to create the full dashboard beside your design.
       </div>
+      <input
+        type="text"
+        className="template-search"
+        placeholder={`Search ${TEMPLATES.length} templates…`}
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
       <div className="templates-grid">
-        {TEMPLATES.map((t) => (
+        {shown.map((t) => (
           <div key={t.id} className="template-card">
-            <div className="template-icon">{ICONS[t.icon]}</div>
-            <div className="template-label">{t.label}</div>
-            <div className="template-desc">{t.desc}</div>
-            <div className="template-meta">
-              <span>{t.components} components</span>
-              <span>{t.worksheets} sheets</span>
-              <span>{t.kpis} KPIs</span>
-              {t.filters > 0 && <span>{t.filters} filters</span>}
+            <div className="template-head">
+              <div className="template-icon">{ICONS[t.icon]}</div>
+              <div className="template-headinfo">
+                <div className="template-label">{t.label}</div>
+                <div className="template-meta-line">
+                  {t.worksheets} sheets · {t.kpis} KPIs
+                  {t.filters > 0 ? ` · ${t.filters} filters` : ""}
+                </div>
+              </div>
+              <button
+                className="btn-secondary template-apply-sm"
+                onClick={() => toPlugin({ type: "apply-template", templateId: t.id })}
+              >
+                Apply
+              </button>
             </div>
-            <button
-              className="btn-secondary template-apply"
-              onClick={() => toPlugin({ type: "apply-template", templateId: t.id })}
-            >
-              Apply template
-            </button>
+            <div className="template-desc" title={t.desc}>{t.desc}</div>
           </div>
         ))}
+        {shown.length === 0 && (
+          <div className="template-none">
+            No template matches “{query}” — try “sales”, “ops” or “KPI”.
+          </div>
+        )}
       </div>
     </div>
   );

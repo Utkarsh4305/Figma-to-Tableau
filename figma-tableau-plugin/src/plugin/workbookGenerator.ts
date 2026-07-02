@@ -22,6 +22,7 @@ import type {
   WorksheetSpec,
   DashboardSpec,
   SpecField,
+  CalcField,
   MeasurePill,
   ZoneSpec,
   ContainerSpec,
@@ -96,9 +97,9 @@ interface GenField {
   isCalc: boolean;
 }
 
-function buildRegistry(spec: WorkbookSpec): Map<string, GenField> {
+function buildRegistryFields(fields: SpecField[], calcs: CalcField[]): Map<string, GenField> {
   const reg = new Map<string, GenField>();
-  for (const f of spec.data.fields) {
+  for (const f of fields) {
     reg.set(f.name, {
       display: f.name,
       local: `[${f.name}]`,
@@ -108,7 +109,7 @@ function buildRegistry(spec: WorkbookSpec): Map<string, GenField> {
       isCalc: false,
     });
   }
-  for (const c of spec.data.calcs) {
+  for (const c of calcs) {
     reg.set(c.name, {
       display: c.name,
       local: `[${c.localName}]`,
@@ -120,6 +121,46 @@ function buildRegistry(spec: WorkbookSpec): Map<string, GenField> {
   }
   return reg;
 }
+
+function buildRegistry(spec: WorkbookSpec): Map<string, GenField> {
+  return buildRegistryFields(spec.data.fields, spec.data.calcs);
+}
+
+/** The per-datasource context a worksheet/filter binds to (primary or an extra). */
+interface DsCtx {
+  dsName: string;
+  caption: string;
+  reg: Map<string, GenField>;
+  fields: SpecField[];
+  rows: string[][];
+}
+
+/** Build the DsCtx for the primary datasource and each ExtraDataset, plus a
+ * worksheet-name → DsCtx map so filters/worksheets resolve to the RIGHT data. */
+function buildDsContexts(spec: WorkbookSpec): { primary: DsCtx; byName: Map<string, DsCtx>; wsToDs: Map<string, DsCtx> } {
+  const primary: DsCtx = {
+    dsName: PRIMARY_DS,
+    caption: spec.workbookName + " Data",
+    reg: buildRegistry(spec),
+    fields: spec.data.fields,
+    rows: spec.data.rows,
+  };
+  const byName = new Map<string, DsCtx>([[PRIMARY_DS, primary]]);
+  for (const ed of spec.extraData ?? []) {
+    byName.set(ed.dsName, {
+      dsName: ed.dsName,
+      caption: ed.caption,
+      reg: buildRegistryFields(ed.fields, []),
+      fields: ed.fields,
+      rows: ed.rows,
+    });
+  }
+  const wsToDs = new Map<string, DsCtx>();
+  for (const ws of spec.worksheets) wsToDs.set(ws.name, (ws.dsName && byName.get(ws.dsName)) || primary);
+  return { primary, byName, wsToDs };
+}
+
+const PRIMARY_DS = "federated.fig";
 
 function dimInstance(base: string): string {
   return `[none:${base}:nk]`;
@@ -172,17 +213,24 @@ function colorStyleBlock(spec: WorkbookSpec): string {
   return out.join("");
 }
 
-function datasourceXml(spec: WorkbookSpec, dataDirectory: string): { xml: string; dsName: string } {
-  const dsName = "federated.fig";
-  const connName = "textscan.fig";
-  const caption = spec.workbookName + " Data";
-  const csvFile = spec.data.fileName;
+/** One inline textscan datasource. Primary passes the workbook's calcs + the
+ * conditional-color / filter-action groups; extra per-domain datasources pass
+ * neither (they're plain sample data for a single dashboard's charts). */
+function datasourceXml(
+  ds: { dsName: string; connName: string; caption: string; fileName: string; fields: SpecField[]; calcs: CalcField[] },
+  dataDirectory: string,
+  extras: { colorStyle: string; actionGroups: string },
+): string {
+  const dsName = ds.dsName;
+  const connName = ds.connName;
+  const caption = ds.caption;
+  const csvFile = ds.fileName;
   const base = csvFile.toLowerCase().endsWith(".csv") ? csvFile.slice(0, -4) : csvFile;
   const parent = `[${csvFile}]`;
   const table = `[${base}#csv]`;
   const objid = `${csvFile}_${hex32()}`;
   const objidB = `[${objid}]`;
-  const fields = spec.data.fields;
+  const fields = ds.fields;
 
   const x: string[] = [];
   x.push(
@@ -253,7 +301,7 @@ function datasourceXml(spec: WorkbookSpec, dataDirectory: string): { xml: string
   }
 
   // calculated fields (CONFIRMED pattern)
-  for (const calc of spec.data.calcs) {
+  for (const calc of ds.calcs) {
     const t = calc.role === "measure" ? "quantitative" : tableauType(calc.type);
     x.push(
       `      <column caption='${esc(calc.name)}' datatype='${calc.type}' name='[${esc(
@@ -264,16 +312,16 @@ function datasourceXml(spec: WorkbookSpec, dataDirectory: string): { xml: string
     x.push("      </column>\n");
   }
 
-  // hidden sheet_link groups for filter actions (CONFIRMED pattern)
-  x.push(actionGroupsXml(spec));
+  // hidden sheet_link groups for filter actions (CONFIRMED pattern; primary only)
+  x.push(extras.actionGroups);
 
   x.push(
     `      <column caption='${esc(csvFile)}' datatype='table' name='[__tableau_internal_object_id__].${objidB}' role='measure' type='quantitative' />\n`
   );
   x.push("      <layout dim-ordering='alphabetic' measure-ordering='alphabetic' show-structure='true' />\n");
 
-  // conditional color (datasource <style>) — CONFIRMED pattern
-  x.push(colorStyleBlock(spec));
+  // conditional color (datasource <style>) — CONFIRMED pattern (primary only)
+  x.push(extras.colorStyle);
 
   x.push("      <object-graph>\n        <objects>\n");
   x.push(`          <object caption='${esc(csvFile)}' id='${objid}'>\n`);
@@ -284,7 +332,7 @@ function datasourceXml(spec: WorkbookSpec, dataDirectory: string): { xml: string
   x.push("            </properties>\n          </object>\n");
   x.push("        </objects>\n      </object-graph>\n");
   x.push("    </datasource>\n");
-  return { xml: x.join(""), dsName };
+  return x.join("");
 }
 
 function tableauType(t: FieldType): string {
@@ -347,12 +395,13 @@ function buttonWorksheetXml(ws: WorksheetSpec, dsName: string, dsCaption: string
 function worksheetXml(
   ws: WorksheetSpec,
   spec: WorkbookSpec,
-  dsName: string,
-  dsCaption: string,
+  ds: DsCtx,
   filterFieldNames: string[] = []
 ): string {
+  const dsName = ds.dsName;
+  const dsCaption = ds.caption;
   if (ws.navButton) return buttonWorksheetXml(ws, dsName, dsCaption);
-  const reg = buildRegistry(spec);
+  const reg = ds.reg;
 
   // resolve fields
   const dim = ws.dimension ? reg.get(ws.dimension) : undefined;
@@ -368,7 +417,7 @@ function worksheetXml(
   const filterPairs = filterFieldNames
     .map((n) => reg.get(n))
     .filter((f): f is GenField => !!f && f.type === "string" && !f.isCalc)
-    .map((f) => ({ f, members: distinctMembers(spec, f.display) }))
+    .map((f) => ({ f, members: distinctMembersIn(ds.fields, ds.rows, f.display) }))
     .filter((p) => p.members.length > 0);
 
   // build dependency lists (ALL <column> first, THEN all <column-instance>)
@@ -420,6 +469,12 @@ function worksheetXml(
   // Only a single-measure bar flips horizontal — a multi-measure (stacked) bar
   // keeps measures on rows / dimension on cols (the established layout).
   const horizontalBar = ws.mark === "Bar" && measFields.length <= 1;
+  // Pie and scatter (Circle) need different shelves/encodings from bar/line or
+  // they render as an identical dot: a Pie puts the measure on WEDGE-SIZE +
+  // dimension on COLOR (empty rows/cols → one centered pie); a scatter puts a
+  // measure on each axis (X vs Y) with the dimension on COLOR → a real point cloud.
+  const isPie = ws.mark === "Pie";
+  const isCircle = ws.mark === "Circle";
   const dimPill = dim ? `[${dsName}].${dimInstance(dim.base)}` : "";
   const measPills = measFields
     .map((mf) => `[${dsName}].${measInstance(mf.f.base, mf.pfx)}`)
@@ -451,11 +506,16 @@ function worksheetXml(
     worksheetStyleXml(horizontalBar && meas0Inst ? { measAxisField: meas0Inst, measAxisScope: "cols" } : {})
   );
 
-  // panes — one per measure (stacked); dual axis falls back to stacked safely
+  // panes — one per measure (stacked); dual axis falls back to stacked safely.
+  // Pie/scatter always color BY THE DIMENSION (that's what makes the wedges /
+  // colored points); other marks only color when an explicit colorField is set.
   const colorInstance =
     colorF && colorF.role !== "measure" ? `[${dsName}].${dimInstance(colorF.base)}` : undefined;
+  const paneColor = colorInstance ?? (isPie || isCircle ? (dimPill || undefined) : undefined);
   x.push("        <panes>\n");
-  const paneCount = Math.max(1, measFields.length);
+  // Scatter is ONE pane with two measures on the axes; everything else keeps the
+  // per-measure stacked panes.
+  const paneCount = isCircle ? 1 : Math.max(1, measFields.length);
   for (let i = 0; i < paneCount; i++) {
     const idAttr = i === 0 ? "" : ` id='${i}'`;
     x.push(`          <pane${idAttr} selection-relaxation-option='selection-relaxation-allow'>\n`);
@@ -465,9 +525,18 @@ function worksheetXml(
     // (the LaDataViz look) instead of thin default bars floating in whitespace.
     x.push("            <mark-sizing mark-sizing-setting='marks-scaling-off' />\n");
     const showLegend = spec.exportOptions?.showLegends ?? true;
-    if (colorInstance && showLegend) {
+    // Pie wedges / scatter point colors ARE the chart, so keep them even when the
+    // dashboard legend is hidden; a plain color legend still respects the toggle.
+    const emitColor = paneColor && (isPie || isCircle || showLegend);
+    // A Pie sizes its wedges by the measure via the <wedge-size> encoding — NOT
+    // <angle> (that element isn't in the 2026.2 mark content model → load error
+    // D2E8DA72 "no declaration found for element 'angle'"). Valid encodings are
+    // color|size|text|shape|wedge-size|lod|geometry|image|tooltip|path|level|edge.
+    const wedgeInst = isPie ? meas0Inst : "";
+    if (emitColor || wedgeInst) {
       x.push("            <encodings>\n");
-      x.push(`              <color column='${colorInstance}' />\n`);
+      if (emitColor) x.push(`              <color column='${paneColor}' />\n`);
+      if (wedgeInst) x.push(`              <wedge-size column='${wedgeInst}' />\n`);
       x.push("            </encodings>\n");
     }
     x.push(markPaneStyle(ws));
@@ -475,8 +544,27 @@ function worksheetXml(
   }
   x.push("        </panes>\n");
 
-  const rowsPills = horizontalBar ? dimPill : measPills;
-  const colsPills = horizontalBar ? measPills : dimPill;
+  // Shelves per mark: pie has none (color+wedge-size place it); scatter puts measure0
+  // on X and measure1 on Y (a real X/Y scatter — falls back to the dimension on X
+  // if only one measure exists); horizontal bar flips dim/measure; the rest keep
+  // measure-on-rows / dimension-on-cols.
+  const meas1Inst = measFields[1]
+    ? `[${dsName}].${measInstance(measFields[1].f.base, measFields[1].pfx)}`
+    : "";
+  let rowsPills: string, colsPills: string;
+  if (isPie) {
+    rowsPills = "";
+    colsPills = "";
+  } else if (isCircle) {
+    colsPills = meas0Inst;
+    rowsPills = meas1Inst || dimPill;
+  } else if (horizontalBar) {
+    rowsPills = dimPill;
+    colsPills = measPills;
+  } else {
+    rowsPills = measPills;
+    colsPills = dimPill;
+  }
   x.push(`        <rows>${rowsPills}</rows>\n`);
   x.push(`        <cols>${colsPills}</cols>\n`);
   x.push("      </table>\n");
@@ -490,12 +578,12 @@ function instanceLine(f: GenField, derivation: string, instName: string): string
   return `            <column-instance column='${f.local}' derivation='${derivation}' name='${instName}' pivot='key' type='${pivotType}' />\n`;
 }
 
-/** Distinct non-empty values of a physical field, from the sample/uploaded rows. */
-function distinctMembers(spec: WorkbookSpec, fieldName: string): string[] {
-  const idx = spec.data.fields.findIndex((f) => f.name === fieldName);
+/** Distinct non-empty values of a physical field, from the given rows. */
+function distinctMembersIn(fields: SpecField[], rows: string[][], fieldName: string): string[] {
+  const idx = fields.findIndex((f) => f.name === fieldName);
   if (idx < 0) return [];
   const set = new Set<string>();
-  for (const r of spec.data.rows) {
+  for (const r of rows) {
     const v = r[idx];
     if (v != null && v !== "") set.add(v);
     if (set.size >= 50) break;
@@ -607,7 +695,9 @@ function markPaneStyle(ws: WorksheetSpec): string {
   const isLine = ws.mark === "Line";
   const isArea = ws.mark === "Area";
   const size = isBar ? "0.9" : isLine || isArea ? "0.5" : "0.7";
-  const labelMode = isBar ? "all" : "line-ends";
+  // Only line/area label just the series ends; bar/pie/scatter/square label every
+  // mark (a pie wedge or scatter point with no label reads as an unlabeled blob).
+  const labelMode = isLine || isArea ? "line-ends" : "all";
 
   const o: string[] = ["            <style>\n"];
   o.push("              <style-rule element='datalabel'>\n");
@@ -725,8 +815,8 @@ function cardStyle(bg = "#FFFFFF"): string {
 
 function dashboardXml(
   dash: DashboardSpec,
-  dsName: string,
-  reg: Map<string, GenField>,
+  primaryCtx: DsCtx,
+  wsToDs: Map<string, DsCtx>,
   opts?: ExportOptions
 ): { xml: string; sheetNames: string[] } {
   const fw = dash.widthPx || 1280;
@@ -802,13 +892,15 @@ function dashboardXml(
     } else if (z.kind === "filter" && z.worksheet && (z.field || z.filterParam)) {
       // dashboard quick-filter card bound to a worksheet + dimension (CONFIRMED).
       // An imported sheet's filter carries its OWN verbatim param (so it filters
-      // the imported datasource); a generated sheet resolves against our sample ds.
-      const f = z.field ? reg.get(z.field) : undefined;
+      // the imported datasource); a generated sheet resolves against the SAME
+      // datasource its bound worksheet uses (so a Sales filter hits sales data).
+      const ctx = (z.worksheet && wsToDs.get(z.worksheet)) || primaryCtx;
+      const f = z.field ? ctx.reg.get(z.field) : undefined;
       const param = z.filterParam
         ? z.filterParam
         : f
-        ? `[${dsName}].${dimInstance(f.base)}`
-        : `[${dsName}].[none:${z.field}:nk]`;
+        ? `[${ctx.dsName}].${dimInstance(f.base)}`
+        : `[${ctx.dsName}].[none:${z.field}:nk]`;
       o.push(
         `        <zone${fn}${fix} h='${H}' id='${nid()}' mode='checkdropdown' name='${esc(z.worksheet)}' param='${param}' type-v2='filter' w='${W}' x='${X}' y='${Y}'>\n`
       );
@@ -1131,9 +1223,21 @@ function actionsXml(spec: WorkbookSpec): string {
 // --- assemble ----------------------------------------------------------------
 
 export function generateWorkbookXml(spec: WorkbookSpec, dataDirectory: string): string {
-  const ds = datasourceXml(spec, dataDirectory);
-  const dsCaption = spec.workbookName + " Data";
-  const reg = buildRegistry(spec);
+  const dsCtxs = buildDsContexts(spec);
+  // Primary datasource carries the workbook calcs + conditional-color / filter-
+  // action groups; each extra per-domain datasource is plain sample data.
+  const primaryDsXml = datasourceXml(
+    { dsName: PRIMARY_DS, connName: "textscan.fig", caption: dsCtxs.primary.caption, fileName: spec.data.fileName, fields: spec.data.fields, calcs: spec.data.calcs },
+    dataDirectory,
+    { colorStyle: colorStyleBlock(spec), actionGroups: actionGroupsXml(spec) },
+  );
+  const extraDsXml = (spec.extraData ?? []).map((ed) =>
+    datasourceXml(
+      { dsName: ed.dsName, connName: ed.connName, caption: ed.caption, fileName: ed.fileName, fields: ed.fields, calcs: [] },
+      dataDirectory,
+      { colorStyle: "", actionGroups: "" },
+    ),
+  );
 
   // gather dashboard filter-card fields per bound worksheet
   const filtersByWs = new Map<string, Set<string>>();
@@ -1166,7 +1270,7 @@ export function generateWorkbookXml(spec: WorkbookSpec, dataDirectory: string): 
   const wsUuid = new Map<string, string>();
   for (const n of wsNames) wsUuid.set(n, uid());
 
-  const dashOut = spec.dashboards.map((d) => dashboardXml(d, ds.dsName, reg, spec.exportOptions));
+  const dashOut = spec.dashboards.map((d) => dashboardXml(d, dsCtxs.primary, dsCtxs.wsToDs, spec.exportOptions));
 
   const out: string[] = [];
   out.push("<?xml version='1.0' encoding='utf-8' ?>\n");
@@ -1180,7 +1284,9 @@ export function generateWorkbookXml(spec: WorkbookSpec, dataDirectory: string): 
     "  <preferences>\n    <preference name='ui.encoding.shelf.height' value='24' />\n    <preference name='ui.shelf.height' value='26' />\n  </preferences>\n"
   );
   out.push("  <datasources>\n");
-  out.push(ds.xml);
+  out.push(primaryDsXml);
+  // Extra per-domain datasources (mixed-domain multi-dashboard export).
+  for (const dx of extraDsXml) out.push(dx);
   // Splice the imported datasources verbatim (their connections point at the
   // repackaged Data/ files; their names are referenced by the imported sheets).
   if (spec.imports) for (const dx of spec.imports.datasourceXml.values()) out.push(dx + "\n");
@@ -1191,7 +1297,7 @@ export function generateWorkbookXml(spec: WorkbookSpec, dataDirectory: string): 
   out.push(actionsXml(spec));
   out.push("  <worksheets>\n");
   for (const ws of spec.worksheets)
-    out.push(worksheetXml(ws, spec, ds.dsName, dsCaption, [...(filtersByWs.get(ws.name) ?? [])]));
+    out.push(worksheetXml(ws, spec, dsCtxs.wsToDs.get(ws.name) ?? dsCtxs.primary, [...(filtersByWs.get(ws.name) ?? [])]));
   // Splice the user's real worksheets verbatim (never regenerated).
   if (spec.imports) for (const wx of spec.imports.worksheetXml.values()) out.push(wx + "\n");
   out.push("  </worksheets>\n");

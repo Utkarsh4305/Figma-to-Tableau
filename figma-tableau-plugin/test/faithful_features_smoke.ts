@@ -51,6 +51,8 @@ async function main() {
   const filterZone = spec.dashboards[0].zones.find((z) => z.kind === "filter");
   assert(!!filterZone, "FILTER/ layer -> a filter zone");
   assert(filterZone!.worksheet === spec.worksheets[0].name, "filter card bound to a host worksheet");
+  // The "Sales by Region" sheets/text make this a sales-domain design, whose
+  // category dimension IS Region, so FILTER/Region binds straight to it.
   assert(filterZone!.field === "Region", "FILTER/Region -> Region dimension");
 
   const webZone = spec.dashboards[0].zones.find((z) => z.kind === "web");

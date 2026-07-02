@@ -9,7 +9,7 @@ import { parseImport, parsedImportFromStored, type ParsedImport } from "../plugi
 import ComponentLibrary from "./components/ComponentLibrary";
 import DashboardTemplates from "./templates/DashboardTemplates";
 
-const BUILD = "kpi-3row-58";
+const BUILD = "multi-ds-15-templates-61";
 
 type Status = { kind: "ok" | "err" | "warn"; text: string } | null;
 

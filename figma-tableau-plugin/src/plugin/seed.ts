@@ -213,6 +213,231 @@ function sampleData(): { fields: SpecField[]; rows: string[][] } {
   return { fields, rows };
 }
 
+/**
+ * A domain-flavored placeholder dataset. `catDim` is the category dimension
+ * (bars/pies/scatter compare it), `trendDim` the time dimension (line/area trend
+ * over it), and `meas` the two measures. So a Clinical template exports charts of
+ * Admissions by Department / over Month — not the generic Sales-by-Region data.
+ */
+interface DomainDataset {
+  fields: SpecField[];
+  rows: string[][];
+  catDim: string;
+  trendDim: string;
+  meas: [string, string];
+}
+
+/** Per-domain placeholder data: realistic category members, time periods and two
+ * measures, so a template's sample charts read as that domain (see DomainDataset). */
+const DOMAIN_DATASETS: Record<
+  string,
+  {
+    catDim: string;
+    cats: [string, number][]; // [member, relative weight]
+    trendDim: string;
+    periods: string[];
+    meas: [string, string];
+    scale: number; // magnitude of the first measure
+    ratio: number; // second measure ≈ first × ratio
+  }
+> = {
+  clinical: {
+    catDim: "Department",
+    cats: [["Cardiology", 1.0], ["Oncology", 0.82], ["Neurology", 0.7], ["Emergency", 0.95], ["Pediatrics", 0.6]],
+    trendDim: "Month",
+    periods: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+    meas: ["Admissions", "Readmissions"],
+    scale: 220,
+    ratio: 0.08,
+  },
+  sales: {
+    catDim: "Region",
+    cats: [["North", 1.0], ["South", 0.72], ["East", 0.9], ["West", 0.63]],
+    trendDim: "Month",
+    periods: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+    meas: ["Revenue", "Orders"],
+    scale: 48000,
+    ratio: 0.015,
+  },
+  finance: {
+    catDim: "Category",
+    cats: [["Operations", 1.0], ["Marketing", 0.55], ["R&D", 0.78], ["Sales", 0.92], ["Admin", 0.4]],
+    trendDim: "Quarter",
+    periods: ["2022 Q1", "2022 Q2", "2022 Q3", "2022 Q4", "2023 Q1", "2023 Q2", "2023 Q3", "2023 Q4"],
+    meas: ["Revenue", "Expense"],
+    scale: 120000,
+    ratio: 0.62,
+  },
+  ops: {
+    catDim: "Department",
+    cats: [["Assembly", 1.0], ["Packaging", 0.85], ["Molding", 0.7], ["Finishing", 0.6]],
+    trendDim: "Week",
+    periods: ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8", "W9", "W10", "W11", "W12"],
+    meas: ["Output", "Downtime"],
+    scale: 1500,
+    ratio: 0.05,
+  },
+  executive: {
+    catDim: "Channel",
+    cats: [["Direct", 1.0], ["Online", 0.9], ["Partner", 0.62], ["Retail", 0.75]],
+    trendDim: "Quarter",
+    periods: ["2022 Q1", "2022 Q2", "2022 Q3", "2022 Q4", "2023 Q1", "2023 Q2", "2023 Q3", "2023 Q4"],
+    meas: ["Revenue", "Growth"],
+    scale: 90000,
+    ratio: 0.04,
+  },
+  marketing: {
+    catDim: "Channel",
+    cats: [["Email", 1.0], ["Social", 0.85], ["Search", 0.95], ["Display", 0.55], ["Referral", 0.45]],
+    trendDim: "Week",
+    periods: ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8", "W9", "W10", "W11", "W12"],
+    meas: ["Leads", "Conversions"],
+    scale: 820,
+    ratio: 0.14,
+  },
+  hr: {
+    catDim: "Department",
+    cats: [["Engineering", 1.0], ["Sales", 0.8], ["Marketing", 0.5], ["Support", 0.65], ["Operations", 0.72]],
+    trendDim: "Month",
+    periods: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+    meas: ["Headcount", "Attrition"],
+    scale: 140,
+    ratio: 0.07,
+  },
+  supplychain: {
+    catDim: "Warehouse",
+    cats: [["North DC", 1.0], ["South DC", 0.8], ["East DC", 0.9], ["West DC", 0.68]],
+    trendDim: "Week",
+    periods: ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8", "W9", "W10", "W11", "W12"],
+    meas: ["Shipments", "Backorders"],
+    scale: 1300,
+    ratio: 0.06,
+  },
+  support: {
+    catDim: "Channel",
+    cats: [["Email", 1.0], ["Chat", 0.9], ["Phone", 0.72], ["Social", 0.48]],
+    trendDim: "Week",
+    periods: ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8", "W9", "W10", "W11", "W12"],
+    meas: ["Tickets", "Resolved"],
+    scale: 640,
+    ratio: 0.88,
+  },
+  product: {
+    catDim: "Feature",
+    cats: [["Dashboards", 1.0], ["Reports", 0.82], ["Search", 0.7], ["Mobile", 0.6], ["API", 0.5]],
+    trendDim: "Week",
+    periods: ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8", "W9", "W10", "W11", "W12"],
+    meas: ["Active Users", "Sessions"],
+    scale: 5200,
+    ratio: 2.4,
+  },
+  itops: {
+    catDim: "Service",
+    cats: [["API", 1.0], ["Web", 0.9], ["Database", 0.72], ["Auth", 0.6], ["CDN", 0.82]],
+    trendDim: "Day",
+    periods: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    meas: ["Requests", "Errors"],
+    scale: 9200,
+    ratio: 0.02,
+  },
+  manufacturing: {
+    catDim: "Line",
+    cats: [["Line 1", 1.0], ["Line 2", 0.86], ["Line 3", 0.7], ["Line 4", 0.6]],
+    trendDim: "Week",
+    periods: ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8", "W9", "W10", "W11", "W12"],
+    meas: ["Units", "Defects"],
+    scale: 2100,
+    ratio: 0.03,
+  },
+  retail: {
+    catDim: "Category",
+    cats: [["Apparel", 1.0], ["Electronics", 0.92], ["Home", 0.72], ["Beauty", 0.6], ["Grocery", 0.85]],
+    trendDim: "Month",
+    periods: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+    meas: ["Revenue", "Units"],
+    scale: 52000,
+    ratio: 0.02,
+  },
+  project: {
+    catDim: "Team",
+    cats: [["Alpha", 1.0], ["Beta", 0.82], ["Gamma", 0.7], ["Delta", 0.6]],
+    trendDim: "Sprint",
+    periods: ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "S10"],
+    meas: ["Completed", "Open"],
+    scale: 48,
+    ratio: 0.42,
+  },
+  esg: {
+    catDim: "Facility",
+    cats: [["Plant A", 1.0], ["Plant B", 0.8], ["Plant C", 0.62], ["HQ Office", 0.4]],
+    trendDim: "Quarter",
+    periods: ["2022 Q1", "2022 Q2", "2022 Q3", "2022 Q4", "2023 Q1", "2023 Q2", "2023 Q3", "2023 Q4"],
+    meas: ["Emissions", "Renewable"],
+    scale: 900,
+    ratio: 0.55,
+  },
+};
+
+/** Build a domain dataset from its config — a rising trend with a gentle seasonal
+ * wobble across the periods, weighted per category, mirroring sampleData's shape. */
+function buildDomainDataset(cfg: (typeof DOMAIN_DATASETS)[string]): DomainDataset {
+  const fields: SpecField[] = [
+    { name: cfg.catDim, type: "string", role: "dimension" },
+    { name: cfg.trendDim, type: "string", role: "dimension" },
+    { name: cfg.meas[0], type: "integer", role: "measure" },
+    { name: cfg.meas[1], type: "integer", role: "measure" },
+  ];
+  const n = cfg.periods.length;
+  const rows: string[][] = [];
+  for (const [cname, cmul] of cfg.cats) {
+    for (let i = 0; i < n; i++) {
+      const t = n > 1 ? i / (n - 1) : 0;
+      const trend = 0.6 + 0.8 * t + 0.15 * Math.sin(i * 1.7); // rises with a wobble
+      const m0 = Math.max(1, Math.round(cmul * trend * cfg.scale));
+      const m1 = Math.max(1, Math.round(m0 * cfg.ratio * (0.9 + 0.2 * cmul)));
+      rows.push([cname, cfg.periods[i], String(m0), String(m1)]);
+    }
+  }
+  return { fields, rows, catDim: cfg.catDim, trendDim: cfg.trendDim, meas: cfg.meas };
+}
+
+/** The primary datasource name (matches workbookGenerator's PRIMARY_DS). */
+const PRIMARY_DS = "federated.fig";
+
+/** Human label for a domain, used as a datasource caption ("Sales Data"). */
+function domainLabel(domain: string): string {
+  const map: Record<string, string> = {
+    clinical: "Clinical", sales: "Sales", finance: "Finance", ops: "Operations",
+    executive: "Executive", marketing: "Marketing", hr: "HR", supplychain: "Supply Chain",
+    support: "Customer Support", product: "Product Analytics", itops: "IT Operations",
+    manufacturing: "Manufacturing", retail: "Retail", project: "Project Management",
+    esg: "ESG", generic: "Sample",
+  };
+  return map[domain] ?? "Sample";
+}
+
+/** Resolve a domain name to its dataset; unknown/"generic" reuses sampleData so
+ * ordinary (non-template) designs keep the original Region/Period/Sales/Profit. */
+function domainDatasetFor(domain: string): DomainDataset {
+  const cfg = DOMAIN_DATASETS[domain];
+  if (!cfg) {
+    const { fields, rows } = sampleData();
+    return { fields, rows, catDim: "Region", trendDim: "Period", meas: ["Sales", "Profit"] };
+  }
+  return buildDomainDataset(cfg);
+}
+
+/** Detect the dashboard domain from the frame title + layer/sheet/text names, so
+ * templates ("Clinical Dashboard", "Sales Dashboard"…) get domain-matched data. */
+function detectFaithfulDomain(models: FaithfulModel[]): string {
+  const hay = models
+    .map((m) => (m.title || "") + " " + m.zones.map((z) => `${z.name || ""} ${z.sheetName || ""} ${z.text || ""}`).join(" "))
+    .join(" ")
+    .toLowerCase();
+  for (const { domain, words } of DOMAIN_KEYWORDS) if (words.some((w) => hay.includes(w))) return domain;
+  return "generic";
+}
+
 /** Coerce a faithful zone's mark tag to a valid MarkType (default Bar). Includes
  * Square (heatmap) and Text (text table) — both confirmed-loadable mark classes
  * (Text is what KPI/nav button-worksheets already use). */
@@ -230,11 +455,14 @@ function markTypeOf(chart: string | undefined): MarkType {
  * exactly how LaDataViz built the live charts in Template.twbx. Text stays
  * faithful; only the SHEET/-tagged things become interactive sheets.
  */
-/** Map a FILTER/<field> tag to a real string dimension in the sample data. */
-function filterDimFor(label: string | undefined): string {
+/** Map a FILTER/<field> tag to a real string dimension in the dataset: bind to a
+ * data dimension the label names outright, else to the time or category dim. */
+function filterDimFor(label: string | undefined, data: DomainDataset): string {
   const l = (label || "").toLowerCase();
-  if (/period|time|date|quarter|month|year/.test(l)) return "Period";
-  return "Region";
+  const named = data.fields.find((f) => f.role === "dimension" && f.name.toLowerCase() === l);
+  if (named) return named.name;
+  if (/period|time|date|quarter|month|year|week|day/.test(l)) return data.trendDim;
+  return data.catDim;
 }
 
 /**
@@ -245,6 +473,7 @@ function filterDimFor(label: string | undefined): string {
  * dedupe set + counters across every dashboard.
  */
 interface FaithfulCtx {
+  data: DomainDataset; // domain-matched placeholder fields/rows the sheets bind to
   worksheets: WorksheetSpec[];
   actions: ActionSpec[];
   used: Set<string>; // assigned worksheet names so far (dedupe across dashboards)
@@ -292,7 +521,13 @@ function uniqueDashNames(titles: string[]): string[] {
  * sample data (mark from the [type] tag). FILTER/ cards are bound to a host sheet
  * by the caller (it needs the whole dashboard's sheets resolved first).
  */
-function buildFaithfulDashboard(model: FaithfulModel, ctx: FaithfulCtx, dashName: string): DashboardSpec {
+function buildFaithfulDashboard(
+  model: FaithfulModel,
+  ctx: FaithfulCtx,
+  dashName: string,
+  data: DomainDataset,
+  dsName: string,
+): DashboardSpec {
 
   // Make each chart cover the CONTAINER it sits in: if a rect (a Figma card
   // frame) snugly contains a SHEET zone, grow the sheet to that card's bounds,
@@ -329,17 +564,22 @@ function buildFaithfulDashboard(model: FaithfulModel, ctx: FaithfulCtx, dashName
       const wsName = uniqNameIn(ctx, z.sheetName || z.name || "Sheet");
       ctx.sheetIdToWs.set(z.id, wsName); // so a Nav/ target can resolve to this sheet
       const mark = markTypeOf(z.chart);
-      // Alternate the measure so adjacent sample charts aren't identical.
-      const measure = ctx.sheetN++ % 2 === 0 ? "Sales" : "Profit";
-      // Line/area read as a TIME TREND over Period; bars/others compare Regions.
+      // Line/area read as a TIME TREND over the time dim; bars/pies/etc. compare
+      // the category dim. A scatter needs TWO measures (X vs Y) so it renders as a
+      // real point cloud instead of the same dot-row a pie would — every other
+      // mark alternates the single measure so adjacent sample charts differ.
       const isTrend = mark === "Line" || mark === "Area";
-      const dimension = isTrend ? "Period" : "Region";
+      const dimension = isTrend ? data.trendDim : data.catDim;
+      const measures =
+        mark === "Circle"
+          ? [{ field: data.meas[0], agg: "Sum" as const }, { field: data.meas[1], agg: "Sum" as const }]
+          : [{ field: ctx.sheetN++ % 2 === 0 ? data.meas[0] : data.meas[1], agg: "Sum" as const }];
       ctx.worksheets.push({
         id: nextId("ws"),
         name: wsName,
         mark,
         dimension,
-        measures: [{ field: measure, agg: "Sum" }],
+        measures,
         dualAxis: false,
         // Mark color: prefer the DESIGN's own chart color (sampled from the most
         // vivid fill inside the SHEET/ layer) so a blue mock exports a blue chart;
@@ -349,6 +589,9 @@ function buildFaithfulDashboard(model: FaithfulModel, ctx: FaithfulCtx, dashName
         // "line-ends" for line/area so only the end value shows.
         markColor: z.markColor || "#898989",
         showLabels: true,
+        // Bind to this dashboard's own datasource so each domain's charts show
+        // their own data (primary domain leaves dsName undefined = federated.fig).
+        dsName: dsName === PRIMARY_DS ? undefined : dsName,
       });
       // ":filter" / ":highlight" suffix -> a dashboard action sourced from this
       // sheet (confirmed XML: tsc:tsl-filter / tsc:brush, see Clinical Trials.twb).
@@ -372,7 +615,7 @@ function buildFaithfulDashboard(model: FaithfulModel, ctx: FaithfulCtx, dashName
         id: nextId("z"),
         kind: "filter" as const,
         ...base,
-        field: filterDimFor(z.filterField),
+        field: filterDimFor(z.filterField, data),
         bg: "#FFFFFF",
         fg: "#D7DAEC",
       };
@@ -597,23 +840,27 @@ function applyFlowLayout(dash: DashboardSpec): void {
  * the sheet — not its whole enclosing dashboard — to be added. sheetIdToWs is
  * populated so the nav target resolves to this worksheet by the destination's id.
  */
-function materializeSheetOnly(model: FaithfulModel, ctx: FaithfulCtx): void {
+function materializeSheetOnly(model: FaithfulModel, ctx: FaithfulCtx, data: DomainDataset, dsName: string): void {
   for (const z of model.zones) {
     if (z.kind !== "sheet") continue;
     const wsName = uniqNameIn(ctx, z.sheetName || z.name || "Sheet");
     ctx.sheetIdToWs.set(z.id, wsName);
     const mark = markTypeOf(z.chart);
-    const measure = ctx.sheetN++ % 2 === 0 ? "Sales" : "Profit";
     const isTrend = mark === "Line" || mark === "Area";
+    const measures =
+      mark === "Circle"
+        ? [{ field: data.meas[0], agg: "Sum" as const }, { field: data.meas[1], agg: "Sum" as const }]
+        : [{ field: ctx.sheetN++ % 2 === 0 ? data.meas[0] : data.meas[1], agg: "Sum" as const }];
     ctx.worksheets.push({
       id: nextId("ws"),
       name: wsName,
       mark,
-      dimension: isTrend ? "Period" : "Region",
-      measures: [{ field: measure, agg: "Sum" }],
+      dimension: isTrend ? data.trendDim : data.catDim,
+      measures,
       dualAxis: false,
       markColor: z.markColor || "#898989",
       showLabels: true,
+      dsName: dsName === PRIMARY_DS ? undefined : dsName,
     });
   }
 }
@@ -623,12 +870,37 @@ function assembleFaithfulWorkbook(
   models: FaithfulModel[],
   opts?: { layout?: "flow" | "floating" }
 ): WorkbookSpec {
-  const { fields, rows } = sampleData();
-  const ctx: FaithfulCtx = { worksheets: [], actions: [], used: new Set(), imgN: 0, sheetN: 0, sheetIdToWs: new Map(), navButtons: [] };
   // Sheet-only models (Nav/ sheet targets that weren't selected) become bare
   // worksheets, not dashboards — split them out so only real frames make dashboards.
   const dashModels = models.filter((m) => !m.sheetOnly);
   const sheetOnlyModels = models.filter((m) => m.sheetOnly);
+
+  // Detect the domain of EACH dashboard INDEPENDENTLY, so a multi-frame export
+  // that mixes (e.g.) a Clinical and a Sales dashboard gives each its OWN data —
+  // a sales chart shows Revenue by Region, not clinical Admissions. Each distinct
+  // domain becomes a datasource: the first is primary (federated.fig), the rest
+  // are ExtraDatasets (federated.fig2…) that their worksheets bind to.
+  const domainOf = (m: FaithfulModel) => detectFaithfulDomain([m]);
+  const distinctDomains = [...new Set([...dashModels, ...sheetOnlyModels].map(domainOf))];
+  if (distinctDomains.length === 0) distinctDomains.push("generic");
+  const domainInfo = new Map<
+    string,
+    { data: DomainDataset; dsName: string; connName: string; caption: string; fileName: string }
+  >();
+  distinctDomains.forEach((dom, i) => {
+    domainInfo.set(dom, {
+      data: domainDatasetFor(dom),
+      dsName: i === 0 ? PRIMARY_DS : `${PRIMARY_DS}${i + 1}`,
+      connName: i === 0 ? "textscan.fig" : `textscan.fig${i + 1}`,
+      caption: `${domainLabel(dom)} Data`,
+      fileName: i === 0 ? "data.csv" : `data_${dom}.csv`,
+    });
+  });
+  const primary = domainInfo.get(distinctDomains[0])!;
+  const data = primary.data; // primary dataset (drives the dummy fallback + spec.data)
+  const { fields, rows } = data;
+  const ctx: FaithfulCtx = { data, worksheets: [], actions: [], used: new Set(), imgN: 0, sheetN: 0, sheetIdToWs: new Map(), navButtons: [] };
+
   // Dashboard names must be UNIQUE across the workbook: Tableau's <windows>
   // section enforces a unique-name (and unique simple-id) identity constraint, so
   // two frames named the same (e.g. several "Data Metrics") would otherwise fail
@@ -636,11 +908,22 @@ function assembleFaithfulWorkbook(
   // up front so dashName flows consistently into the spec, actions, nav targets,
   // and the per-dashboard window uuid.
   const resolvedDashNames = uniqueDashNames(dashModels.map((m) => m.title || "Dashboard"));
-  const dashboards = dashModels.map((m, i) => buildFaithfulDashboard(m, ctx, resolvedDashNames[i]));
+  const dashboards = dashModels.map((m, i) => {
+    const info = domainInfo.get(domainOf(m))!;
+    return buildFaithfulDashboard(m, ctx, resolvedDashNames[i], info.data, info.dsName);
+  });
   if (opts?.layout === "flow") for (const d of dashboards) applyFlowLayout(d);
   // Now the sheet-only worksheets (after dashboards, so sheetIdToWs already has
   // every placed sheet; these add the extra nav-target worksheets on top).
-  for (const m of sheetOnlyModels) materializeSheetOnly(m, ctx);
+  for (const m of sheetOnlyModels) {
+    const info = domainInfo.get(domainOf(m))!;
+    materializeSheetOnly(m, ctx, info.data, info.dsName);
+  }
+  // Non-primary domains become extra inline datasources (each with its own CSV).
+  const extraData = distinctDomains.slice(1).map((dom) => {
+    const info = domainInfo.get(dom)!;
+    return { dsName: info.dsName, connName: info.connName, caption: info.caption, fileName: info.fileName, fields: info.data.fields, rows: info.data.rows };
+  });
 
   // A workbook needs >=1 worksheet. If NO design had a SHEET/-tagged layer, keep
   // one unplaced dummy so the faithful (text/shape) export still opens.
@@ -649,8 +932,8 @@ function assembleFaithfulWorkbook(
       id: nextId("ws"),
       name: "Sheet 1",
       mark: "Bar",
-      dimension: "Region",
-      measures: [{ field: "Sales", agg: "Sum" }],
+      dimension: data.catDim,
+      measures: [{ field: data.meas[0], agg: "Sum" }],
       dualAxis: false,
       showLabels: false,
     });
@@ -707,7 +990,8 @@ function assembleFaithfulWorkbook(
   return {
     workbookName: (first?.title || "Workbook").replace(/[\\/:*?"<>|]+/g, " ").trim() || "Workbook",
     tableauVersion: "2026.2",
-    data: { fileName: "data.csv", fields, calcs: [], rows },
+    data: { fileName: primary.fileName, fields, calcs: [], rows },
+    extraData: extraData.length ? extraData : undefined,
     worksheets: ctx.worksheets,
     dashboards,
     actions: ctx.actions,

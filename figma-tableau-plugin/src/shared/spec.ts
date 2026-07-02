@@ -73,6 +73,11 @@ export interface WorksheetSpec {
   // background; a <nav-action> sourced from it navigates on click. When set, the
   // generator emits a dedicated button-worksheet and ignores mark/dimension/measures.
   navButton?: { caption: string; bg: string; fg: string; fontSize: number };
+  // Which datasource this worksheet binds to. Undefined = the primary `data`
+  // (federated.fig). Set to an `ExtraDataset.dsName` when a multi-dashboard export
+  // mixes domains (e.g. a Clinical dashboard and a Sales dashboard each get their
+  // OWN dataset, so a sales chart never shows clinical fields).
+  dsName?: string;
 }
 
 // Confirmed action kinds (Tableau 2026.2 references): highlight = tsc:brush
@@ -203,6 +208,21 @@ export interface DataSpec {
 }
 
 /**
+ * An ADDITIONAL inline datasource beyond the primary `WorkbookSpec.data`. Used so a
+ * multi-dashboard export that mixes domains gives each dashboard its own data:
+ * worksheets reference it by `WorksheetSpec.dsName`. Each ships its own CSV under
+ * Data/<fileName> (packaged as a raw asset). No calcs/color — just fields + rows.
+ */
+export interface ExtraDataset {
+  dsName: string; // e.g. "federated.fig2" (referenced by WorksheetSpec.dsName)
+  connName: string; // e.g. "textscan.fig2"
+  caption: string; // e.g. "Sales Data"
+  fileName: string; // e.g. "data_sales.csv"
+  fields: SpecField[];
+  rows: string[][];
+}
+
+/**
  * A quick-filter found inside an imported worksheet (lifted from its <slices>).
  * Placed on the dashboard as a real filter card bound to that worksheet's own
  * data when the sheet is swapped in.
@@ -258,6 +278,9 @@ export interface WorkbookSpec {
   workbookName: string;
   tableauVersion: string;
   data: DataSpec;
+  // Extra per-domain datasources (multi-dashboard mixed-domain export). Each
+  // worksheet with a matching `dsName` binds here instead of `data`.
+  extraData?: ExtraDataset[];
   worksheets: WorksheetSpec[];
   dashboards: DashboardSpec[];
   actions: ActionSpec[];

@@ -396,92 +396,355 @@ async function insertLibraryComponent(componentId: string): Promise<void> {
   figma.notify(`Inserted ${t.name} beside your dashboard`);
 }
 
-/** Dashboard templates: create a full dashboard layout with multiple components. */
-const TEMPLATES: Record<string, { name: string; w: number; h: number; children: { name: string; w: number; h: number; x: number; y: number; fill: RGB; caption?: string; capColor?: RGB; radius?: number; fontSize?: number }[] }> = {
+/** Dashboard templates: create a full dashboard layout with multiple components.
+ * Each template has a DISTINCT layout (sidebar / hero+rail / two-column / hero+
+ * scorecard / monitoring grid) and a domain-appropriate set of charts + KPIs, so
+ * applying one gives a purpose-built starting point \u2014 not the same grid recolored. */
+interface TChild {
+  name: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  fill: RGB;
+  caption?: string;
+  capColor?: RGB;
+  radius?: number;
+  fontSize?: number;
+  label?: string; // KPI small heading above the value
+  delta?: string; // KPI change line below the value
+  deltaColor?: RGB;
+}
+
+// Shared template palette (light cards on a dark canvas).
+const T_KPI: RGB = { r: 0.95, g: 0.96, b: 1.0 };
+const T_SH: RGB = { r: 0.93, g: 0.94, b: 0.98 };
+const T_FIL: RGB = { r: 1, g: 1, b: 1 };
+const T_SHCAP: RGB = { r: 0.25, g: 0.28, b: 0.42 };
+const T_VAL: RGB = { r: 0.1, g: 0.12, b: 0.2 };
+const T_UP: RGB = { r: 0.13, g: 0.6, b: 0.35 }; // positive / good change
+const T_DOWN: RGB = { r: 0.86, g: 0.15, b: 0.15 }; // negative / bad change
+const T_BG: RGB = { r: 0.07, g: 0.075, b: 0.085 };
+const T_TITLE: RGB = { r: 0.92, g: 0.93, b: 0.97 };
+
+// Concise child builders so each template reads as a layout, not a wall of RGB.
+const tTitle = (name: string, x: number, y: number, w: number, caption: string): TChild =>
+  ({ name, x, y, w, h: 30, fill: T_BG, caption, capColor: T_TITLE, fontSize: 16 });
+const tKpi = (
+  name: string, x: number, y: number, w: number, h: number,
+  value: string, label: string, delta?: string, deltaColor: RGB = T_UP,
+): TChild => ({ name, x, y, w, h, fill: T_KPI, caption: value, capColor: T_VAL, fontSize: h >= 96 ? 30 : 26, label, delta, deltaColor });
+const tSheet = (name: string, x: number, y: number, w: number, h: number, caption: string): TChild =>
+  ({ name, x, y, w, h, fill: T_SH, caption, capColor: T_SHCAP });
+const tFilter = (name: string, x: number, y: number, w: number, h: number, caption: string): TChild =>
+  ({ name, x, y, w, h, fill: T_FIL, caption, capColor: T_SHCAP, radius: 8 });
+
+// Per-category dashboard background (dark, distinctly hued) so each template
+// reads as its own category at a glance \u2014 e.g. deep blue for clinical, green for
+// sales. Light cards (T_SH / T_KPI) keep their contrast on every one.
+const T_BG_CLINICAL: RGB = { r: 0.04, g: 0.09, b: 0.16 };
+const T_BG_SALES: RGB = { r: 0.04, g: 0.12, b: 0.08 };
+const T_BG_FINANCE: RGB = { r: 0.05, g: 0.07, b: 0.13 };
+const T_BG_EXEC: RGB = { r: 0.08, g: 0.07, b: 0.12 };
+const T_BG_OPS: RGB = { r: 0.12, g: 0.08, b: 0.03 };
+const T_BG_MARKETING: RGB = { r: 0.13, g: 0.05, b: 0.10 };
+const T_BG_HR: RGB = { r: 0.09, g: 0.05, b: 0.13 };
+const T_BG_SUPPLY: RGB = { r: 0.03, g: 0.11, b: 0.11 };
+const T_BG_SUPPORT: RGB = { r: 0.03, g: 0.10, b: 0.14 };
+const T_BG_PRODUCT: RGB = { r: 0.07, g: 0.05, b: 0.14 };
+const T_BG_ITOPS: RGB = { r: 0.05, g: 0.08, b: 0.12 };
+const T_BG_MFG: RGB = { r: 0.09, g: 0.09, b: 0.10 };
+const T_BG_RETAIL: RGB = { r: 0.14, g: 0.05, b: 0.05 };
+const T_BG_PROJECT: RGB = { r: 0.06, g: 0.06, b: 0.14 };
+const T_BG_ESG: RGB = { r: 0.03, g: 0.10, b: 0.06 };
+
+const TEMPLATES: Record<string, { name: string; w: number; h: number; bg?: RGB; children: TChild[] }> = {
+  // \u2500\u2500 Clinical \u2014 LEFT SIDEBAR: KPI/filter rail on the left, charts fill the right.
   "clinical": {
     name: "Clinical Dashboard",
-    w: 1200, h: 800,
+    w: 1300, h: 820, bg: T_BG_CLINICAL,
     children: [
-      { name: "KPI/Patients", w: 240, h: 90, x: 20, y: 20, fill: { r: 0.95, g: 0.96, b: 1.0 }, caption: "1,284", capColor: { r: 0.1, g: 0.12, b: 0.2 }, fontSize: 28 },
-      { name: "KPI/Readmissions", w: 240, h: 90, x: 280, y: 20, fill: { r: 0.95, g: 0.96, b: 1.0 }, caption: "3.2%", capColor: { r: 0.1, g: 0.12, b: 0.2 }, fontSize: 28 },
-      { name: "KPI/Avg Stay", w: 240, h: 90, x: 540, y: 20, fill: { r: 0.95, g: 0.96, b: 1.0 }, caption: "4.7d", capColor: { r: 0.1, g: 0.12, b: 0.2 }, fontSize: 28 },
-      { name: "KPI/Bed Occupancy", w: 240, h: 90, x: 800, y: 20, fill: { r: 0.95, g: 0.96, b: 1.0 }, caption: "87%", capColor: { r: 0.1, g: 0.12, b: 0.2 }, fontSize: 28 },
-      { name: "SHEET/Admissions Trend[line]", w: 560, h: 300, x: 20, y: 130, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Admissions Trend", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
-      { name: "SHEET/Department Breakdown[bar]", w: 380, h: 300, x: 600, y: 130, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Dept Breakdown", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
-      { name: "SHEET/Patient Demographics[pie]", w: 380, h: 280, x: 20, y: 450, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Demographics", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
-      { name: "SHEET/Readmission Rate[scatter]", w: 380, h: 280, x: 420, y: 450, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Readmission Rate", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
-      { name: "FILTER/Department", w: 200, h: 40, x: 860, y: 450, fill: { r: 1, g: 1, b: 1 }, caption: "Department \u25BE", capColor: { r: 0.25, g: 0.28, b: 0.42 }, radius: 8 },
-      { name: "FILTER/Date Range", w: 200, h: 40, x: 860, y: 510, fill: { r: 1, g: 1, b: 1 }, caption: "Date \u25BE", capColor: { r: 0.25, g: 0.28, b: 0.42 }, radius: 8 },
-      { name: "TEXT/Clinical Dashboard", w: 400, h: 32, x: 20, y: 750, fill: { r: 1, g: 1, b: 1 }, caption: "Clinical Performance Dashboard", capColor: { r: 0.06, g: 0.09, b: 0.15 }, fontSize: 11 },
+      tTitle("TEXT/Title", 24, 20, 520, "Clinical Performance Dashboard"),
+      tKpi("KPI/Total Patients", 24, 64, 250, 100, "1,284", "Total Patients", "+4.2% MoM"),
+      tKpi("KPI/Readmission Rate", 24, 176, 250, 100, "3.2%", "Readmission Rate", "-0.6% MoM"),
+      tKpi("KPI/Avg Length of Stay", 24, 288, 250, 100, "4.7 d", "Avg Length of Stay", "-0.3 d"),
+      tKpi("KPI/Bed Occupancy", 24, 400, 250, 100, "87%", "Bed Occupancy", "+2 pts"),
+      tFilter("FILTER/Department", 24, 512, 250, 44, "Department \u25BE"),
+      tFilter("FILTER/Month", 24, 568, 250, 44, "Month \u25BE"),
+      tSheet("SHEET/Admissions Trend[line]", 298, 64, 978, 280, "Admissions Trend"),
+      tSheet("SHEET/Admissions by Department[bar]", 298, 360, 478, 200, "Admissions by Department"),
+      tSheet("SHEET/Patient Mix[pie]", 792, 360, 484, 200, "Patient Mix"),
+      tSheet("SHEET/Readmissions vs Admissions[scatter]", 298, 576, 978, 224, "Readmissions vs Admissions"),
     ],
   },
+  // \u2500\u2500 Sales \u2014 HERO + RAIL: big trend hero with a region rail, then a 3-up row.
   "sales": {
     name: "Sales Dashboard",
-    w: 1200, h: 800,
+    w: 1280, h: 800, bg: T_BG_SALES,
     children: [
-      { name: "KPI/Revenue", w: 240, h: 90, x: 20, y: 20, fill: { r: 0.95, g: 0.96, b: 1.0 }, caption: "$2.4M", capColor: { r: 0.1, g: 0.12, b: 0.2 }, fontSize: 28 },
-      { name: "KPI/Growth", w: 240, h: 90, x: 280, y: 20, fill: { r: 0.95, g: 0.96, b: 1.0 }, caption: "+12.5%", capColor: { r: 0.1, g: 0.12, b: 0.2 }, fontSize: 28 },
-      { name: "KPI/Orders", w: 240, h: 90, x: 540, y: 20, fill: { r: 0.95, g: 0.96, b: 1.0 }, caption: "8,432", capColor: { r: 0.1, g: 0.12, b: 0.2 }, fontSize: 28 },
-      { name: "KPI/Conversion", w: 240, h: 90, x: 800, y: 20, fill: { r: 0.95, g: 0.96, b: 1.0 }, caption: "3.8%", capColor: { r: 0.1, g: 0.12, b: 0.2 }, fontSize: 28 },
-      { name: "SHEET/Sales Trend[line]", w: 760, h: 300, x: 20, y: 130, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Sales Trend", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
-      { name: "SHEET/Sales by Region[bar]", w: 400, h: 300, x: 800, y: 130, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "By Region", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
-      { name: "SHEET/Product Mix[pie]", w: 380, h: 280, x: 20, y: 460, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Product Mix", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
-      { name: "SHEET/Forecast[area]", w: 380, h: 280, x: 420, y: 460, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Forecast", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
-      { name: "FILTER/Region", w: 200, h: 40, x: 860, y: 460, fill: { r: 1, g: 1, b: 1 }, caption: "Region \u25BE", capColor: { r: 0.25, g: 0.28, b: 0.42 }, radius: 8 },
-      { name: "FILTER/Product", w: 200, h: 40, x: 860, y: 520, fill: { r: 1, g: 1, b: 1 }, caption: "Product \u25BE", capColor: { r: 0.25, g: 0.28, b: 0.42 }, radius: 8 },
-      { name: "TEXT/Sales Dashboard", w: 400, h: 32, x: 20, y: 760, fill: { r: 1, g: 1, b: 1 }, caption: "Sales Performance Dashboard", capColor: { r: 0.06, g: 0.09, b: 0.15 }, fontSize: 11 },
+      tTitle("TEXT/Title", 24, 20, 460, "Sales Performance Dashboard"),
+      tFilter("FILTER/Region", 944, 22, 150, 36, "Region \u25BE"),
+      tFilter("FILTER/Month", 1106, 22, 150, 36, "Month \u25BE"),
+      tKpi("KPI/Revenue", 24, 74, 290, 90, "$2.4M", "Revenue", "+12.5% YoY"),
+      tKpi("KPI/Growth", 330, 74, 290, 90, "+12.5%", "Growth", "vs last year"),
+      tKpi("KPI/Orders", 636, 74, 290, 90, "8,432", "Orders", "+6.1%"),
+      tKpi("KPI/Conversion", 942, 74, 290, 90, "3.8%", "Conversion", "+0.4 pts"),
+      tSheet("SHEET/Sales Trend[area]", 24, 176, 860, 320, "Sales Trend"),
+      tSheet("SHEET/Sales by Region[bar]", 900, 176, 356, 320, "Sales by Region"),
+      tSheet("SHEET/Product Mix[pie]", 24, 508, 396, 272, "Product Mix"),
+      tSheet("SHEET/Orders by Region[bar]", 436, 508, 396, 272, "Orders by Region"),
+      tSheet("SHEET/Revenue Forecast[area]", 848, 508, 408, 272, "Revenue Forecast"),
     ],
   },
+  // \u2500\u2500 Finance \u2014 TWO BIG COLUMNS under a 5-KPI strip (P&L left, breakdown right).
   "finance": {
     name: "Finance Dashboard",
-    w: 1200, h: 800,
+    w: 1260, h: 860, bg: T_BG_FINANCE,
     children: [
-      { name: "KPI/Revenue", w: 200, h: 80, x: 20, y: 20, fill: { r: 0.95, g: 0.96, b: 1.0 }, caption: "$8.2M", capColor: { r: 0.1, g: 0.12, b: 0.2 }, fontSize: 26 },
-      { name: "KPI/Expenses", w: 200, h: 80, x: 240, y: 20, fill: { r: 0.95, g: 0.96, b: 1.0 }, caption: "$5.1M", capColor: { r: 0.1, g: 0.12, b: 0.2 }, fontSize: 26 },
-      { name: "KPI/Net Income", w: 200, h: 80, x: 460, y: 20, fill: { r: 0.95, g: 0.96, b: 1.0 }, caption: "$3.1M", capColor: { r: 0.1, g: 0.12, b: 0.2 }, fontSize: 26 },
-      { name: "KPI/Margin", w: 200, h: 80, x: 680, y: 20, fill: { r: 0.95, g: 0.96, b: 1.0 }, caption: "37.8%", capColor: { r: 0.1, g: 0.12, b: 0.2 }, fontSize: 26 },
-      { name: "KPI/Cash Flow", w: 200, h: 80, x: 900, y: 20, fill: { r: 0.95, g: 0.96, b: 1.0 }, caption: "$1.2M", capColor: { r: 0.1, g: 0.12, b: 0.2 }, fontSize: 26 },
-      { name: "SHEET/P&L Trend[line]", w: 580, h: 300, x: 20, y: 120, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "P&L Trend", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
-      { name: "SHEET/Category Breakdown[bar]", w: 580, h: 300, x: 620, y: 120, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Category Breakdown", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
-      { name: "SHEET/Budget vs Actual[bar]", w: 380, h: 260, x: 20, y: 440, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Budget vs Actual", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
-      { name: "SHEET/Expenses by Dept[pie]", w: 380, h: 260, x: 420, y: 440, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Expenses by Dept", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
-      { name: "FILTER/Period", w: 200, h: 40, x: 860, y: 440, fill: { r: 1, g: 1, b: 1 }, caption: "Period \u25BE", capColor: { r: 0.25, g: 0.28, b: 0.42 }, radius: 8 },
-      { name: "FILTER/Department", w: 200, h: 40, x: 860, y: 500, fill: { r: 1, g: 1, b: 1 }, caption: "Department \u25BE", capColor: { r: 0.25, g: 0.28, b: 0.42 }, radius: 8 },
-      { name: "TEXT/Finance Dashboard", w: 400, h: 32, x: 20, y: 730, fill: { r: 1, g: 1, b: 1 }, caption: "Financial Overview Dashboard", capColor: { r: 0.06, g: 0.09, b: 0.15 }, fontSize: 11 },
+      tTitle("TEXT/Title", 24, 20, 460, "Financial Overview Dashboard"),
+      tFilter("FILTER/Quarter", 980, 22, 130, 36, "Quarter \u25BE"),
+      tFilter("FILTER/Category", 1122, 22, 114, 36, "Category \u25BE"),
+      tKpi("KPI/Revenue", 24, 74, 232, 88, "$8.2M", "Revenue", "+9% YoY"),
+      tKpi("KPI/Expenses", 268, 74, 232, 88, "$5.1M", "Expenses", "+4% YoY", T_DOWN),
+      tKpi("KPI/Net Income", 512, 74, 232, 88, "$3.1M", "Net Income", "+18% YoY"),
+      tKpi("KPI/Margin", 756, 74, 232, 88, "37.8%", "Margin", "+2.1 pts"),
+      tKpi("KPI/Cash Flow", 1000, 74, 236, 88, "$1.2M", "Cash Flow", "+0.3M"),
+      tSheet("SHEET/Revenue & Expense Trend[line]", 24, 174, 596, 330, "Revenue & Expense Trend"),
+      tSheet("SHEET/Budget vs Actual[bar]", 24, 520, 596, 320, "Budget vs Actual"),
+      tSheet("SHEET/Revenue by Category[bar]", 640, 174, 596, 330, "Revenue by Category"),
+      tSheet("SHEET/Expense Breakdown[pie]", 640, 520, 596, 320, "Expense Breakdown"),
     ],
   },
+  // \u2500\u2500 Executive \u2014 HERO TREND across the top, KPI row, then a 3-up scorecard.
   "executive": {
     name: "Executive Dashboard",
-    w: 1200, h: 800,
+    w: 1280, h: 780, bg: T_BG_EXEC,
     children: [
-      { name: "KPI/Total Revenue", w: 260, h: 100, x: 20, y: 20, fill: { r: 0.95, g: 0.96, b: 1.0 }, caption: "$24.8M", capColor: { r: 0.1, g: 0.12, b: 0.2 }, fontSize: 30 },
-      { name: "KPI/YoY Growth", w: 260, h: 100, x: 310, y: 20, fill: { r: 0.95, g: 0.96, b: 1.0 }, caption: "+18.3%", capColor: { r: 0.1, g: 0.12, b: 0.2 }, fontSize: 30 },
-      { name: "KPI/Active Users", w: 260, h: 100, x: 600, y: 20, fill: { r: 0.95, g: 0.96, b: 1.0 }, caption: "42.5K", capColor: { r: 0.1, g: 0.12, b: 0.2 }, fontSize: 30 },
-      { name: "KPI/NPS Score", w: 260, h: 100, x: 890, y: 20, fill: { r: 0.95, g: 0.96, b: 1.0 }, caption: "72", capColor: { r: 0.1, g: 0.12, b: 0.2 }, fontSize: 30 },
-      { name: "SHEET/Revenue Trend[line]", w: 780, h: 280, x: 20, y: 140, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Revenue Trend", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
-      { name: "SHEET/Channel Performance[bar]", w: 380, h: 280, x: 820, y: 140, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "By Channel", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
-      { name: "SHEET/Regional Revenue[bar]", w: 380, h: 260, x: 20, y: 450, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "By Region", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
-      { name: "SHEET/Market Share[pie]", w: 380, h: 260, x: 420, y: 450, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Market Share", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
-      { name: "SHEET/Product Scorecard[table]", w: 380, h: 260, x: 820, y: 450, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Product Scorecard", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
-      { name: "TEXT/Executive Dashboard", w: 400, h: 32, x: 20, y: 740, fill: { r: 1, g: 1, b: 1 }, caption: "Executive Overview Dashboard", capColor: { r: 0.06, g: 0.09, b: 0.15 }, fontSize: 11 },
+      tTitle("TEXT/Title", 24, 20, 420, "Executive Overview"),
+      tSheet("SHEET/Revenue Trend[line]", 24, 60, 1232, 256, "Revenue Trend"),
+      tKpi("KPI/Total Revenue", 24, 336, 296, 100, "$24.8M", "Total Revenue", "+18.3% YoY"),
+      tKpi("KPI/YoY Growth", 332, 336, 296, 100, "+18.3%", "YoY Growth", "vs last year"),
+      tKpi("KPI/Active Users", 640, 336, 296, 100, "42.5K", "Active Users", "+9.7%"),
+      tKpi("KPI/NPS Score", 948, 336, 296, 100, "72", "NPS Score", "+5 pts"),
+      tSheet("SHEET/Revenue by Channel[bar]", 24, 452, 396, 308, "Revenue by Channel"),
+      tSheet("SHEET/Market Share[pie]", 436, 452, 396, 308, "Market Share"),
+      tSheet("SHEET/Channel Scorecard[table]", 848, 452, 408, 308, "Channel Scorecard"),
     ],
   },
+  // \u2500\u2500 Operations \u2014 MONITORING GRID: KPI strip + a 2-up and a 3-up chart grid.
   "operations": {
     name: "Operations Dashboard",
-    w: 1200, h: 800,
+    w: 1320, h: 860, bg: T_BG_OPS,
     children: [
-      { name: "KPI/Efficiency", w: 220, h: 80, x: 20, y: 20, fill: { r: 0.95, g: 0.96, b: 1.0 }, caption: "94.2%", capColor: { r: 0.1, g: 0.12, b: 0.2 }, fontSize: 26 },
-      { name: "KPI/Downtime", w: 220, h: 80, x: 260, y: 20, fill: { r: 0.95, g: 0.96, b: 1.0 }, caption: "2.1h", capColor: { r: 0.1, g: 0.12, b: 0.2 }, fontSize: 26 },
-      { name: "KPI/Throughput", w: 220, h: 80, x: 500, y: 20, fill: { r: 0.95, g: 0.96, b: 1.0 }, caption: "1,842", capColor: { r: 0.1, g: 0.12, b: 0.2 }, fontSize: 26 },
-      { name: "KPI/Quality Score", w: 220, h: 80, x: 740, y: 20, fill: { r: 0.95, g: 0.96, b: 1.0 }, caption: "98.5%", capColor: { r: 0.1, g: 0.12, b: 0.2 }, fontSize: 26 },
-      { name: "KPI/On-Time Rate", w: 220, h: 80, x: 980, y: 20, fill: { r: 0.95, g: 0.96, b: 1.0 }, caption: "96%", capColor: { r: 0.1, g: 0.12, b: 0.2 }, fontSize: 26 },
-      { name: "SHEET/Production Trend[line]", w: 580, h: 280, x: 20, y: 120, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Production Trend", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
-      { name: "SHEET/Downtime by Cause[bar]", w: 580, h: 280, x: 620, y: 120, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Downtime Causes", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
-      { name: "SHEET/Quality Metrics[heatmap]", w: 380, h: 260, x: 20, y: 420, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Quality Metrics", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
-      { name: "SHEET/Bottleneck Analysis[scatter]", w: 380, h: 260, x: 420, y: 420, fill: { r: 0.93, g: 0.94, b: 0.98 }, caption: "Bottleneck Analysis", capColor: { r: 0.25, g: 0.28, b: 0.42 } },
-      { name: "FILTER/Department", w: 200, h: 40, x: 860, y: 420, fill: { r: 1, g: 1, b: 1 }, caption: "Department \u25BE", capColor: { r: 0.25, g: 0.28, b: 0.42 }, radius: 8 },
-      { name: "FILTER/Shift", w: 200, h: 40, x: 860, y: 480, fill: { r: 1, g: 1, b: 1 }, caption: "Shift \u25BE", capColor: { r: 0.25, g: 0.28, b: 0.42 }, radius: 8 },
-      { name: "TEXT/Operations Dashboard", w: 400, h: 32, x: 20, y: 720, fill: { r: 1, g: 1, b: 1 }, caption: "Operations Performance Dashboard", capColor: { r: 0.06, g: 0.09, b: 0.15 }, fontSize: 11 },
+      tTitle("TEXT/Title", 24, 20, 420, "Operations Monitoring"),
+      tFilter("FILTER/Department", 1050, 22, 128, 36, "Department \u25BE"),
+      tFilter("FILTER/Week", 1190, 22, 106, 36, "Week \u25BE"),
+      tKpi("KPI/Efficiency", 24, 74, 244, 88, "94.2%", "Efficiency", "+1.3%"),
+      tKpi("KPI/Downtime", 280, 74, 244, 88, "2.1 h", "Downtime", "-0.4 h"),
+      tKpi("KPI/Throughput", 536, 74, 244, 88, "1,842", "Throughput", "+3.5%"),
+      tKpi("KPI/Quality Score", 792, 74, 244, 88, "98.5%", "Quality Score", "+0.2%"),
+      tKpi("KPI/On-Time Rate", 1048, 74, 248, 88, "96%", "On-Time Rate", "+1 pt"),
+      tSheet("SHEET/Production Trend[line]", 24, 174, 870, 300, "Production Trend"),
+      tSheet("SHEET/Downtime by Cause[bar]", 910, 174, 386, 300, "Downtime by Cause"),
+      tSheet("SHEET/Quality Metrics[heatmap]", 24, 490, 410, 340, "Quality Metrics"),
+      tSheet("SHEET/Bottleneck Analysis[scatter]", 450, 490, 430, 340, "Bottleneck Analysis"),
+      tSheet("SHEET/Output by Department[bar]", 896, 490, 400, 340, "Output by Department"),
+    ],
+  },
+  // ── Marketing — FUNNEL HERO: KPI row, big channel-performance hero + funnel rail,
+  // then a 3-up of leads trend / conversions by channel / spend mix.
+  "marketing": {
+    name: "Marketing Dashboard",
+    w: 1300, h: 820, bg: T_BG_MARKETING,
+    children: [
+      tTitle("TEXT/Title", 24, 20, 480, "Marketing Campaign Performance"),
+      tFilter("FILTER/Channel", 980, 22, 150, 36, "Channel ▾"),
+      tFilter("FILTER/Week", 1142, 22, 134, 36, "Week ▾"),
+      tKpi("KPI/Leads", 24, 74, 296, 92, "18.2K", "Leads (MQLs)", "+14% WoW"),
+      tKpi("KPI/CTR", 336, 74, 296, 92, "3.6%", "Click-Through", "+0.5 pts"),
+      tKpi("KPI/CAC", 648, 74, 296, 92, "$42", "Cost per Lead", "-$6 WoW"),
+      tKpi("KPI/ROAS", 960, 74, 296, 92, "4.8x", "Return on Ad Spend", "+0.4x"),
+      tSheet("SHEET/Leads Trend[area]", 24, 182, 830, 300, "Leads Trend"),
+      tSheet("SHEET/Conversion Funnel[bar]", 872, 182, 404, 300, "Conversion Funnel"),
+      tSheet("SHEET/Leads by Channel[bar]", 24, 500, 400, 300, "Leads by Channel"),
+      tSheet("SHEET/Channel Mix[pie]", 448, 500, 400, 300, "Channel Mix"),
+      tSheet("SHEET/Conversions vs Leads[scatter]", 872, 500, 404, 300, "Conversions vs Leads"),
+    ],
+  },
+  // ── HR — PEOPLE OVERVIEW: KPI strip, headcount trend + attrition, then a
+  // department bar and diversity pie.
+  "hr": {
+    name: "HR Dashboard",
+    w: 1260, h: 820, bg: T_BG_HR,
+    children: [
+      tTitle("TEXT/Title", 24, 20, 460, "People & Workforce Analytics"),
+      tFilter("FILTER/Department", 980, 22, 130, 36, "Department ▾"),
+      tFilter("FILTER/Month", 1122, 22, 114, 36, "Month ▾"),
+      tKpi("KPI/Headcount", 24, 74, 232, 90, "1,204", "Headcount", "+38 MoM"),
+      tKpi("KPI/Attrition", 268, 74, 232, 90, "7.2%", "Attrition Rate", "-0.8% MoM"),
+      tKpi("KPI/Time to Hire", 512, 74, 232, 90, "28 d", "Time to Hire", "-3 d"),
+      tKpi("KPI/eNPS", 756, 74, 232, 90, "41", "Employee NPS", "+6 pts"),
+      tKpi("KPI/Offer Rate", 1000, 74, 236, 90, "82%", "Offer Accept", "+3 pts"),
+      tSheet("SHEET/Headcount Trend[line]", 24, 176, 720, 300, "Headcount Trend"),
+      tSheet("SHEET/Attrition by Department[bar]", 764, 176, 472, 300, "Attrition by Department"),
+      tSheet("SHEET/Headcount by Department[bar]", 24, 492, 590, 308, "Headcount by Department"),
+      tSheet("SHEET/Workforce Mix[pie]", 646, 492, 590, 308, "Workforce Mix"),
+    ],
+  },
+  // ── Supply Chain — FLOW: KPI strip, shipments trend hero + on-time rail, then
+  // warehouse bar, backorders and a fulfillment scatter.
+  "supplychain": {
+    name: "Supply Chain Dashboard",
+    w: 1320, h: 840, bg: T_BG_SUPPLY,
+    children: [
+      tTitle("TEXT/Title", 24, 20, 480, "Supply Chain & Logistics"),
+      tFilter("FILTER/Warehouse", 1044, 22, 140, 36, "Warehouse ▾"),
+      tFilter("FILTER/Week", 1196, 22, 100, 36, "Week ▾"),
+      tKpi("KPI/Shipments", 24, 74, 300, 90, "42.1K", "Shipments", "+5.2% WoW"),
+      tKpi("KPI/On-Time", 336, 74, 300, 90, "94.6%", "On-Time Delivery", "+1.1%"),
+      tKpi("KPI/Backorders", 648, 74, 300, 90, "312", "Backorders", "-48 WoW"),
+      tKpi("KPI/Inventory Turns", 960, 74, 300, 90, "8.4", "Inventory Turns", "+0.3"),
+      tSheet("SHEET/Shipments Trend[line]", 24, 178, 860, 300, "Shipments Trend"),
+      tSheet("SHEET/On-Time by Warehouse[bar]", 900, 178, 396, 300, "On-Time by Warehouse"),
+      tSheet("SHEET/Shipments by Warehouse[bar]", 24, 496, 400, 320, "Shipments by Warehouse"),
+      tSheet("SHEET/Backorder Mix[pie]", 448, 496, 400, 320, "Backorder Mix"),
+      tSheet("SHEET/Backorders vs Shipments[scatter]", 872, 496, 424, 320, "Backorders vs Shipments"),
+    ],
+  },
+  // ── Customer Support — SERVICE DESK: KPI strip, tickets trend hero + CSAT rail,
+  // then channel bar, backlog pie.
+  "support": {
+    name: "Customer Support Dashboard",
+    w: 1260, h: 820, bg: T_BG_SUPPORT,
+    children: [
+      tTitle("TEXT/Title", 24, 20, 500, "Customer Support Performance"),
+      tFilter("FILTER/Channel", 980, 22, 130, 36, "Channel ▾"),
+      tFilter("FILTER/Week", 1122, 22, 114, 36, "Week ▾"),
+      tKpi("KPI/Tickets", 24, 74, 232, 90, "6,842", "Tickets", "+3.1% WoW"),
+      tKpi("KPI/CSAT", 268, 74, 232, 90, "4.6", "CSAT (of 5)", "+0.2"),
+      tKpi("KPI/First Response", 512, 74, 232, 90, "1.2 h", "First Response", "-0.3 h"),
+      tKpi("KPI/Resolution", 756, 74, 232, 90, "8.4 h", "Resolution Time", "-1.1 h"),
+      tKpi("KPI/SLA", 1000, 74, 236, 90, "97%", "SLA Met", "+2 pts"),
+      tSheet("SHEET/Tickets Trend[line]", 24, 176, 720, 300, "Tickets Trend"),
+      tSheet("SHEET/Tickets by Channel[bar]", 764, 176, 472, 300, "Tickets by Channel"),
+      tSheet("SHEET/Resolved vs Open[bar]", 24, 492, 590, 308, "Resolved vs Open"),
+      tSheet("SHEET/Channel Mix[pie]", 646, 492, 590, 308, "Channel Mix"),
+    ],
+  },
+  // ── Product Analytics — GROWTH: hero DAU trend across the top, KPI row, then a
+  // feature-adoption bar, retention pie and a usage scatter.
+  "product": {
+    name: "Product Analytics Dashboard",
+    w: 1280, h: 800, bg: T_BG_PRODUCT,
+    children: [
+      tTitle("TEXT/Title", 24, 20, 460, "Product Analytics"),
+      tSheet("SHEET/Active Users Trend[area]", 24, 60, 1232, 250, "Active Users Trend"),
+      tKpi("KPI/DAU", 24, 330, 296, 96, "42.5K", "Daily Active Users", "+8.3% WoW"),
+      tKpi("KPI/Retention", 332, 330, 296, 96, "68%", "30-Day Retention", "+2 pts"),
+      tKpi("KPI/Sessions", 640, 330, 296, 96, "128K", "Sessions", "+11%"),
+      tKpi("KPI/Churn", 948, 330, 296, 96, "3.1%", "Churn Rate", "-0.4 pts"),
+      tSheet("SHEET/Usage by Feature[bar]", 24, 446, 396, 314, "Usage by Feature"),
+      tSheet("SHEET/Feature Adoption Mix[pie]", 436, 446, 396, 314, "Feature Adoption Mix"),
+      tSheet("SHEET/Sessions vs Users[scatter]", 848, 446, 408, 314, "Sessions vs Users"),
+    ],
+  },
+  // ── IT Operations — NOC: KPI strip, requests trend hero + error rail, then a
+  // service heatmap, latency bar and an errors scatter.
+  "itops": {
+    name: "IT Operations Dashboard",
+    w: 1320, h: 840, bg: T_BG_ITOPS,
+    children: [
+      tTitle("TEXT/Title", 24, 20, 460, "IT Operations & Reliability"),
+      tFilter("FILTER/Service", 1044, 22, 140, 36, "Service ▾"),
+      tFilter("FILTER/Day", 1196, 22, 100, 36, "Day ▾"),
+      tKpi("KPI/Uptime", 24, 74, 300, 90, "99.95%", "Uptime", "+0.02%"),
+      tKpi("KPI/Requests", 336, 74, 300, 90, "48.2M", "Requests / day", "+6.1%"),
+      tKpi("KPI/Error Rate", 648, 74, 300, 90, "0.12%", "Error Rate", "-0.03 pts"),
+      tKpi("KPI/Latency", 960, 74, 300, 90, "142 ms", "p95 Latency", "-8 ms"),
+      tSheet("SHEET/Requests Trend[line]", 24, 178, 860, 300, "Requests Trend"),
+      tSheet("SHEET/Errors by Service[bar]", 900, 178, 396, 300, "Errors by Service"),
+      tSheet("SHEET/Service Health[heatmap]", 24, 496, 410, 320, "Service Health"),
+      tSheet("SHEET/Requests by Service[bar]", 450, 496, 430, 320, "Requests by Service"),
+      tSheet("SHEET/Errors vs Requests[scatter]", 896, 496, 400, 320, "Errors vs Requests"),
+    ],
+  },
+  // ── Manufacturing — SHOP FLOOR: KPI strip, output trend hero + yield rail, then
+  // a defect heatmap, units bar and a defects scatter.
+  "manufacturing": {
+    name: "Manufacturing Dashboard",
+    w: 1320, h: 840, bg: T_BG_MFG,
+    children: [
+      tTitle("TEXT/Title", 24, 20, 460, "Manufacturing & Production"),
+      tFilter("FILTER/Line", 1044, 22, 140, 36, "Line ▾"),
+      tFilter("FILTER/Week", 1196, 22, 100, 36, "Week ▾"),
+      tKpi("KPI/OEE", 24, 74, 300, 90, "82.4%", "OEE", "+1.6%"),
+      tKpi("KPI/Units", 336, 74, 300, 90, "94.2K", "Units Produced", "+4.1% WoW"),
+      tKpi("KPI/Defect Rate", 648, 74, 300, 90, "1.8%", "Defect Rate", "-0.3 pts"),
+      tKpi("KPI/Yield", 960, 74, 300, 90, "96.5%", "First-Pass Yield", "+0.7%"),
+      tSheet("SHEET/Output Trend[line]", 24, 178, 860, 300, "Output Trend"),
+      tSheet("SHEET/Units by Line[bar]", 900, 178, 396, 300, "Units by Line"),
+      tSheet("SHEET/Defect Heatmap[heatmap]", 24, 496, 410, 320, "Defect Heatmap"),
+      tSheet("SHEET/Yield by Line[bar]", 450, 496, 430, 320, "Yield by Line"),
+      tSheet("SHEET/Defects vs Units[scatter]", 896, 496, 400, 320, "Defects vs Units"),
+    ],
+  },
+  // ── Retail / E-commerce — STOREFRONT: KPI row, revenue trend hero + category rail,
+  // then category mix pie, units bar and a basket scatter.
+  "retail": {
+    name: "Retail Dashboard",
+    w: 1280, h: 820, bg: T_BG_RETAIL,
+    children: [
+      tTitle("TEXT/Title", 24, 20, 500, "Retail & E-commerce Overview"),
+      tFilter("FILTER/Category", 978, 22, 140, 36, "Category ▾"),
+      tFilter("FILTER/Month", 1130, 22, 126, 36, "Month ▾"),
+      tKpi("KPI/Revenue", 24, 74, 296, 92, "$4.8M", "Revenue", "+9.4% MoM"),
+      tKpi("KPI/AOV", 336, 74, 296, 92, "$68", "Avg Order Value", "+$4"),
+      tKpi("KPI/Conversion", 648, 74, 296, 92, "3.1%", "Checkout Conversion", "+0.3 pts"),
+      tKpi("KPI/Returns", 960, 74, 296, 92, "4.2%", "Return Rate", "-0.5 pts"),
+      tSheet("SHEET/Revenue Trend[area]", 24, 182, 830, 300, "Revenue Trend"),
+      tSheet("SHEET/Revenue by Category[bar]", 872, 182, 404, 300, "Revenue by Category"),
+      tSheet("SHEET/Category Mix[pie]", 24, 500, 400, 300, "Category Mix"),
+      tSheet("SHEET/Units by Category[bar]", 448, 500, 400, 300, "Units by Category"),
+      tSheet("SHEET/Units vs Revenue[scatter]", 872, 500, 404, 300, "Units vs Revenue"),
+    ],
+  },
+  // ── Project Management — DELIVERY: KPI strip, burn-up (completed) trend hero +
+  // open rail, then a team bar and a status pie.
+  "project": {
+    name: "Project Management Dashboard",
+    w: 1260, h: 820, bg: T_BG_PROJECT,
+    children: [
+      tTitle("TEXT/Title", 24, 20, 500, "Project Delivery & Velocity"),
+      tFilter("FILTER/Team", 980, 22, 130, 36, "Team ▾"),
+      tFilter("FILTER/Sprint", 1122, 22, 114, 36, "Sprint ▾"),
+      tKpi("KPI/Velocity", 24, 74, 232, 90, "48", "Velocity (pts)", "+5 pts"),
+      tKpi("KPI/Completed", 268, 74, 232, 90, "312", "Stories Done", "+18 sprint"),
+      tKpi("KPI/Open", 512, 74, 232, 90, "74", "Open Items", "-11"),
+      tKpi("KPI/On-Track", 756, 74, 232, 90, "86%", "On-Track", "+4 pts"),
+      tKpi("KPI/Cycle Time", 1000, 74, 236, 90, "3.4 d", "Cycle Time", "-0.6 d"),
+      tSheet("SHEET/Completed Trend[line]", 24, 176, 720, 300, "Completed by Sprint"),
+      tSheet("SHEET/Open by Team[bar]", 764, 176, 472, 300, "Open Items by Team"),
+      tSheet("SHEET/Throughput by Team[bar]", 24, 492, 590, 308, "Throughput by Team"),
+      tSheet("SHEET/Status Mix[pie]", 646, 492, 590, 308, "Status Mix"),
+    ],
+  },
+  // ── ESG / Sustainability — IMPACT: KPI strip, emissions trend hero + renewable
+  // rail, then a facility bar and an energy-mix pie.
+  "esg": {
+    name: "ESG Dashboard",
+    w: 1260, h: 820, bg: T_BG_ESG,
+    children: [
+      tTitle("TEXT/Title", 24, 20, 500, "ESG & Sustainability"),
+      tFilter("FILTER/Facility", 980, 22, 130, 36, "Facility ▾"),
+      tFilter("FILTER/Quarter", 1122, 22, 114, 36, "Quarter ▾"),
+      tKpi("KPI/Emissions", 24, 74, 296, 92, "12.4K t", "CO₂ Emissions", "-6.2% YoY"),
+      tKpi("KPI/Renewable", 336, 74, 296, 92, "58%", "Renewable Energy", "+7 pts"),
+      tKpi("KPI/Water", 648, 74, 296, 92, "-9%", "Water Intensity", "vs baseline"),
+      tKpi("KPI/Diversion", 960, 74, 296, 92, "74%", "Waste Diversion", "+5 pts"),
+      tSheet("SHEET/Emissions Trend[line]", 24, 182, 720, 300, "Emissions Trend"),
+      tSheet("SHEET/Emissions by Facility[bar]", 764, 182, 472, 300, "Emissions by Facility"),
+      tSheet("SHEET/Renewable by Facility[bar]", 24, 498, 590, 302, "Renewable by Facility"),
+      tSheet("SHEET/Energy Mix[pie]", 646, 498, 590, 302, "Energy Mix"),
     ],
   },
 };
@@ -506,7 +769,7 @@ async function applyTemplate(templateId: string): Promise<void> {
   dash.x = originX;
   dash.y = originY;
   dash.cornerRadius = 10;
-  dash.fills = [{ type: "SOLID", color: { r: 0.07, g: 0.075, b: 0.085 } }];
+  dash.fills = [{ type: "SOLID", color: t.bg ?? T_BG }];
 
   for (const c of t.children) {
     const child = figma.createFrame();
@@ -520,16 +783,26 @@ async function applyTemplate(templateId: string): Promise<void> {
       child.strokes = [{ type: "SOLID", color: { r: 0.78, g: 0.8, b: 0.9 } }];
       child.strokeWeight = 1;
     }
-    if (font && c.caption) {
+    if (font && (c.caption || c.label)) {
       const fontSize = c.fontSize ?? 14;
       const color = c.capColor ?? { r: 0.25, g: 0.28, b: 0.42 };
-      if (c.name.startsWith("KPI/") || c.name.startsWith("TEXT/")) {
+      if (c.name.startsWith("KPI/") && c.label) {
+        // Rich KPI card: small label / big value / change line, as ONE styled
+        // text layer in a hug-height Auto-Layout (reuses fillKpiRows so it never
+        // clips and stays editable, exactly like the library KPI cards).
+        const rows: Array<{ text: string; size: number; color: RGB }> = [
+          { text: c.label, size: 13, color: { r: 0.4, g: 0.43, b: 0.55 } },
+          { text: c.caption ?? "", size: fontSize, color },
+        ];
+        if (c.delta) rows.push({ text: c.delta, size: 12, color: c.deltaColor ?? T_UP });
+        fillKpiRows(child, font, rows);
+      } else if (c.name.startsWith("KPI/") || c.name.startsWith("TEXT/")) {
         // KPI / Text zones: hug-height Auto-Layout so the caption never clips.
-        fillCaption(child, font, c.caption, fontSize, color, 10, 10);
+        fillCaption(child, font, c.caption ?? "", fontSize, color, 10, 10);
       } else {
         const txt = figma.createText();
         txt.fontName = font;
-        txt.characters = c.caption;
+        txt.characters = c.caption ?? "";
         txt.fontSize = fontSize;
         txt.fills = [{ type: "SOLID", color }];
         child.appendChild(txt);

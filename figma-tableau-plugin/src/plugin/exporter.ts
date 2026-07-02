@@ -267,6 +267,22 @@ function importedRawAssets(spec: WorkbookSpec): RawAsset[] {
   return spec.imports ? spec.imports.assets.map((a) => ({ path: a.path, bytes: a.bytes })) : [];
 }
 
+/** Extra per-domain datasource CSVs (mixed-domain multi-dashboard export). Each
+ * ships as Data/<fileName> so its inline textscan connection resolves. */
+function extraDatasetAssets(spec: WorkbookSpec): RawAsset[] {
+  if (!spec.extraData?.length) return [];
+  const enc = new TextEncoder();
+  return spec.extraData.map((ed) => ({
+    path: `${DATA_DIR}/${ed.fileName}`,
+    bytes: enc.encode(rowsToCsv(ed.fields, ed.rows)),
+  }));
+}
+
+/** All non-primary CSVs/assets to package alongside the primary Data/<csv>. */
+function allRawAssets(spec: WorkbookSpec): RawAsset[] {
+  return [...importedRawAssets(spec), ...extraDatasetAssets(spec)];
+}
+
 /** Generate + package + download a WorkbookSpec. */
 export async function exportSpecTwbx(spec: WorkbookSpec): Promise<ExportResult> {
   const res = generateSpecWorkbook(spec);
@@ -276,7 +292,7 @@ export async function exportSpecTwbx(spec: WorkbookSpec): Promise<ExportResult> 
     csvFile: res.csvFile,
     csvText: res.csvText,
     images: collectImageAssets(spec),
-    rawAssets: importedRawAssets(spec),
+    rawAssets: allRawAssets(spec),
   });
   return res;
 }
@@ -290,7 +306,7 @@ export async function buildSpecBlob(spec: WorkbookSpec): Promise<Blob> {
     csvFile: res.csvFile,
     csvText: res.csvText,
     images: collectImageAssets(spec),
-    rawAssets: importedRawAssets(spec),
+    rawAssets: allRawAssets(spec),
   });
 }
 
@@ -327,6 +343,13 @@ export function validateTwb(xml: string, worksheetNames: string[]): string[] {
   // confirmed-safe way to toggle tooltips, so it must never be emitted.
   if (/tooltip-visibility/.test(xml)) {
     throw new Error("Generated .twb contains 'tooltip-visibility', which Tableau 2026.2 rejects (D2E8DA72).");
+  }
+
+  // 2b-iii. The <angle> pane encoding is NOT in the 2026.2 mark content model
+  // ("no declaration found for element 'angle'", D2E8DA72) — a pie sizes wedges
+  // with <wedge-size>. Guard so a pie can never ship an unloadable file again.
+  if (/<angle[\s/>]/.test(xml)) {
+    throw new Error("Generated .twb contains <angle>, which Tableau 2026.2 rejects (use <wedge-size>; D2E8DA72).");
   }
 
   // 2c. The native <button> dashboard-object is rejected by the user's Tableau

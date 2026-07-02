@@ -292,7 +292,22 @@ export interface MsgInsertLibraryComponent {
   componentId: LibraryComponentId;
 }
 
-export type TemplateId = "clinical" | "sales" | "finance" | "executive" | "operations";
+export type TemplateId =
+  | "clinical"
+  | "sales"
+  | "finance"
+  | "executive"
+  | "operations"
+  | "marketing"
+  | "hr"
+  | "supplychain"
+  | "support"
+  | "product"
+  | "itops"
+  | "manufacturing"
+  | "retail"
+  | "project"
+  | "esg";
 
 export interface MsgApplyTemplate {
   type: "apply-template";

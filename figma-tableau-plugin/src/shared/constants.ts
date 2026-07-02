@@ -96,11 +96,26 @@ export const HEADER_KEYWORDS = ["header", "topbar", "title bar", "appbar"];
 export const FOOTER_KEYWORDS = ["footer", "legend"];
 
 /** Dashboard domain detection — drives nicer placeholder field sets. */
+// Checked in order — first match wins — so MORE-SPECIFIC domains come before the
+// generic ones (itops before ops, etc.). Avoid generic measure words like
+// "revenue"/"orders"/"units" as keywords: they appear across many domains and
+// would misroute a dashboard. Prefer the domain's title term + distinctive nouns.
 export const DOMAIN_KEYWORDS: Array<{ domain: string; words: string[] }> = [
-  { domain: "clinical", words: ["clinical", "trial", "patient", "subject", "adverse", "enrollment", "site", "visit"] },
-  { domain: "finance", words: ["finance", "revenue", "profit", "expense", "budget", "cash", "p&l"] },
-  { domain: "sales", words: ["sales", "pipeline", "deal", "lead", "quota", "conversion"] },
-  { domain: "ops", words: ["operation", "ops", "sla", "incident", "ticket", "uptime", "throughput"] },
+  { domain: "clinical", words: ["clinical", "trial", "patient", "subject", "adverse", "admission", "readmission", "healthcare", "hospital", "diagnosis"] },
+  { domain: "finance", words: ["finance", "financial", "p&l", "budget", "expense", "cash flow", "net income", "ebitda", "ledger", "gross margin"] },
+  { domain: "sales", words: ["sales", "pipeline", "deal", "quota", "win rate", "bookings"] },
+  { domain: "marketing", words: ["marketing", "campaign", "ctr", "impression", "seo", "brand", "mql", "click-through"] },
+  { domain: "hr", words: ["human resource", "headcount", "attrition", "employee", "recruit", "payroll", "hiring", "workforce", "onboarding"] },
+  { domain: "supplychain", words: ["supply chain", "logistics", "warehouse", "inventory", "shipment", "procurement", "freight", "backorder"] },
+  { domain: "support", words: ["customer support", "helpdesk", "help desk", "ticket", "csat", "sla", "resolution time", "first response"] },
+  { domain: "product", words: ["product analytics", "feature adoption", "retention", "dau", "mau", "churn", "sessions"] },
+  { domain: "itops", words: ["it operations", "server", "incident", "uptime", "latency", "error rate", "devops", "infrastructure", "requests"] },
+  { domain: "manufacturing", words: ["manufacturing", "factory", "assembly", "defect", "yield", "oee", "production line"] },
+  { domain: "retail", words: ["retail", "e-commerce", "ecommerce", "storefront", "basket", "sku", "checkout", "merchandise"] },
+  { domain: "project", words: ["project", "sprint", "backlog", "milestone", "velocity", "roadmap", "gantt"] },
+  { domain: "esg", words: ["esg", "sustainability", "emission", "carbon", "renewable", "waste", "environmental", "governance"] },
+  { domain: "ops", words: ["operations", "operation", "ops", "throughput", "downtime", "bottleneck", "utilization"] },
+  { domain: "executive", words: ["executive", "exec", "leadership", "overview", "scorecard", "board"] },
 ];
 
 /** Per-domain placeholder data fields (dimension + measures). */

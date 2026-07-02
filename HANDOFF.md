@@ -3,8 +3,23 @@
 > Self-contained context for any AI/engineer picking this up, **including on a
 > device without the local Claude memory**. It folds in the essential facts from
 > the private memory files (the Tableau 2026.2 recipe, the reference-export
-> workflow, and project state). Last updated: **2026-07-01**, build
-> `cleanup-simpleid-49`.
+> workflow, and project state). Last updated: **2026-07-02**, build
+> `multi-ds-15-templates-61`.
+>
+> **Latest (build 61, 2026-07-02):** (1) **Pie load-error fixed** — a pie sizes
+> wedges with **`<wedge-size>`**, NOT `<angle>` (D2E8DA72 "no declaration found for
+> element 'angle'"; valid encodings: color|size|text|shape|wedge-size|lod|geometry|
+> image|tooltip|path|level|edge). `validateTwb` now guards `<angle>`. (2)
+> **Per-dashboard datasources** — a mixed-domain multi-dashboard export used to give
+> every chart ONE domain's data (a Sales dashboard showed clinical fields). Now each
+> dashboard's domain is detected independently and gets its OWN inline datasource
+> (`WorkbookSpec.extraData` + `WorksheetSpec.dsName`; primary `federated.fig`, extras
+> `federated.fig2…` each with `data_<domain>.csv`). (3) **15 dashboard templates**
+> (10 new: marketing, hr, supplychain, support, product, itops, manufacturing,
+> retail, project, esg) — each a distinct layout + domain charts + per-category dark
+> BG color + rich label/value/delta KPIs, backed by per-domain `DOMAIN_DATASETS` and
+> collision-ordered `DOMAIN_KEYWORDS`. `tsc` clean, 16 tests green, build OK. Not
+> committed. Not yet Tableau-confirmed by the user.
 >
 > **v13 merge (2026-07-01, PR #1 from "rishit") + cleanup done.** The merge added a
 > detection/analysis engine, a UI restructure (Dashboard/Library/Account tabs), and

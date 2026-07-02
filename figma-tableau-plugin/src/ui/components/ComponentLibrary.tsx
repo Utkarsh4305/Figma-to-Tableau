@@ -198,13 +198,44 @@ export default function ComponentLibrary() {
                     JSON.stringify({ ftDrop: true, source: "library", id: c.id })
                   );
                   e.dataTransfer.effectAllowed = "copy";
+                  // Over the Figma canvas the browser draws a "no-drop" cursor
+                  // (the canvas is in Figma's top window — a sandboxed plugin
+                  // iframe can't register a drop target there, so it can't be
+                  // recoloured). A drag image makes a labelled preview of the
+                  // card follow the pointer so the drag reads as intentional.
+                  const card = e.currentTarget as HTMLElement;
+                  const ghost = card.cloneNode(true) as HTMLElement;
+                  ghost.style.position = "absolute";
+                  ghost.style.top = "-9999px";
+                  ghost.style.left = "-9999px";
+                  ghost.style.width = `${card.offsetWidth}px`;
+                  ghost.style.opacity = "0.9";
+                  ghost.style.pointerEvents = "none";
+                  document.body.appendChild(ghost);
+                  e.dataTransfer.setDragImage(
+                    ghost,
+                    card.offsetWidth / 2,
+                    card.offsetHeight / 2
+                  );
+                  // Remove once the browser has snapshotted it for the drag.
+                  setTimeout(() => ghost.remove(), 0);
                 }}
                 onDragEnd={(e) => {
                   // Drags that START in the plugin UI don't reach Figma's canvas
                   // drop handler via native dataTransfer — you must post a special
                   // `pluginDrop` message on dragend. Figma maps clientX/clientY to
-                  // the canvas and fires figma.on("drop") (only if dropped OUTSIDE
-                  // the UI iframe, i.e. on the canvas).
+                  // the canvas and fires figma.on("drop").
+                  //
+                  // Figma does NOT filter drops that land back on the panel, so we
+                  // must: only insert when the pointer was released OUTSIDE the
+                  // plugin window (i.e. the user actually dragged onto the canvas).
+                  // A mis-drop inside the panel is ignored — nothing is added.
+                  const insideUI =
+                    e.clientX >= 0 &&
+                    e.clientY >= 0 &&
+                    e.clientX <= window.innerWidth &&
+                    e.clientY <= window.innerHeight;
+                  if (insideUI) return;
                   parent.postMessage(
                     {
                       pluginDrop: {

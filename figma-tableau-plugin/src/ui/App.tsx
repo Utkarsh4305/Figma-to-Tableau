@@ -78,12 +78,20 @@ export default function App() {
   // reads as a drag. (Dropping actually happens on the Figma canvas via the
   // card's dragend `pluginDrop` message.)
   useEffect(() => {
-    const onDragOver = (e: DragEvent) => {
+    // Both `dragenter` and `dragover` must call preventDefault for the browser to
+    // treat the panel as a valid drop target; otherwise it paints the ⃠ (no-drop)
+    // cursor even though the drag is fine. Setting dropEffect="copy" makes it read
+    // as a copy (+) cursor the whole time you're over the plugin UI.
+    const allowDrop = (e: DragEvent) => {
       e.preventDefault();
       if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
     };
-    window.addEventListener("dragover", onDragOver);
-    return () => window.removeEventListener("dragover", onDragOver);
+    window.addEventListener("dragenter", allowDrop);
+    window.addEventListener("dragover", allowDrop);
+    return () => {
+      window.removeEventListener("dragenter", allowDrop);
+      window.removeEventListener("dragover", allowDrop);
+    };
   }, []);
 
   // Imported real worksheets (the swap feature) — held in a ref so the once-

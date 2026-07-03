@@ -7,7 +7,7 @@ import { faithfulSpecMulti } from "../plugin/faithfulSpec";
 
 import { exportSpecTwbx, applyImportedSwap } from "../plugin/exporter";
 import { parseImport, parsedImportFromStored } from "../plugin/twbImport";
-import { FREE_EXPORT_LIMIT, PREMIUM_PRICE_LABEL, PAYMENT_SERVER_URL } from "../shared/constants";
+import { FREE_EXPORT_LIMIT, PREMIUM_PRICE_LABEL, PAYMENT_SERVER_URL, WEBSITE_URL } from "../shared/constants";
 const FEEDBACK_WEBHOOK_URL = "https://discord.com/api/webhooks/1522511235969449994/d4bOsdn6-HiMg1EgA41CbsmsZ8ShOzTTV4g0yOnwlGMs3_5SaLmRu0C31i_uwwhQBM2l";
 
 import ComponentLibrary from "./components/ComponentLibrary";
@@ -223,15 +223,15 @@ export default function App() {
     }
   };
 
-  /** Open the Razorpay checkout page (hosted by the payment server) in the browser. */
+  /** Open the website's upgrade page (it hands off to the Razorpay checkout). */
   const openCheckout = () => {
     if (!account.userId) {
       setStatus({ kind: "err", text: "Figma didn't provide a user id — restart the plugin and try again." });
       return;
     }
-    const url = `${PAYMENT_SERVER_URL}/checkout?uid=${encodeURIComponent(account.userId)}&name=${encodeURIComponent(account.userName ?? "")}`;
+    const url = `${WEBSITE_URL}/upgrade?uid=${encodeURIComponent(account.userId)}&name=${encodeURIComponent(account.userName ?? "")}`;
     window.open(url, "_blank");
-    setStatus({ kind: "warn", text: "Checkout opened in your browser. After paying, come back and click “Refresh status”." });
+    setStatus({ kind: "warn", text: "Upgrade page opened in your browser. After paying, come back and click “Refresh status”." });
   };
 
   const sendFeedback = async () => {

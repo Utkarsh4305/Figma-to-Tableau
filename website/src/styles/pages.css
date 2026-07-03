@@ -1,0 +1,172 @@
+/* ---------------------------------------------------------------------------
+   pages.css — non-home page shells: upgrade, placeholders, 404.
+--------------------------------------------------------------------------- */
+
+.page {
+  position: relative;
+  min-height: calc(100vh - var(--nav-h));
+  padding: calc(var(--nav-h) + 72px) 0 110px;
+  overflow: hidden;
+}
+
+/* Offset for pages composed of home sections (e.g. /pricing). */
+.page-offset {
+  padding-top: var(--nav-h);
+}
+
+.section--page {
+  padding-top: 96px;
+}
+
+/* --- /upgrade --------------------------------------------------------------- */
+
+.upgrade {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 44px;
+  align-items: start;
+}
+
+.upgrade__card {
+  padding: 40px 36px 34px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.upgrade__card .plan__badge {
+  position: static;
+  align-self: flex-start;
+}
+
+.upgrade__card h1 {
+  font-size: clamp(26px, 3.4vw, 36px);
+}
+
+.upgrade__cta {
+  align-self: stretch;
+  margin-top: 6px;
+}
+
+.upgrade__note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--text-faint);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.upgrade__note svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--green);
+}
+
+.upgrade__note b {
+  color: var(--text-dim);
+}
+
+.upgrade__nouid {
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  background: rgba(251, 191, 36, 0.06);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+}
+
+.upgrade__nouid p {
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.upgrade__nouid b {
+  color: var(--text);
+}
+
+.upgrade__aside {
+  padding-top: 14px;
+}
+
+.upgrade__aside h2 {
+  font-size: 21px;
+  margin-bottom: 20px;
+}
+
+.upgrade__aside ol {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: var(--text-dim);
+  font-size: 14.5px;
+  line-height: 1.65;
+}
+
+.upgrade__aside b {
+  color: var(--text);
+}
+
+.upgrade__aside-links {
+  margin-top: 26px;
+  color: var(--text-faint);
+  font-size: 14px;
+}
+
+.upgrade__aside-links a {
+  color: var(--blue);
+}
+
+.upgrade__aside-links a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 900px) {
+  .upgrade {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- Placeholder pages (docs, blog, auth, account…) --------------------------- */
+
+.page--placeholder {
+  display: flex;
+  align-items: center;
+}
+
+.placeholder {
+  position: relative;
+  padding: 56px 48px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+.placeholder h1 {
+  font-size: clamp(28px, 4vw, 40px);
+}
+
+.placeholder p {
+  color: var(--text-dim);
+  font-size: 16px;
+  line-height: 1.7;
+  max-width: 56ch;
+}
+
+.placeholder__actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+@media (max-width: 560px) {
+  .placeholder {
+    padding: 40px 24px;
+  }
+}

@@ -1,7 +1,7 @@
 {
-  "name": "figma-tableau-payment-server",
+  "name": "figma-tableau-backend",
   "version": "1.0.0",
-  "description": "Razorpay billing server for the Figma to Tableau plugin — $10/month Premium subscription (unlimited exports after the 15 free ones).",
+  "description": "Backend for the Figma to Tableau plugin — Razorpay billing ($10/month Premium, unlimited exports after the 15 free ones), license API, and future auth/analytics modules.",
   "license": "MIT",
   "private": true,
   "main": "server.js",

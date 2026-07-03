@@ -1,0 +1,182 @@
+/* ---------------------------------------------------------------------------
+   layout.css — navbar + footer.
+--------------------------------------------------------------------------- */
+
+/* --- Navbar ----------------------------------------------------------------- */
+
+.nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  height: var(--nav-h);
+  transition: background 0.3s ease, border-color 0.3s ease, backdrop-filter 0.3s ease;
+  border-bottom: 1px solid transparent;
+}
+
+.nav--scrolled {
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px) saturate(1.4);
+  border-bottom-color: var(--border);
+}
+
+.nav__inner {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 16.5px;
+  letter-spacing: -0.01em;
+}
+
+.logo em {
+  font-style: normal;
+  color: var(--text-faint);
+  font-weight: 500;
+  margin: 0 1px;
+}
+
+.nav__links {
+  display: flex;
+  gap: 6px;
+  margin-inline: auto;
+}
+
+.nav__link {
+  padding: 8px 12px;
+  border-radius: 9px;
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--text-dim);
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.nav__link:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.nav__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nav__actions .btn--primary {
+  padding: 9px 18px;
+  font-size: 14px;
+}
+
+.nav__burger {
+  display: none;
+  margin-left: auto;
+  padding: 8px;
+  color: var(--text);
+}
+
+.nav__drawer {
+  display: none;
+}
+
+@media (max-width: 960px) {
+  .nav__links,
+  .nav__actions {
+    display: none;
+  }
+  .nav__burger {
+    display: inline-flex;
+  }
+  .nav__drawer {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 24px 20px;
+    background: var(--bg-glass);
+    backdrop-filter: blur(18px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav__drawer .nav__link {
+    padding: 12px 10px;
+    font-size: 16px;
+  }
+  .nav__drawer .btn--primary {
+    margin-top: 10px;
+  }
+}
+
+/* --- Footer ----------------------------------------------------------------- */
+
+.footer {
+  border-top: 1px solid var(--border);
+  background: linear-gradient(180deg, transparent, rgba(77, 141, 255, 0.04));
+  padding: 72px 0 36px;
+}
+
+.footer__top {
+  display: flex;
+  gap: 64px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.footer__brand p {
+  margin-top: 18px;
+  color: var(--text-dim);
+  font-size: 14.5px;
+  line-height: 1.7;
+}
+
+.footer__cols {
+  display: flex;
+  gap: clamp(32px, 6vw, 88px);
+  flex-wrap: wrap;
+}
+
+.footer__col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 120px;
+}
+
+.footer__col h4 {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-faint);
+  margin-bottom: 6px;
+}
+
+.footer__col a {
+  font-size: 14.5px;
+  color: var(--text-dim);
+  transition: color 0.2s ease;
+}
+
+.footer__col a:hover {
+  color: var(--text);
+}
+
+.footer__bottom {
+  margin-top: 56px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  color: var(--text-faint);
+  font-size: 13px;
+}

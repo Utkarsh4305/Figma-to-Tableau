@@ -8,8 +8,8 @@
   "documentAccess": "dynamic-page",
   "permissions": ["currentuser"],
   "networkAccess": {
-    "allowedDomains": ["https://discord.com", "https://figma-tableau-pay.example.com"],
-    "devAllowedDomains": ["http://localhost:3000"],
-    "reasoning": "Discord webhook for in-plugin feedback; the plugin's own billing server (Razorpay subscription status checks for the Premium plan)."
+    "allowedDomains": ["https://discord.com", "https://figma-tableau-pay.example.com", "https://figma-tableau.example.com"],
+    "devAllowedDomains": ["http://localhost:3000", "http://localhost:5173"],
+    "reasoning": "Discord webhook for in-plugin feedback; the plugin's own billing backend (Razorpay license checks for the Premium plan); the plugin's marketing website (premium upgrade page)."
   }
 }

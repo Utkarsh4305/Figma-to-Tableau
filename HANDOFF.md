@@ -4,7 +4,43 @@
 > device without the local Claude memory**. It folds in the essential facts from
 > the private memory files (the Tableau 2026.2 recipe, the reference-export
 > workflow, and project state). Last updated: **2026-07-03**, build
-> `razorpay-billing-88`.
+> `razorpay-billing-88` (+ backend/website restructure, v22).
+>
+> **Latest (v22, 2026-07-03): REPO RESTRUCTURE — `backend/` + `website/` +
+> premium CTAs → website.** Three changes, plugin export pipeline untouched:
+> - **`payment-server/` → `backend/`** (git-mv; `.env` with the real test keys,
+>   `licenses.json`, and node_modules all moved intact). The monolithic
+>   `server.js` was split into modules with identical behavior:
+>   `src/config.js` (env), `src/services/razorpayClient.js` +
+>   `src/services/licenseStore.js` (licenses.json stays at the backend root),
+>   and `src/routes/{licenses,payments,webhooks,checkout}.js`, assembled in
+>   `src/app.js` (future auth/analytics/subscription-management routers mount
+>   there). Smoke-tested after the move: healthz/license/checkout OK and a REAL
+>   Razorpay test order created via `/api/create-order`. Any older mention of
+>   `payment-server/` in this doc now means `backend/`.
+> - **New `website/`** — standalone marketing site (Vite + React + TS +
+>   react-router + framer-motion + lucide; Clash Display/Satoshi/JetBrains Mono
+>   fonts; premium dark theme: deep charcoal `#07090f`, electric blue
+>   `#4D8DFF`, violet `#8B5CF6`, cyan `#3BD6FF`, glass cards, grid+orb+noise
+>   backdrops). Home = hero (animated Figma-frame → beam → Tableau-dashboard
+>   scene with mouse parallax + floating SHEET//KPI//Nav/ chips), how-it-works,
+>   features (8), draggable before/after demo, count-up benefit stats, pricing
+>   (Free / Premium glow / Enterprise-soon), FAQ accordion, CTA banner, footer.
+>   Routed placeholders keep future URLs stable: /docs /blog /contact /support
+>   /login /account /activate /privacy /terms. **`/upgrade?uid=&name=`** is the
+>   premium entry: with a uid it hands off to `<backend>/checkout?uid=…`
+>   (`VITE_BACKEND_URL`, default localhost:3000); without one it explains that
+>   checkout starts from the plugin's Account tab. `npm run build` (tsc+vite)
+>   green; dev server `npm run dev` → http://localhost:5173. See
+>   `website/README.md` for the ship checklist.
+> - **Plugin CTAs** — `openCheckout` (both the export-gate Upgrade button and
+>   the Account tab CTA) now opens `${WEBSITE_URL}/upgrade?uid=…&name=…` (new
+>   `WEBSITE_URL` in `shared/constants.ts`, currently `http://localhost:5173`
+>   — replace before shipping); license polling still hits
+>   `PAYMENT_SERVER_URL` directly. manifest devAllowedDomains gained
+>   `http://localhost:5173`, allowedDomains gained the website placeholder
+>   `https://figma-tableau.example.com` → **re-import the manifest**. tsc + 16
+>   suites + build green. Not committed.
 >
 > **Latest (build 88.1, 2026-07-03): STANDARD CHECKOUT (one-time orders) added
 > to the billing server + LIVE test credentials wired.** The server now has two
@@ -552,8 +588,8 @@
 
 ## 1. What this project is
 
-`D:\wireframe` converts **dashboard designs into Tableau workbooks**. Two
-independent tracks live here:
+`D:\wireframe` converts **dashboard designs into Tableau workbooks**. Four
+tracks live here:
 
 1. **Python generators** (older, standalone) — turn an HTML wireframe / a static
    `image.png` mock into a hand-authored `.twb`. See `generate_twb.py`
@@ -564,6 +600,13 @@ independent tracks live here:
    (TypeScript + React + Vite) that converts a selected **Figma frame** into a
    downloadable Tableau **`.twbx`**. This is where all recent effort goes and is
    the focus of this handoff.
+3. **`backend/`** — the Node/Express server side: Razorpay billing (checkout,
+   order/subscription verify, webhooks) + the `GET /api/license/:uid` endpoint
+   the plugin polls; modular `src/routes/*` with room for auth/analytics.
+   Formerly `payment-server/`. See `backend/README.md`.
+4. **`website/`** — the standalone marketing site (Vite + React + TS +
+   framer-motion). Premium CTAs in the plugin open its `/upgrade` page, which
+   hands off to the backend checkout. See `website/README.md`.
 
 The plugin's goal is **parity with the LaDataViz "Figma to Tableau" plugin**: an
 exported dashboard that *looks like the Figma design*, where the text stays text
@@ -949,7 +992,8 @@ can be re-exposed later if a real responsive use-case appears. Build tag is now
 pills; image-only spec builder; background-image checkbox hidden in Image mode).
 Build 88 adds the free-plan export gate (15 exports, then the Export button
 becomes an Upgrade prompt) + the Razorpay Premium flow on the Account tab —
-see the "Latest (build 88)" block at the top and `payment-server/README.md`.
+see the "Latest (build 88)" block at the top and `backend/README.md` (the
+folder was `payment-server/` until the v22 restructure).
 
 **Tabs added (`nav-interactions-tabs-43`).** `App.tsx` now has a 3-tab bar under
 the brand block — **Export** (the existing workflow), **Syntax**, **Defaults**:

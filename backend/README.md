@@ -1,7 +1,23 @@
-# Figma to Tableau — Payment server (Razorpay)
+# Figma to Tableau — Backend
 
-Billing backend for the plugin's Premium plan: **15 free exports**, then
-**paid Premium for unlimited**. Two billing modes, picked by env config:
+Backend for the plugin: today that's Razorpay billing for the Premium plan
+(**15 free exports**, then **paid Premium for unlimited**) plus the license
+API; auth, analytics/usage tracking, and subscription management mount here
+as future route modules (see `src/app.js`).
+
+```
+server.js                     entry point (listen)
+src/config.js                 env parsing + validation
+src/app.js                    Express app — mounts every route module
+src/services/razorpayClient.js  Razorpay SDK client
+src/services/licenseStore.js    uid → license records (licenses.json)
+src/routes/licenses.js        GET  /api/license/:uid
+src/routes/payments.js        POST /api/subscription | /api/create-order | /api/verify | /api/verify-payment
+src/routes/webhooks.js        POST /api/webhook
+src/routes/checkout.js        GET  /checkout (hosted Razorpay page)
+```
+
+Two billing modes, picked by env config:
 
 - **Order mode (default, Standard Checkout)** — active when `RAZORPAY_PLAN_ID`
   is unset. Each one-time payment (`ORDER_AMOUNT_PAISE`, default ₹850) grants
@@ -14,10 +30,11 @@ Billing backend for the plugin's Premium plan: **15 free exports**, then
 1. The plugin counts exports per Figma user in `figma.clientStorage`
    (`ft-export-count`). At 15, the Export button is replaced by an Upgrade
    prompt and the sandbox refuses further exports.
-2. **Upgrade** (Account tab) opens `https://<this server>/checkout?uid=<figma user id>`
-   in the browser. The page creates a Razorpay **subscription** on your plan
-   (tagged with the Figma user id in `notes.figma_uid`) and runs Razorpay
-   Checkout.
+2. **Upgrade** (Account tab, and every premium CTA) opens the marketing
+   website's `/upgrade?uid=<figma user id>` page in the browser, which hands
+   off to `https://<this server>/checkout?uid=<figma user id>`. That page
+   creates a Razorpay **subscription** on your plan (tagged with the Figma
+   user id in `notes.figma_uid`) and runs Razorpay Checkout.
 3. On success the page calls `/api/verify` (signature check:
    `HMAC-SHA256(payment_id|subscription_id, key_secret)`), which stores a
    license: `{ uid → subscriptionId, status, validUntil }` in `licenses.json`.
@@ -44,15 +61,15 @@ Billing backend for the plugin's Premium plan: **15 free exports**, then
      neither — keys alone are enough.
 2. **Server**
    ```
-   cd payment-server
+   cd backend
    npm install
    copy .env.example .env    # then fill in the keys / plan id / webhook secret
    npm start
    ```
    Deploy anywhere that runs Node 18+ with a persistent disk (Render, Railway,
    a VPS). `licenses.json` lives next to `server.js` — on ephemeral-filesystem
-   hosts, mount a disk for it or swap the `loadStore`/`saveStore` functions for
-   a real database.
+   hosts, mount a disk for it or swap `loadStore`/`saveStore` in
+   `src/services/licenseStore.js` for a real database.
 3. **Plugin** — point it at the deployed server (both places must match):
    - `figma-tableau-plugin/src/shared/constants.ts` → `PAYMENT_SERVER_URL`
    - `figma-tableau-plugin/manifest.json` → `networkAccess.allowedDomains`

@@ -8,12 +8,12 @@
 // The output LOOKS like the design; it carries no live data.
 // ---------------------------------------------------------------------------
 
-import type { FaithfulModel, FaithfulTextRun, FaithfulZone, Rect } from "../shared/types";
+import type { FaithfulModel, FaithfulZone, Rect } from "../shared/types";
 import { matchLayerPrefix } from "../shared/constants";
-import { markFromTag, parseLayerOptions, parseButtonName, dominantChartColor, navDestination, firstTextStyle, parseSheetTag } from "./faithful/zoneParsers";
-import { PT_PER_PX, hh, toHex, toHex8, fillOf, solidHex, firstSolidStroke, hasImageFill, VECTORISH, FILLABLE, rectOf, MAX_ZONES, isBoldStyle } from "./faithful/colorGeometry";
-import { styledRuns, TextLine, linesWithSizes, alignOf } from "./faithful/textRuns";
-import { SEGOE_EMS, PX_PER_PT, TABLEAU_TEXT_SCALE, LINE_BOX, estLineWidthPx, zoneNeedW, scaleZoneFont, fitFaithfulText } from "./faithful/textFitting";
+import { parseLayerOptions, parseButtonName, dominantChartColor, navDestination, firstTextStyle, parseSheetTag } from "./faithful/zoneParsers";
+import { PT_PER_PX, fillOf, solidHex, firstSolidStroke, hasImageFill, VECTORISH, FILLABLE, rectOf, MAX_ZONES, isBoldStyle } from "./faithful/colorGeometry";
+import { styledRuns, linesWithSizes, alignOf } from "./faithful/textRuns";
+import { fitFaithfulText } from "./faithful/textFitting";
 export { attachFaithfulImages, buildImageOnlyModel, attachBackgroundImage } from "./faithful/rasterization";
 
 

@@ -4,9 +4,39 @@
 > device without the local Claude memory**. It folds in the essential facts from
 > the private memory files (the Tableau 2026.2 recipe, the reference-export
 > workflow, and project state). Last updated: **2026-07-03**, build
-> `image-mode-87`.
+> `image-mode-87` (post-modularization refactor).
 >
-> **Latest (build 87, 2026-07-03): IMAGE EXPORT MODE (standalone third mode).**
+> **Latest (2026-07-03, after build 87): MODULARIZATION REFACTOR (no behavior
+> change).** The four monoliths were split into focused modules — same exports,
+> same output, build tag unchanged (`image-mode-87`):
+> - `faithful.ts` (~1240 → 512 lines) → `faithful/zoneParsers.ts` (SHEET/BUTTON/
+>   Nav/FILTER name parsers, markFromTag, dominantChartColor), `faithful/
+>   colorGeometry.ts` (px→pt, hex/paint/stroke helpers, rectOf), `faithful/
+>   textRuns.ts` (styled segments, line splitting, alignment), `faithful/
+>   textFitting.ts` (SEGOE_EMS table, fitFaithfulText), `faithful/
+>   rasterization.ts` (base64, attachFaithfulImages, buildImageOnlyModel,
+>   attachBackgroundImage — re-exported from faithful.ts).
+> - `workbookGenerator.ts` (~1400 → 99 lines, now just orchestration) →
+>   `xmlUtils.ts` (uid, escaping, shared helpers), `datasourceXml.ts`,
+>   `worksheetXml.ts`, `dashboardXml.ts`, `windowsXml.ts`, `actionsXml.ts`.
+> - `seed.ts` (~1480 → 234 lines: blankSpec/seedSpecFromModel/sample data) →
+>   `faithfulSpec.ts` (faithfulSpec/faithfulSpecMulti/applyFlowLayout/
+>   imageOnlySpec — the primary export path), `domainData.ts` (domain-flavored
+>   placeholder datasets), `layoutTree.ts` (guillotine geometric layout).
+> - `code.ts` (~940 → 272 lines: message switch + sendFaithful/addSheets) →
+>   `builders.ts` (component/KPI-card builders, findDashboardFrame), `drop.ts`,
+>   `insert.ts`, `templates.ts` (applyTemplate + the 15 domain layouts),
+>   `persistence.ts` (clientStorage: import/account/UI state), `messaging.ts`
+>   (typed post()).
+> - `App.tsx` (~1240 → 1012 lines) → `ui/hooks.tsx` (useExportConfig,
+>   useWindowSize, useToast, useImport).
+> Follow-up cleanup on top: unused imports pruned from `faithful.ts`;
+> `hasNavAction` moved from `workbookGenerator.ts` into `xmlUtils.ts`.
+> Verified after: tsc clean, all 18 test suites green, build OK. Everything
+> through build 87 + the refactor is now COMMITTED (`bd876bc` and earlier —
+> the long-standing "not committed" backlog is cleared).
+>
+> **Previous (build 87, 2026-07-03): IMAGE EXPORT MODE (standalone third mode).**
 > User: "the export as image is a work with either tiled or floating mode, please
 > seclude it, that is works properly independently, like those two." Previously
 > the "Export frame background as image" checkbox was a sub-option within
@@ -504,8 +534,8 @@ break it:
 
 | Context | Has | Files | Role |
 |---|---|---|---|
-| **Figma sandbox** (`code.ts`) | the `figma` API, **no DOM**, no Blob/btoa | `plugin/code.ts`, `plugin/parser.ts`, `plugin/faithful.ts` | Read the selected frame → build a model → `postMessage` to the UI |
-| **UI iframe** (React) | DOM, Blob, JSZip, FileSaver, **no `figma`** | everything in `ui/`, plus `plugin/seed.ts`, `workbookGenerator.ts`, `exporter.ts`, `twbxBuilder.ts`, `csv.ts`, `xlsx.ts`, `mapper.ts`, `tableauGenerator.ts` | Turn the model into `.twb` XML, zip into `.twbx`, download |
+| **Figma sandbox** (`code.ts`) | the `figma` API, **no DOM**, no Blob/btoa | `plugin/code.ts`, `parser.ts`, `faithful.ts` + `faithful/*`, `builders.ts`, `drop.ts`, `insert.ts`, `templates.ts`, `persistence.ts`, `messaging.ts` | Read the selected frame → build a model → `postMessage` to the UI |
+| **UI iframe** (React) | DOM, Blob, JSZip, FileSaver, **no `figma`** | everything in `ui/`, plus `plugin/seed.ts`, `faithfulSpec.ts`, `domainData.ts`, `layoutTree.ts`, `workbookGenerator.ts` + `*Xml.ts`/`xmlUtils.ts`, `exporter.ts`, `twbxBuilder.ts`, `csv.ts`, `xlsx.ts`, `twbImport.ts` | Turn the model into `.twb` XML, zip into `.twbx`, download |
 
 They communicate only via `postMessage` with typed messages in
 `shared/types.ts` (`PluginToUi` / `UiToPlugin`). `shared/` files must stay
@@ -533,13 +563,13 @@ editable `WorkbookSpec`. Drives the editor tabs (Preview/Data/Sheets/Layout).
 This path makes real worksheets from *detected* charts. It still exists but is
 **not** the primary export anymore.
 
-### B. Faithful transpile → `FaithfulModel` (`faithful.ts` → `seed.faithfulSpec`) — THE PRIMARY PATH
+### B. Faithful transpile → `FaithfulModel` (`faithful.ts` → `faithfulSpec.ts`) — THE PRIMARY PATH
 `parseFaithful()` walks every visible node back-to-front and emits a flat
 `FaithfulZone[]` at absolute Figma px. **Multi-dashboard (`multi-dashboard-37`):**
 `parseFaithfulAll()` resolves **every selected frame** (children collapse to their
 frame, deduped, reading-order sorted) and returns one `FaithfulModel` PER frame;
 the `faithful-ready` message now carries `models: FaithfulModel[]`, and
-`seed.faithfulSpecMulti(models)` builds ONE `WorkbookSpec` with **one dashboard
+`faithfulSpecMulti(models)` (in `faithfulSpec.ts`) builds ONE `WorkbookSpec` with **one dashboard
 per frame** (shared sample dataset; worksheet names + image filenames kept unique
 across all dashboards). Select N frames → N Tableau dashboards. `parseFaithful()`
 / `faithfulSpec(model)` remain as the single-frame path (byte-identical output;
@@ -1223,18 +1253,40 @@ src/shared/
   types.ts          DashboardModel, FaithfulModel/FaithfulZone, message types
   spec.ts           WorkbookSpec/WorksheetSpec/DashboardSpec/ZoneSpec, LayoutMode
   constants.ts      TABLEAU build consts, RT2026/AGG2026/MANIFEST, LAYER_PREFIXES, matchLayerPrefix
-src/plugin/        (sandbox: code/parser/faithful; UI: the rest)
-  code.ts           sandbox entry; message switch; parseAndSend/sendFaithful/applyTagsAndResend
+src/plugin/        (sandbox side unless noted UI)
+  code.ts           sandbox entry; message switch; parseAndSend/sendFaithful/addSheets
   parser.ts         heuristic parse → DashboardModel; applyAutoTags; exportPng/attachImages
-  faithful.ts       parseFaithful → FaithfulModel (the primary transpiler); Nav/ reaction read (navDestination) + expandNavTargets (auto-include destinations); attachFaithfulImages
-  seed.ts           seedSpecFromModel + faithfulSpec + blankSpec; sample dataset; Nav/ target resolution (sheet vs dashboard window)
-  workbookGenerator.ts  WorkbookSpec → .twb XML  ← worksheet/pane/zone styling lives here
-  exporter.ts       generateSpecWorkbook/exportSpecTwbx + validateTwb (the load guards)
-  twbxBuilder.ts    zip .twb + Data/ + Image/ → .twbx blob, download
-  csv.ts / xlsx.ts  data upload/parse/type-infer/sample rows
-  twbImport.ts      parse an uploaded .twb/.twbx → ParsedImport (worksheet swap + clientStorage persistence)
+  faithful.ts       parseFaithful/parseFaithfulAll → FaithfulModel (the primary transpiler); Nav/ reaction read + expandNavTargets; walk() + zone emission
+  faithful/         split-out faithful helpers:
+    zoneParsers.ts    SHEET/BUTTON/Nav/FILTER name parsers; markFromTag; dominantChartColor
+    colorGeometry.ts  px→pt, hex/paint/stroke helpers, rectOf, MAX_ZONES
+    textRuns.ts       styled text segments, line splitting, alignment
+    textFitting.ts    SEGOE_EMS width table; fitFaithfulText (grow/shrink engine)
+    rasterization.ts  base64; attachFaithfulImages/buildImageOnlyModel/attachBackgroundImage
+  builders.ts       library/default/KPI-card component builders; findDashboardFrame
+  drop.ts           drag-and-drop handler (fonts, container lookup, drop events)
+  insert.ts         click-to-insert for library components + default frames
+  templates.ts      applyTemplate + the 15 domain layouts/palette
+  persistence.ts    clientStorage: imported workbook / account info / UI state
+  messaging.ts      typed post() sandbox → UI
+  seed.ts           (UI) blankSpec/seedSpecFromModel + the sample dataset
+  faithfulSpec.ts   (UI) faithfulSpec/faithfulSpecMulti/applyFlowLayout/imageOnlySpec — FaithfulModel → WorkbookSpec, Nav/ target resolution
+  domainData.ts     (UI) domain-flavored placeholder datasets
+  layoutTree.ts     (UI) geometric layout engine (recursive guillotine)
+  workbookGenerator.ts  (UI) WorkbookSpec → .twb XML orchestrator (~100 lines; delegates to the *Xml modules)
+  xmlUtils.ts       (UI) uid/escaping/hasNavAction + shared XML helpers
+  datasourceXml.ts  (UI) datasources + color styles + action groups
+  worksheetXml.ts   (UI) data worksheets + nav-button worksheets ← pane styling lives here
+  dashboardXml.ts   (UI) dashboard zones/containers (floating + tiled)
+  windowsXml.ts     (UI) <windows> section (load-critical) + Entire-View fit
+  actionsXml.ts     (UI) nav/highlight/filter <actions>
+  exporter.ts       (UI) generateSpecWorkbook/exportSpecTwbx + validateTwb (the load guards)
+  twbxBuilder.ts    (UI) zip .twb + Data/ + Image/ → .twbx blob, download
+  csv.ts / xlsx.ts  (UI) data upload/parse/type-infer/sample rows
+  twbImport.ts      (UI) parse an uploaded .twb/.twbx → ParsedImport (worksheet swap + clientStorage persistence)
 src/ui/
   App.tsx           Dashboard/Library/Account tabs, message handler, the export button + import-swap (title/filter injection), SyntaxTab/DefaultsTab, BUILD tag
+  hooks.tsx         useExportConfig/useWindowSize/useToast/useImport
   components/ComponentLibrary.tsx  Library ▸ Components (insert-library-component)
   templates/DashboardTemplates.tsx Library ▸ Templates (apply-template)
   devMock.ts        browser stand-in for the Figma sandbox

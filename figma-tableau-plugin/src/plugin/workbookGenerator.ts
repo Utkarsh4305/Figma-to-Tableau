@@ -4,16 +4,12 @@
 
 import type { WorkbookSpec } from "../shared/spec";
 import { TABLEAU, MANIFEST_ENTRIES } from "../shared/constants";
-import { uid } from "./xmlUtils";
+import { uid, hasNavAction } from "./xmlUtils";
 import { buildDsContexts, PRIMARY_DS, datasourceXml, colorStyleBlock, actionGroupsXml } from "./datasourceXml";
 import { worksheetXml } from "./worksheetXml";
 import { dashboardXml } from "./dashboardXml";
 import { windowsXml } from "./windowsXml";
 import { actionsXml } from "./actionsXml";
-
-function hasNavAction(spec: WorkbookSpec): boolean {
-  return spec.actions.some((a) => a.kind === "navigate");
-}
 
 function manifestXml(spec: WorkbookSpec): string {
   const entries = new Set<string>(MANIFEST_ENTRIES);

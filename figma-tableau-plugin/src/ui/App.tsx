@@ -7,12 +7,12 @@ import { faithfulSpecMulti } from "../plugin/faithfulSpec";
 
 import { exportSpecTwbx, applyImportedSwap } from "../plugin/exporter";
 import { parseImport, parsedImportFromStored } from "../plugin/twbImport";
+const FEEDBACK_WEBHOOK_URL = "https://discord.com/api/webhooks/1522511235969449994/d4bOsdn6-HiMg1EgA41CbsmsZ8ShOzTTV4g0yOnwlGMs3_5SaLmRu0C31i_uwwhQBM2l";
+
 import ComponentLibrary from "./components/ComponentLibrary";
 import DashboardTemplates from "./templates/DashboardTemplates";
 import { TAB_ICONS, SUBTAB_ICONS, SYNTAX_ICONS, ACCOUNT_ICONS, type SyntaxIconName } from "./icons";
 import { useExportConfig, useWindowSize, useToast, useImport } from "./hooks";
-
-const BUILD = "image-mode-87";
 
 function toPlugin(msg: any) {
   parent.postMessage({ pluginMessage: msg }, "*");
@@ -155,15 +155,6 @@ function SyntaxTab() {
           </div>
         </details>
       </div>
-
-      <div className="syntax-item syntax-tip">
-        <div className="syntax-desc">
-          <b>Tip — real data:</b> upload your .twb/.twbx on the Dashboard tab, then
-          name SHEET/ layers to match your worksheet names. Matching ignores case
-          and extra spaces; a sheet placed twice on one dashboard is cloned
-          automatically.
-        </div>
-      </div>
     </div>
   );
 }
@@ -177,7 +168,7 @@ export default function App() {
   const [parsing, setParsing] = useState(false);
 
   const { setStatus, busy, setBusy, toastEl } = useToast();
-  const { layoutMode, setLayoutMode, layoutModeRef, includeBg, setIncludeBg, includeBgRef } = useExportConfig();
+  const { layoutMode, setLayoutMode, layoutModeRef, includeBgRef } = useExportConfig();
   const { importedRef, importedNames, setImportedNames, checkedSheets, setCheckedSheets,
           toggleSheet, allChecked, toggleAllSheets, checkedSheetNames, clearStoredImport } = useImport();
   const { currentSizeRef, saveUiState, resizeHandle } = useWindowSize(tab);
@@ -191,6 +182,30 @@ export default function App() {
     userName: null,
     exportCount: 0,
   });
+  const [feedbackText, setFeedbackText] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const sendFeedback = async () => {
+    const text = feedbackText.trim();
+    if (!text || !FEEDBACK_WEBHOOK_URL || sending) return;
+    setSending(true);
+    try {
+      const res = await fetch(FEEDBACK_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: `**Feedback from ${account.userName || "Anonymous"}**\n${text}`,
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setFeedbackText("");
+      setStatus({ kind: "ok", text: "Feedback sent — thank you!" });
+    } catch {
+      setStatus({ kind: "err", text: "Couldn't send feedback. Check the webhook URL and try again." });
+    } finally {
+      setSending(false);
+    }
+  };
 
   /** Build a compact kind-count description from the model's elements, e.g.
    *  "5 sheets · 3 KPIs · 2 filters · 1 nav". Returns null when there's
@@ -579,7 +594,6 @@ export default function App() {
           {busy ? <><span className="spinner" /> Exporting…</> : "Export to Tableau"}
         </button>
 
-        <div className="build-tag">build {BUILD}</div>
       </div>
     ) : null;
 
@@ -622,32 +636,6 @@ export default function App() {
               />
             </div>
 
-            <details className="spec-details dashboard-details-accordion">
-              <summary className="field-label import-summary">
-                Dashboard details
-              </summary>
-              <div className="spec-details-body">
-                <div className="spec-detail-row">
-                  <span className="spec-detail-label">Worksheets</span>
-                  <span className="spec-detail-value">{spec.worksheets.length}</span>
-                </div>
-                <div className="spec-detail-row">
-                  <span className="spec-detail-label">Fields</span>
-                  <span className="spec-detail-value">{spec.data.fields.length}</span>
-                </div>
-                <div className="spec-detail-row">
-                  <span className="spec-detail-label">Zones</span>
-                  <span className="spec-detail-value">{spec.dashboards[0]?.zones.length ?? 0}</span>
-                </div>
-                {spec.actions.length > 0 ? (
-                  <div className="spec-detail-row">
-                    <span className="spec-detail-label">Actions</span>
-                    <span className="spec-detail-value">{spec.actions.length}</span>
-                  </div>
-                ) : null}
-              </div>
-            </details>
-
             <div className="export-row">
               <div className="field-label">Export mode</div>
               <div className="toggle-row">
@@ -669,13 +657,13 @@ export default function App() {
                   </label>
                 ))}
               </div>
-              <div className="layout-hint" style={{ marginTop: 4 }}>
-                {layoutMode === "floating"
-                  ? "Every zone keeps its exact Figma position. The safe, confirmed default."
-                  : layoutMode === "tiled"
-                  ? "Zones are rebuilt as Tableau layout-flow containers — the layout adapts to the dashboard size."
-                  : "The whole frame is rasterized as a single PNG. No worksheets, filters, or interactive zones."}
-              </div>
+              {layoutMode !== "floating" && (
+                <div className="layout-hint" style={{ marginTop: 4 }}>
+                  {layoutMode === "tiled"
+                    ? "Zones are rebuilt as Tableau layout-flow containers — the layout adapts to the dashboard size."
+                    : "The whole frame is rasterized as a single PNG. No worksheets, filters, or interactive zones."}
+                </div>
+              )}
             </div>
 
             <div className="export-row">
@@ -704,45 +692,8 @@ export default function App() {
                     <span>{label}</span>
                   </label>
                 ))}
-              </div>
-              <div className="shelf-row">
-                <span className="shelf-label">Worksheet filter shelf:</span>
-                <select
-                  value={(spec.exportOptions as any)?.filterShelfPosition ?? "right"}
-                  onChange={(e) =>
-                    update((s) => ({
-                      ...s,
-                      exportOptions: {
-                        ...DEFAULT_EXPORT_OPTIONS,
-                        ...s.exportOptions,
-                        filterShelfPosition: e.target.value as "right" | "hidden",
-                      },
-                    }))
-                  }
-                >
-                  <option value="right">Right (recommended)</option>
-                  <option value="hidden">Hidden</option>
-                </select>
-              </div>
-              {layoutMode !== "image" && (
-                <>
-                  <label className="toggle-item" style={{ marginTop: 8 }}>
-                    <input
-                      type="checkbox"
-                      checked={includeBg}
-                      onChange={() => setIncludeBg((v) => !v)}
-                    />
-                    <span>Export frame background as image</span>
-                  </label>
-                  {includeBg && (
-                    <div className="layout-hint">
-                      Rasterizes the entire frame as a background PNG — captures
-                      gradients and complex fills. Increases export time and file size.
-                    </div>
-                  )}
-                </>
-              )}
             </div>
+          </div>
 
             <details className="spec-details import-accordion">
               <summary className="field-label import-summary">
@@ -928,24 +879,6 @@ export default function App() {
           </div>
 
           <div>
-            <div className="section-label">Usage</div>
-            <div className="account-card account-stats">
-              <div className="stat-cell">
-                <div className="stat-val">{account.exportCount}</div>
-                <div className="stat-key">Exports</div>
-              </div>
-              <div className="stat-cell">
-                <div className="stat-val">{importedNames.length}</div>
-                <div className="stat-key">Imported sheets</div>
-              </div>
-              <div className="stat-cell">
-                <div className="stat-val">{frameNames.length}</div>
-                <div className="stat-key">Frames selected</div>
-              </div>
-            </div>
-          </div>
-
-          <div>
             <div className="section-label">Data &amp; storage</div>
             <div className="account-card">
               <div className="account-row-head">
@@ -968,29 +901,31 @@ export default function App() {
                 Clear stored workbook
               </button>
             </div>
-            <div className="account-card account-note">
-              <span className="account-row-icon">{ACCOUNT_ICONS.shield}</span>
-              <div className="account-sub">
-                Everything runs locally inside Figma. Your designs and workbooks never
-                leave this machine — the plugin makes no network requests.
-              </div>
-            </div>
           </div>
 
-          <div>
-            <div className="section-label">About</div>
-            <div className="account-card">
-              <div className="account-row-head">
-                <span className="account-row-icon">{ACCOUNT_ICONS.info}</span>
-                <div>
-                  <div className="account-name">Figma to Tableau</div>
-                  <div className="account-sub">
-                    Exports .twbx workbooks for Tableau 2026.2 · build {BUILD}
-                  </div>
-                </div>
+          {FEEDBACK_WEBHOOK_URL && (
+            <div>
+              <div className="section-label">Feedback</div>
+              <div className="account-card">
+                <textarea
+                  className="feedback-input"
+                  rows={3}
+                  placeholder="Report a bug, suggest a feature, or share your thoughts…"
+                  value={feedbackText}
+                  onChange={(e) => setFeedbackText(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  disabled={!feedbackText.trim() || sending}
+                  onClick={sendFeedback}
+                  style={{ marginTop: 4 }}
+                >
+                  {sending ? "Sending…" : "Send feedback"}
+                </button>
               </div>
             </div>
-          </div>
+          )}
         </div>
         {resizeHandle}
       </>

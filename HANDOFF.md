@@ -3,8 +3,123 @@
 > Self-contained context for any AI/engineer picking this up, **including on a
 > device without the local Claude memory**. It folds in the essential facts from
 > the private memory files (the Tableau 2026.2 recipe, the reference-export
-> workflow, and project state). Last updated: **2026-07-02**, build
-> `colored-canvas-74`.
+> workflow, and project state). Last updated: **2026-07-03**, build
+> `filter-topbar-86`.
+>
+> **Latest (build 86, 2026-07-03): FILTER SIDEBAR → HEIGHT-PINNED TOP BAR.**
+> User on build 85: "everything is fine but due to filter so much space is
+> getting wasted and things are congested" + screenshot: the filter column
+> rendered ~HALF the dashboard wide with a giant empty area under 2 filter
+> cards. This CONFIRMS (Tableau-observed): **`distribute-evenly` IGNORES a
+> child container's width pin** — the sidebar was pinned `fixed-size='200'`
+> and still equalized to ~50%. Width pins are simply not trustworthy.
+> Fix: FILTER/ cards are no longer a sidebar at all. `applyFlowLayout` now
+> re-attaches them as a **height-pinned filter bar row across the TOP** of the
+> vert body (prepended to the root vert stack, or the root is wrapped in one):
+> equal-width cards via the row's distribute-evenly, row pinned to the clamped
+> quick-filter height (70–110px). Height pins in vert stacks are the ONE
+> reliable mechanism (reference-proven, user-confirmed across builds). The
+> filler zone + `ZoneSpec.flex` + `ContainerSpec.fixedSize` machinery from
+> builds 84–85 DELETED (dead). TILED LAYOUT TRUST LIST (hard-won, 4 user
+> round-trips): (a) height pins in vert stacks — reliable; (b)
+> distribute-evenly horz rows — reliable; (c) width pins — IGNORED under
+> distribute-evenly, do not rely on them for layout;(d) never emit a
+> strategy-less unequal horz row — undefined distribution, slivers.
+> Tests updated; tsc clean, 18 suites green, build OK. Not committed.
+>
+> **Latest (build 85, 2026-07-03): TILED LAYOUT GENERALIZED (vertical one-char
+> text / invisible sheets).** User on build 84: "text is getting messed in some
+> places and some sheets are not visible in some dashboards" + screenshot of a
+> column crushed to ~1 character per line ("C/a/t/e…"). Root cause: build 84
+> emitted UNEQUAL horz rows with NO layout strategy + width pins — a construct
+> that exists NOWHERE in the LaDataViz references. Re-audited both references
+> and derived the actual invariants (every construct we now emit exists in a
+> confirmed-working workbook):
+> 1. **Every multi-child HORZ row carries `distribute-evenly`** — both
+>    references do this universally; a strategy-less unequal horz row has
+>    UNPROVEN distribution semantics and collapsed columns into slivers.
+> 2. **All reference pins are HEIGHTS in vert flows** (44/29/104/187/899px);
+>    there is not a single width pin. We still allow width pins (Tableau
+>    Desktop's fixed-width container pattern) but only when SAFE:
+>    - an individually wide pin (>45% of the row) flexes instead (a pinned
+>      900px header text starved its siblings into slivers);
+>    - pins must sum ≤80% of the row (flexible children always keep ≥20%);
+>    - EVEN rows (KPI strips, 50/50 chart pairs) get NO pins at all —
+>      distribute-evenly IS the sizing there (reference-exact; pinning
+>      some-but-not-all equal children skewed the strip).
+> 3. VERT stacks unchanged (height pins + de only when rows are even) —
+>    reference-proven.
+> New `pinCandidate()` helper + `allowPin` param threaded through
+> emitZone/emitContainer. Worst case for an unequal design is now graceful
+> equalization (70/30 → 50/50) — nothing can ever be crushed invisible.
+> lds_smoke + faithful_flow_smoke updated (wide header unpinned, equal KPI
+> leaves unpinned, de on all horz rows, button/sidebar pins kept). tsc clean,
+> 18 suites green, build OK. Not committed.
+>
+> **Latest (build 84, 2026-07-03): TILED PROPORTIONS FIXED (giant filters /
+> crushed sheets).** User on build 83's tiled output: "better, but in some
+> places the filters are way too big and the sheets are way too small".
+> Diagnosed against the ACTUAL LaDataViz references (`examples/Template.twbx`,
+> `examples/multi.twbx` — extracted and read the .twb):
+> 1. **Both references use FIXED min=max `<size>` even for tiled** — build 83's
+>    automatic `<size />` let Tableau re-lay the flow at arbitrary window sizes,
+>    distorting the fixed/flexible balance. REVERTED to fixed min=max (scale-to-
+>    fit preserves designed proportions with maximized='true').
+> 2. **The references do NOT blanket-apply `layout-strategy-id=
+>    'distribute-evenly'`**: it appears on genuinely even rows (KPI strips,
+>    50/50 chart pairs) but is OMITTED on heterogeneous stacks ('Main Content',
+>    'Content'). Our generator stamped it on EVERY >1-child container — so
+>    Tableau equalized the `horz{ body, Filters }` root to ~50/50: filters half
+>    the dashboard, charts crushed. NOW emitted only when all children have
+>    near-equal extent along the flow axis (max ≤ 1.25 × min).
+> 3. **Filter cards clamped + filler**: FILTER/ tiles clamp to quick-filter-card
+>    bounds (w 160–240, h 70–140) in flow mode, and an invisible FLEXIBLE
+>    "Filter Fill" empty zone (new `ZoneSpec.flex`) absorbs the sidebar's
+>    leftover height so pinned filter cards aren't stretched down the column.
+>    New `ContainerSpec.fixedSize` pins the sidebar's WIDTH explicitly (the
+>    flexible filler would otherwise make `nodeFlexible` unpin it — the old
+>    check was axis-blind).
+> Smoke test updated (fixed sizing, exactly-one distribute-evenly on the even
+> chart row, sidebar fixed-size + clamped filter + flexible filler). tsc clean,
+> all tests green, build OK. Tiled mode now LOADS in the user's Tableau
+> (implied by their feedback); awaiting visual re-confirm of proportions. Not
+> committed.
+>
+> **Latest (build 83, 2026-07-03): TILED MODE BROUGHT UP TO FLOATING QUALITY**
+> — user: "work on the tiled export mode and make it proper like the floating
+> layout mode". Six concrete gaps between the flow (tiled) path and the
+> Tableau-confirmed floating path, all fixed:
+> 1. **Nav buttons no longer flex like charts**: button-worksheets are `kind:
+>    "sheet"` zones, and `zoneFlexible` treated every non-KPI sheet as flexible,
+>    so a 120×40 button ballooned to a chart-sized tile. New `ZoneSpec.pinned`
+>    flag (set on button zones in `buildFaithfulDashboard`), honored in
+>    `zoneFlexible` → button pinned to its Figma size (`fixed-size='120'`).
+> 2. **Tiled dashboards now size AUTOMATICALLY** (`<size />`, the attribute-less
+>    schema default) instead of `sizing-mode='fixed'` min=max — a fixed-size
+>    tiled dashboard could never reflow, which defeated responsive mode
+>    entirely. Floating keeps fixed sizing (confirmed presentation behavior).
+> 3. **No floating zones over the flow tree anymore**: `applyFlowLayout` now
+>    drops ALL rect zones (page bg, cards, loose dividers), not just enclosing
+>    cards — a floating rect over flow containers caused clutter/re-calc loops
+>    and would misalign the moment the (now automatic) layout reflows.
+> 4. **KPI-card text groups are fully tiled**: the old approach recreated the
+>    card as a floating "KPI Card" rect behind the tree and cleared the member
+>    text bgs. Now the member tiles KEEP the propagated card tint and tinted
+>    **spacer tiles** (`type-v2='empty'` with the card bg, pinned to gap height)
+>    fill the card's uncovered bands above/between/below the text — the whole
+>    card reads as one tinted card entirely inside the tree, resize-safe.
+> 5. **FILTER/ cards become a real right sidebar container**: the dashboard
+>    builder relocates filters to absolute right-strip coords that can overlap
+>    charts, which broke the guillotine (no clean gutters → reading-order
+>    fallback). Filters are now excluded from tree inference and re-attached as
+>    `horz{ body, vert Filters }` with the sidebar pinned to its width.
+> 6. **Tiled sheets get the same card look as floating**: borderless rounded
+>    white card (cornerRadius ?? 10, padding 8) + margin 6 for gutters, replacing
+>    the old bordered/square/padding-16 `cardStyle` (deleted). Tiled text zones
+>    drop their 1px margin so grouped KPI stripes fuse seamlessly.
+> Test `faithful_flow_smoke.ts` extended (button pinning, `<size />`, spacers,
+> Filters sidebar, no decorative rects); tsc clean, all smoke tests green,
+> build OK. Tiled still needs a Tableau load-confirm pass. Not committed.
 >
 > **Latest (build 74, 2026-07-02): canvas fix, take 2** — user's TABLEAU
 > exports still showed black canvases at 0.42 (screenshots confirmed; the

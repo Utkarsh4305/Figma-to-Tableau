@@ -128,6 +128,10 @@ export interface ZoneSpec {
   // A KPI "big number" sheet. In tiled mode KPIs are pinned (fixed-size) like
   // text/headers so a KPI row stays short instead of flexing like a chart.
   isKpi?: boolean;
+  // Pin this zone to its Figma size in tiled mode even when it's a sheet zone.
+  // Used by button-worksheets (nav buttons ARE sheet zones) so a 120×40 button
+  // stays a button instead of flexing to a chart-sized tile in the flow.
+  pinned?: boolean;
   // filter card: the (string) dimension the quick filter is on
   field?: string;
   // filter card bound to an IMPORTED worksheet: the verbatim

@@ -110,9 +110,14 @@ function testGeometricLayout() {
   const root = s.dashboards[0].root!;
   assert(!!root && root.direction === "horz", "top level splits sidebar | content (horz)");
   const xml = generateSpecWorkbook(s).twbXml;
-  // KPI/header rows + sidebar must be pinned; chart rows flexible.
+  // Sidebar (width), header text + KPI row (heights) pinned; chart rows
+  // flexible. The 3 EQUAL KPI leaves are NOT width-pinned — their even horz
+  // row carries distribute-evenly instead (the reference pattern), so pins
+  // there would only skew the strip.
   const pinned = (xml.match(/is-fixed='true'/g) || []).length;
-  assert(pinned >= 6, "expected pinned header/kpi/sidebar zones, got " + pinned);
+  assert(pinned >= 3, "expected pinned header/kpi-row/sidebar zones, got " + pinned);
+  const kpiZone = xml.match(/<zone[^>]*name='Tasks Completed'[^>]*>/)?.[0] ?? "";
+  assert(kpiZone !== "" && !/fixed-size/.test(kpiZone), "equal KPI leaves unpinned (distribute-evenly sizes them)");
   assert((xml.match(/type-v2='layout-flow'/g) || []).length >= 4, "expected nested flow containers");
   assert((xml.match(/show-title='false'/g) || []).length === 7, "all 7 sheets hide titles");
   assert(xml.includes("friendly-name='Sidebar' fixed-size='64'"), "sidebar pinned to its width");

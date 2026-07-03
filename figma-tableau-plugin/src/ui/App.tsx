@@ -10,12 +10,27 @@ import ComponentLibrary from "./components/ComponentLibrary";
 import DashboardTemplates from "./templates/DashboardTemplates";
 import { TAB_ICONS, SUBTAB_ICONS, SYNTAX_ICONS, ACCOUNT_ICONS, type SyntaxIconName } from "./icons";
 
-const BUILD = "colored-canvas-74";
+const BUILD = "filter-topbar-86";
 
 type Status = { kind: "ok" | "err" | "warn"; text: string } | null;
 
 function toPlugin(msg: UiToPlugin) {
   parent.postMessage({ pluginMessage: msg }, "*");
+}
+
+/** Debounce a save-UI-state call so rapid resize events don't hammer
+ *  clientStorage on every pixel. Returns a function the caller invokes
+ *  whenever the saved values should be flushed. */
+function createUiSaver(): (w: number, h: number, tab: string) => void {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let lastW = 0, lastH = 0, lastTab = "";
+  return (w: number, h: number, tab: string) => {
+    lastW = w; lastH = h; lastTab = tab;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      toPlugin({ type: "save-ui-state", data: { width: lastW, height: lastH, tab: lastTab as any } });
+    }, 600);
+  };
 }
 
 
@@ -178,12 +193,47 @@ export default function App() {
   const [checkedSheets, setCheckedSheets] = useState<Record<string, boolean>>({});
   const [tab, setTab] = useState<"dashboard" | "library" | "account">("dashboard");
   const [frameNames, setFrameNames] = useState<string[]>([]);
+  // Debounced UI-state persistence (window size + active tab).
+  const saveUiState = useRef(createUiSaver());
+  // Whether a ui-state-restored has been applied yet (first mount only).
+  const uiStateApplied = useRef(false);
+  // Track the CURRENT size as-sent-to-the-sandbox so we can save it accurately
+  // even though the sandbox clamps it (we never read back the clamped value).
+  const currentSizeRef = useRef<{ w: number; h: number }>({ w: 420, h: 580 });
+
   // Account tab: the Figma user's name + the persisted all-time export counter,
   // both read in the sandbox (figma.currentUser / figma.clientStorage).
   const [account, setAccount] = useState<{ userName: string | null; exportCount: number }>({
     userName: null,
     exportCount: 0,
   });
+
+  /** Build a compact kind-count description from the model's elements, e.g.
+   *  "5 sheets · 3 KPIs · 2 filters · 1 nav". Returns null when there's
+   *  nothing interesting to report (only generic text/container layers). */
+  const layerBreakdown = (model: DashboardModel | null): string | null => {
+    if (!model) return null;
+    const counts: Record<string, number> = {};
+    for (const el of model.elements) {
+      if (el.role === "worksheet") counts.sheets = (counts.sheets || 0) + 1;
+      else if (el.role === "kpi")       counts.kpis   = (counts.kpis || 0) + 1;
+      else if (el.role === "filter")    counts.filters = (counts.filters || 0) + 1;
+      else if (el.role === "button")    counts.nav    = (counts.nav || 0) + 1;
+      else if (el.role === "image")     counts.images = (counts.images || 0) + 1;
+      else if (el.role === "web")       counts.web    = (counts.web || 0) + 1;
+    }
+    const parts: string[] = [];
+    if (counts.sheets)  parts.push(`${counts.sheets} sheet${counts.sheets > 1 ? "s" : ""}`);
+    if (counts.kpis)    parts.push(`${counts.kpis} KPI${counts.kpis > 1 ? "s" : ""}`);
+    if (counts.filters) parts.push(`${counts.filters} filter${counts.filters > 1 ? "s" : ""}`);
+    if (counts.nav)     parts.push(`${counts.nav} nav`);
+    if (counts.images)  parts.push(`${counts.images} image${counts.images > 1 ? "s" : ""}`);
+    if (counts.web)     parts.push(`${counts.web} web`);
+    if (!parts.length)  return null;
+    return parts.join(" · ");
+  };
+  const breakdownCache = useRef<string | null>(null);
+  if (model) breakdownCache.current = layerBreakdown(model);
 
   // Auto-dismiss SUCCESS toasts only. Warnings and errors carry actionable
   // guidance (which SHEET/ names to use, why charts are demo data…) — they stay
@@ -249,6 +299,21 @@ export default function App() {
     };
   }, []);
 
+  // Layout mode: floating (pixel-exact) or tiled (responsive flow containers).
+  // Stored in a ref so the once-registered faithful-ready handler reads the latest.
+  // Defaults to floating so a hurried click always produces the pixel-exact result;
+  // the user deliberately opts into tiled.
+  const [layoutMode, setLayoutMode] = useState<"floating" | "tiled">("floating");
+  const layoutModeRef = useRef<"floating" | "tiled">("floating");
+  layoutModeRef.current = layoutMode;
+
+  // Background image: rasterize the whole frame as a PNG behind all zones,
+  // faithfully preserving gradients, images, and complex fills. Opt-in because
+  // it adds ~1s to export time and increases .twbx size.
+  const [includeBg, setIncludeBg] = useState(false);
+  const includeBgRef = useRef(false);
+  includeBgRef.current = includeBg;
+
   // Imported real worksheets (the swap feature) — held in a ref so the once-
   // registered faithful-ready handler reads the latest upload. Persisted across
   // plugin sessions via figma.clientStorage (restored on mount).
@@ -286,12 +351,12 @@ export default function App() {
         const models = msg.models;
         void (async () => {
           try {
-            // One dashboard per selected frame (multi-dashboard export). Always
-            // pixel-exact FLOATING — the layout that matches the Figma design
-            // exactly. (Responsive layout-flow reflows/reshapes the design, so it
-            // was removed from the UI; faithfulSpecMulti still supports 'flow' for
-            // tests, but the export never requests it.)
-            const fSpec   = faithfulSpecMulti(models);
+            // One dashboard per selected frame (multi-dashboard export). The
+            // layout mode lets the user choose between pixel-exact FLOATING and
+            // responsive TILED (layout-flow containers). Defaults to floating
+            // so a hurried click always produces the exact result.
+            const fLayout = layoutModeRef.current === "tiled" ? "flow" as const : "floating" as const;
+            const fSpec   = faithfulSpecMulti(models, fLayout);
             // Honor the name typed in the Export box (the file + .twb are named
             // from spec.workbookName); fall back to the frame-derived default.
             const typedName = workbookNameRef.current.trim();
@@ -381,6 +446,19 @@ export default function App() {
         return;
       }
 
+      if (msg.type === "ui-state-restored") {
+        if (msg.data && !uiStateApplied.current) {
+          uiStateApplied.current = true;
+          setTab(msg.data.tab);
+          // Restore the window to its previous size. This runs after the UI
+          // has mounted and the sandbox has opened it at the default size, so
+          // we send a resize message to adjust. The sandbox clamps ≥360×420.
+          currentSizeRef.current = { w: msg.data.width, h: msg.data.height };
+          toPlugin({ type: "resize", width: msg.data.width, height: msg.data.height });
+        }
+        return;
+      }
+
       if (msg.type !== "model-ready") return;
 
       if (msg.error || !msg.model) {
@@ -432,7 +510,10 @@ export default function App() {
     pendingFaithfulRef.current = true;
     setBusy(true);
     setStatus({ kind: "warn", text: "Transpiling design…" });
-    toPlugin({ type: "request-faithful" });
+    toPlugin({
+      type: "request-faithful",
+      includeBackground: includeBgRef.current,
+    });
   };
 
   // Upload an existing Tableau workbook to swap its REAL worksheets in for the
@@ -530,11 +611,11 @@ export default function App() {
       }}
       onPointerMove={(e) => {
         if (!resizingRef.current) return;
-        toPlugin({
-          type: "resize",
-          width: Math.round(e.clientX + 8),
-          height: Math.round(e.clientY + 8),
-        });
+        const w = Math.round(e.clientX + 8);
+        const h = Math.round(e.clientY + 8);
+        currentSizeRef.current = { w, h };
+        toPlugin({ type: "resize", width: w, height: h });
+        saveUiState.current(w, h, tab);
       }}
       onPointerUp={(e) => {
         resizingRef.current = false;
@@ -575,7 +656,11 @@ export default function App() {
         <button
           key={id}
           className={`tab-btn ${tab === id ? "active" : ""}`}
-          onClick={() => setTab(id)}
+          onClick={() => {
+            setTab(id);
+            const s = currentSizeRef.current;
+            saveUiState.current(s.w, s.h, id);
+          }}
         >
           <span className="tab-icon">{TAB_ICONS[id]}</span>
           {label}
@@ -635,6 +720,11 @@ export default function App() {
                   ? `${Math.round(model.width)} × ${Math.round(model.height)} · ${model.elements.length} layers → 1 dashboard`
                   : "1 dashboard"}
               </div>
+              {breakdownCache.current ? (
+                <div className="frame-breakdown">{breakdownCache.current}</div>
+              ) : model && model.elements.length > 0 ? (
+                <div className="frame-breakdown warn">No recognized layer prefixes</div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -677,6 +767,36 @@ export default function App() {
                 ) : null}
               </div>
             </details>
+
+            <div className="export-row">
+              <div className="field-label">Layout mode</div>
+              <div className="pill-row">
+                {(["floating", "tiled"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    className={`pill-btn ${layoutMode === mode ? "active" : ""}`}
+                    onClick={() => {
+                      setLayoutMode(mode);
+                      const s = currentSizeRef.current;
+                      saveUiState.current(s.w, s.h, tab);
+                    }}
+                    title={
+                      mode === "floating"
+                        ? "Pixel-exact positions match the Figma design exactly. Recommended."
+                        : "Responsive flow containers reflow to fill the dashboard — design may shift."
+                    }
+                  >
+                    {mode === "floating" ? "Floating (pixel-exact)" : "Tiled (responsive)"}
+                  </button>
+                ))}
+              </div>
+              <div className="layout-hint" style={{ marginTop: 4 }}>
+                {layoutMode === "floating"
+                  ? "Every zone keeps its exact Figma position. The safe, confirmed default."
+                  : "Zones are rebuilt as Tableau layout-flow containers — the layout adapts when you change the dashboard size in Tableau."}
+              </div>
+            </div>
 
             <div className="export-row">
               <div className="field-label">Export options</div>
@@ -724,6 +844,20 @@ export default function App() {
                   <option value="hidden">Hidden</option>
                 </select>
               </div>
+              <label className="toggle-item" style={{ marginTop: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={includeBg}
+                  onChange={() => setIncludeBg((v) => !v)}
+                />
+                <span>Export frame background as image</span>
+              </label>
+              {includeBg && (
+                <div className="layout-hint">
+                  Rasterizes the entire frame as a background PNG — captures
+                  gradients and complex fills. Increases export time and file size.
+                </div>
+              )}
             </div>
 
             <details className="spec-details import-accordion">

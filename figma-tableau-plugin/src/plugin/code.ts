@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import { parseSelection, attachImages, applyAutoTags } from "./parser";
-import { parseFaithfulAll, attachFaithfulImages, expandNavTargets, collectFrames } from "./faithful";
+import { parseFaithfulAll, attachFaithfulImages, expandNavTargets, collectFrames, attachBackgroundImage } from "./faithful";
 import type { UiToPlugin, PluginToUi } from "../shared/types";
 import { UI_SIZE, DOMAIN_ACCENTS } from "../shared/constants";
 
@@ -64,7 +64,7 @@ async function applyTagsAndResend(): Promise<void> {
 // Faithful transpile: recreate every SELECTED frame as native zones (one Tableau
 // dashboard each), rasterizing icons/vectors. Best-effort images must not block
 // the models.
-async function sendFaithful(): Promise<void> {
+async function sendFaithful(options?: { includeBackground?: boolean }): Promise<void> {
   try {
     // dynamic-page docs: make sure every page (and its nodes' prototype reactions
     // + the frames those navigate to) is loaded before we read interactions.
@@ -86,6 +86,19 @@ async function sendFaithful(): Promise<void> {
         await attachFaithfulImages(m);
       } catch {
         /* some images just won't render */
+      }
+    }
+    // Background image: rasterize the entire frame as a background PNG behind
+    // all other zones (captures gradients/complex fills). Only called for the
+    // ORIGINAL user-selected models (not Nav/ auto-included destinations).
+    if (options?.includeBackground) {
+      const frames = collectFrames();
+      for (let i = 0; i < Math.min(models.length, frames.length); i++) {
+        try {
+          await attachBackgroundImage(models[i], frames[i]);
+        } catch {
+          /* background is best-effort */
+        }
       }
     }
     post({ type: "faithful-ready", models });
@@ -1039,6 +1052,25 @@ async function logExport(): Promise<void> {
   void sendAccountInfo();
 }
 
+/** Persist the plugin UI state (window size + active tab) across sessions. */
+async function saveUiState(data: { width: number; height: number; tab: string }): Promise<void> {
+  try {
+    await figma.clientStorage.setAsync("ft-ui-state", data);
+  } catch {
+    /* UI state is cosmetic — swallow silently */
+  }
+}
+
+/** Restore the persisted UI state on the next plugin launch. */
+async function restoreUiState(): Promise<void> {
+  try {
+    const stored = await figma.clientStorage.getAsync("ft-ui-state");
+    post({ type: "ui-state-restored", data: stored ?? null });
+  } catch {
+    post({ type: "ui-state-restored", data: null });
+  }
+}
+
 /** Forget the imported workbook persisted across sessions. */
 async function clearImport(): Promise<void> {
   try {
@@ -1068,12 +1100,13 @@ figma.ui.onmessage = (msg: UiToPlugin) => {
     case "request-parse":
       void parseAndSend();
       void restoreImport();
+      void restoreUiState();
       break;
     case "apply-tags":
       void applyTagsAndResend();
       break;
     case "request-faithful":
-      void sendFaithful();
+      void sendFaithful({ includeBackground: msg.includeBackground });
       break;
     case "add-sheets":
       void addSheets(msg.names);
@@ -1086,6 +1119,9 @@ figma.ui.onmessage = (msg: UiToPlugin) => {
       // exceed the clientStorage quota — swallow the rejection so it doesn't
       // surface as an unhandled error; the user just re-uploads next session.
       figma.clientStorage.setAsync("ft-import", msg.data).catch(() => {});
+      break;
+    case "save-ui-state":
+      void saveUiState(msg.data);
       break;
     case "resize":
       figma.ui.resize(Math.max(360, msg.width), Math.max(420, msg.height));
@@ -1111,6 +1147,7 @@ figma.ui.onmessage = (msg: UiToPlugin) => {
   }
 };
 
-// Initial parse on launch + restore persisted import data from prior session.
+// Initial parse on launch + restore persisted import data + UI state.
 void parseAndSend();
 void restoreImport();
+void restoreUiState();

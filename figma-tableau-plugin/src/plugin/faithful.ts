@@ -1163,3 +1163,33 @@ export async function attachFaithfulImages(model: FaithfulModel): Promise<void> 
   // Drop image zones that couldn't be rasterized (no empty bitmaps).
   model.zones = model.zones.filter((z) => z.kind !== "image" || z.imagePng);
 }
+
+/**
+ * Rasterize the entire frame as a background PNG and insert it at position 0
+ * (behind every other zone). This captures gradients, images, and complex fills
+ * that can't be recreated as native Tableau zones, while the interactive zones
+ * (sheets, filters, buttons, web objects) render on top as live Tableau objects.
+ * The frame MUST be the same SceneNode already used to build the model.
+ * Best-effort: if rasterization fails the model is left unchanged.
+ */
+export async function attachBackgroundImage(model: FaithfulModel, node: SceneNode): Promise<void> {
+  try {
+    const exporter = node as (SceneNode & { exportAsync?: (s: unknown) => Promise<Uint8Array> });
+    if (typeof exporter.exportAsync !== "function") return;
+    const bytes = await exporter.exportAsync({ format: "PNG", constraint: { type: "SCALE", value: 2 } });
+    const b64 = bytesToBase64(bytes);
+    const w = model.width;
+    const h = model.height;
+    const bgZone: FaithfulZone = {
+      id: node.id + "_bg",
+      name: "Background",
+      kind: "image",
+      x: 0, y: 0, w, h,
+      imagePng: b64,
+      isBackground: true,
+    };
+    model.zones = [bgZone, ...model.zones];
+  } catch {
+    /* background is best-effort — skip on failure */
+  }
+}

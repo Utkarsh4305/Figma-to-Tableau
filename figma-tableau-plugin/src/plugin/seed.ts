@@ -660,7 +660,9 @@ function buildFaithfulDashboard(
       });
       // showTitle:false so dropFigmaTitles (which only touches titled chart sheets)
       // leaves this button alone; the worksheet itself draws the caption.
-      return { id: nextId("z"), kind: "sheet" as const, ...base, worksheet: btnWs, bg: z.fill || "#2563EB", cornerRadius: z.cornerRadius, showTitle: false };
+      // pinned:true so tiled mode keeps the button at its Figma size instead of
+      // flexing it to a chart-sized tile (only real chart sheets flex).
+      return { id: nextId("z"), kind: "sheet" as const, ...base, worksheet: btnWs, bg: z.fill || "#2563EB", cornerRadius: z.cornerRadius, showTitle: false, pinned: true };
     }
     if (z.kind === "text") {
       return {
@@ -768,9 +770,24 @@ function dropFigmaTitles(zones: ZoneSpec[]): ZoneSpec[] {
   return remove.size ? zones.filter((z) => !remove.has(z.id)) : zones;
 }
 
-/** A content zone (vs. a purely decorative rect / background). */
+/** A content zone (vs. a purely decorative rect / background). Used for card
+ *  color propagation: a panel rect propagates its color onto the content zones
+ *  it encloses. Text is included so text labels inside a panel card get the
+ *  card's tint before being excluded from the layout tree (they float on top). */
 function isContentZone(z: ZoneSpec): boolean {
   return z.kind === "sheet" || z.kind === "text" || z.kind === "image" || z.kind === "filter" || z.kind === "web";
+}
+
+/** A structural zone that should participate in the tiled flow layout tree.
+ *  All content zones participate — sheets, images, filters, web, buttons, AND
+ *  all text zones regardless of height. Previously text <40px was floated to
+ *  avoid micro-rows, but floating text at absolute positions overlaps flow
+ *  containers (whose sequential layout ignores y), causing both visual clutter
+ *  and Tableau re-calc loops. Putting every text zone in the tree, pinned to
+ *  its native fixed-size, eliminates overlap entirely. Rects handled separately
+ *  (card propagation / dropped). */
+function isStructuralZone(z: ZoneSpec): boolean {
+  return z.kind === "sheet" || z.kind === "image" || z.kind === "filter" || z.kind === "web" || z.kind === "button" || z.kind === "text";
 }
 
 /**
@@ -780,16 +797,33 @@ function isContentZone(z: ZoneSpec): boolean {
  * (`inferLayoutTree`) + the generator's tiled path, both already shipping on the
  * heuristic path.
  *
- * Two faithful-specific cleanups first, because flow containers TILE (they can't
+ * ALL content zones (sheets, images, filters, web, buttons, text) participate
+ * in the flow container tree — no floating text. Putting every text zone in the
+ * tree with fixed-size eliminates the overlap between floating labels and flow
+ * containers that caused visual clutter and continuous re-calc loops.
+ *
+ * Faithful-specific cleanups first, because flow containers TILE (they can't
  * overlap) and — confirmed from every reference — a `layout-flow` zone may NOT
  * carry a background:
- *   1. Drop the full-frame background + any rect that ENCLOSES another content
- *      zone (a card/panel background). Otherwise it would overlap its contents in the
- *      flow, and we can't represent it as a container background. The page colour
- *      still comes from the dashboard's own outer zone-style; each chart keeps its
- *      white card via the tiled sheet `cardStyle`.
- *   2. Keep pure-leaf decorative rects (dividers / chips that enclose nothing) —
- *      they tile cleanly as `empty` zones.
+ *   1. Card colors are PROPAGATED to the content tiles an enclosing card rect
+ *      covers, so the panel's tint visually survives the card's removal.
+ *   2. ALL rect zones are then dropped — a tiled dashboard resizes/reflows, so
+ *      any absolutely-positioned decorative rect (page background, card, divider)
+ *      would end up floating OVER the flow tree and misaligned the moment the
+ *      layout reflows (floating-over-flow overlap is also what caused the visual
+ *      clutter + Tableau re-calc loops this module's history records). The page
+ *      colour still comes from the dashboard's own outer zone-style; each chart
+ *      keeps its white rounded card via the tiled sheet zone-style.
+ *   3. A KPI card enclosing several text layers becomes a vert group container:
+ *      the member text tiles keep the card's tint and tinted SPACER tiles (empty
+ *      zones with the card bg) fill the card's uncovered bands — the whole card
+ *      area reads as one tinted card, fully inside the flow tree (no floating
+ *      background rect that would detach on resize).
+ *   4. FILTER/ cards (relocated to an absolute right strip by the dashboard
+ *      builder, where they may overlap charts) are excluded from the guillotine
+ *      and re-attached as a HEIGHT-PINNED filter bar row across the top (a
+ *      fixed-width sidebar is impossible: distribute-evenly ignores width pins,
+ *      so a sidebar always equalized to ~half the dashboard).
  *
  * Mutates the dashboard in place. On any failure (or too few zones to tile) it
  * leaves the dashboard FLOATING — the Tableau-confirmed default — so flow mode
@@ -811,27 +845,240 @@ function applyFlowLayout(dash: DashboardSpec): void {
   const enclosingCards = dash.zones
     .filter((z) => z.kind === "rect" && dash.zones.some((o) => o !== z && isContentZone(o) && encloses(z, o)))
     .sort((a, b) => b.w * b.h - a.w * a.h); // largest first
+  // Track which text zones each card encloses, plus the card's own visual props
+  // and geometry, so text siblings can be grouped AND a background rect can be
+  // recreated at the card's exact position/size (not the text union bounds).
+  const cardToTextInfo = new Map<string, { textIds: string[]; bg: string; x: number; y: number; w: number; h: number; cornerRadius?: number }>();
   for (const card of enclosingCards) {
     if (!card.bg || card.w * card.h >= dashArea * 0.8) continue; // skip the page bg
+    const textIds: string[] = [];
     for (const o of dash.zones) {
       if (o === card || !isContentZone(o) || o.kind === "image" || !encloses(card, o)) continue;
       // Only fill a tile that has no distinct colour of its own (default white).
       if (!o.bg || o.bg === "#FFFFFF" || o.bg === "#FFFFFFFF") o.bg = card.bg;
       if (o.cornerRadius == null) o.cornerRadius = card.cornerRadius;
+      if (o.kind === "text") textIds.push(o.id);
+    }
+    if (textIds.length > 1) cardToTextInfo.set(card.id, { textIds, bg: card.bg, x: card.x, y: card.y, w: card.w, h: card.h, cornerRadius: card.cornerRadius });
+  }
+  // Drop EVERY rect (enclosing cards AND loose decorative rects/dividers): a
+  // tiled dashboard reflows, so an absolutely-positioned rect would float over
+  // the flow tree and detach from it on resize. Colors were propagated above.
+  const kept = dash.zones.filter((z) => z.kind !== "rect");
+  const structural = kept.filter(isStructuralZone);
+  // FILTER/ cards were relocated to an absolute right strip (possibly on top of
+  // charts) — keep them OUT of the guillotine and re-attach them as a dedicated
+  // right sidebar container after the tree is built.
+  const filterTiles = structural.filter((z) => z.kind === "filter");
+  const bodyTiles = structural.filter((z) => z.kind !== "filter");
+  if (bodyTiles.length < 2) return;
+
+  // Group text zones so sibling labels inside the same card stay as one tile.
+  // Without this, each separate text layer of a KPI (label/value/delta) becomes
+  // its own structural element and gets split into separate tiles — the
+  // guillotine sees the gap between adjacent text zones (they touch but don't
+  // overlap) and treats the boundary as a gutter.
+  //
+  // Two sources of sibling text zones:
+  //   1. #L zones — a single multi-line text node split per line in faithful.ts
+  //      (ids end with "#L0", "#L1", etc.)
+  //   2. Separate text layers inside the same card — three distinct Figma text
+  //      layers grouped by their enclosing card rect.
+  interface TextGroupInfo {
+    textIds: string[];
+    bg: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    cornerRadius?: number;
+  }
+  const cardTextGroups = new Map<string, TextGroupInfo>(); // gid -> info
+  const lineGroups = new Map<string, ZoneSpec[]>();        // #L base id -> members
+  const groupRepIds = new Set<string>();
+
+  // First pass: detect #L groups (multi-line text splits)
+  for (const z of bodyTiles) {
+    const m = /^(.*)#L(\d+)$/.exec(z.id || "");
+    if (m) {
+      const g = lineGroups.get(m[1]);
+      if (g) g.push(z);
+      else lineGroups.set(m[1], [z]);
     }
   }
-  const dropIds = new Set(enclosingCards.map((c) => c.id));
-  const kept = dash.zones.filter((z) => !dropIds.has(z.id));
-  // Need at least two tiles and at least one real content zone to bother tiling.
-  if (kept.length < 2 || !kept.some(isContentZone)) return;
+  // Second pass: detect card-based text groups (separate layers).
+  // Build a set of zone ids already claimed by #L groups so we don't double-group.
+  const lineGroupIds = new Set<string>();
+  for (const members of lineGroups.values()) for (const m of members) lineGroupIds.add(m.id);
+  const usedInCardGroup = new Set<string>();
+  for (const [cardId, info] of cardToTextInfo) {
+    const available = info.textIds.filter((id) => !lineGroupIds.has(id));
+    if (available.length > 1) {
+      const gid = `@cardtext:${cardId}`;
+      cardTextGroups.set(gid, { textIds: available, bg: info.bg, x: info.x, y: info.y, w: info.w, h: info.h, cornerRadius: info.cornerRadius });
+      for (const id of available) usedInCardGroup.add(id);
+    }
+  }
+
+  // Build the structural set: standalone zones + #L group reps + card text group reps
+  const structuralList: ZoneSpec[] = bodyTiles.filter((z) => {
+    if (lineGroupIds.has(z.id)) return false;
+    if (usedInCardGroup.has(z.id)) return false;
+    return true;
+  });
+
+  // Add #L group representatives
+  for (const [baseId, members] of lineGroups) {
+    members.sort((a, b) => a.y - b.y);
+    const repId = `@group:${baseId}`;
+    structuralList.push({
+      id: repId,
+      kind: "text",
+      x: Math.min(...members.map((z) => z.x)),
+      y: Math.min(...members.map((z) => z.y)),
+      w: Math.max(...members.map((z) => z.x + z.w)) - Math.min(...members.map((z) => z.x)),
+      h: Math.max(...members.map((z) => z.y + z.h)) - Math.min(...members.map((z) => z.y)),
+    });
+    groupRepIds.add(repId);
+  }
+
+  // Add card text group representatives — use the CARD's own rect so the flow
+  // container is positioned at the card's bounds, aligning with the background
+  // rect and keeping text inside the card.
+  for (const [gid, info] of cardTextGroups) {
+    const members = info.textIds.map((id) => bodyTiles.find((z) => z.id === id)).filter((z): z is ZoneSpec => !!z);
+    if (members.length < 2) continue;
+    structuralList.push({
+      id: gid,
+      kind: "text",
+      x: info.x,
+      y: info.y,
+      w: info.w,
+      h: info.h,
+    });
+    groupRepIds.add(gid);
+  }
+
   let root: ContainerSpec | undefined;
   try {
-    root = inferLayoutTree(kept);
+    root = inferLayoutTree(structuralList);
   } catch {
     root = undefined;
   }
   if (!root) return;
-  dash.zones = kept; // dropped rects must NOT linger (they'd float on top)
+
+  // Walk the tree and replace each group-rep leaf with a vert container that
+  // holds the individual text zones, so the generator emits them together.
+  //
+  // A CARD group's members keep the card tint propagated onto them earlier, and
+  // tinted SPACER tiles (empty zones with the card bg, pinned to the gap height)
+  // fill the card's uncovered bands (above/between/below the text layers) — so
+  // the whole card area renders as ONE tinted card, entirely inside the flow
+  // tree. (The previous approach — a floating background rect behind the tiles —
+  // overlapped the flow containers and detached from them on resize.)
+  const spacerZones: ZoneSpec[] = [];
+  const expandTextGroups = (node: LayoutNode): void => {
+    if (!isContainer(node)) return;
+    for (let i = 0; i < node.children.length; i++) {
+      const ch = node.children[i];
+      if (!isContainer(ch) && groupRepIds.has(ch.zone)) {
+        let memberZones: ZoneSpec[] | undefined;
+        let card: TextGroupInfo | undefined;
+
+        // #L group (multi-line text split — no card, just stack the lines)
+        if (ch.zone.startsWith("@group:")) {
+          const ms = lineGroups.get(ch.zone.replace(/^@group:/, ""));
+          if (ms && ms.length > 0) memberZones = [...ms].sort((a, b) => a.y - b.y);
+        }
+        // Card text group (separate text layers inside one card rect)
+        else if (ch.zone.startsWith("@cardtext:")) {
+          const info = cardTextGroups.get(ch.zone);
+          if (info) {
+            card = info;
+            memberZones = info.textIds
+              .map((id) => bodyTiles.find((z) => z.id === id))
+              .filter((z): z is ZoneSpec => !!z)
+              .sort((a, b) => a.y - b.y);
+          }
+        }
+
+        if (memberZones && memberZones.length > 0) {
+          const children: LayoutNode[] = [];
+          if (card) {
+            const spacer = (y: number, h: number): void => {
+              const z: ZoneSpec = {
+                id: nextId("z"),
+                kind: "rect",
+                friendlyName: "Card Fill",
+                x: card!.x,
+                y,
+                w: card!.w,
+                h,
+                bg: card!.bg,
+              };
+              spacerZones.push(z);
+              children.push({ zone: z.id });
+            };
+            let cursor = card.y;
+            for (const m of memberZones) {
+              const gap = m.y - cursor;
+              if (gap > 2) spacer(cursor, gap);
+              children.push({ zone: m.id });
+              cursor = Math.max(cursor, m.y + m.h);
+            }
+            const tail = card.y + card.h - cursor;
+            if (tail > 2) spacer(cursor, tail);
+          } else {
+            for (const m of memberZones) children.push({ zone: m.id });
+          }
+          node.children[i] = {
+            id: nextId("c"),
+            direction: "vert",
+            children,
+            name: card ? "KPI Card" : undefined,
+          };
+        }
+      } else {
+        expandTextGroups(ch);
+      }
+    }
+  };
+  expandTextGroups(root);
+
+  // Re-attach the FILTER/ cards as a HEIGHT-PINNED filter bar row across the
+  // TOP of the dashboard (they were excluded from the guillotine because their
+  // relocated strip coordinates may overlap charts).
+  //
+  // NOT a fixed-width sidebar: a Tableau-confirmed lesson (builds 83–85) is
+  // that `distribute-evenly` IGNORES a child's width pin — a sidebar in a horz
+  // split always equalized to ~50% of the dashboard, wasting a huge empty
+  // column and congesting the charts. A height-pinned row in a vert stack is
+  // the one mechanism the references prove reliable, and a top filter bar of
+  // equal-width cards is standard dashboard furniture anyway.
+  if (filterTiles.length > 0) {
+    filterTiles.sort((a, b) => a.y - b.y || a.x - b.x);
+    // Quick-filter cards have a natural height (~title + dropdown). Clamp so a
+    // FILTER/ layer drawn as a big panel can't become a giant card; width is
+    // an equal share of the row (distribute-evenly sizes the cards).
+    const rowH = Math.max(70, Math.min(110, Math.round(Math.max(...filterTiles.map((f) => f.h)))));
+    const n = filterTiles.length;
+    filterTiles.forEach((f, i) => {
+      f.x = Math.round((i * dash.widthPx) / n);
+      f.y = 0;
+      f.w = Math.round(dash.widthPx / n);
+      f.h = rowH;
+    });
+    const filterRow: ContainerSpec = {
+      id: nextId("c"),
+      direction: "horz",
+      children: filterTiles.map((f) => ({ zone: f.id })),
+      name: "Filters",
+    };
+    if (root.direction === "vert") root.children.unshift(filterRow);
+    else root = { id: nextId("c"), direction: "vert", children: [filterRow, root], name: "Body" };
+  }
+
+  dash.zones = [...kept, ...spacerZones];
   dash.layoutMode = "tiled";
   dash.root = root;
 }

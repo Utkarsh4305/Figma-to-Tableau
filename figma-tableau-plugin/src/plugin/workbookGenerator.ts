@@ -799,20 +799,6 @@ function containerStyle(margin = "8"): string {
   );
 }
 
-/** Card zone-style for a worksheet wrapper: white bg, light border, padding. */
-function cardStyle(bg = "#FFFFFF"): string {
-  return (
-    "          <zone-style>\n" +
-    "            <format attr='border-color' value='#E3E6F0' />\n" +
-    "            <format attr='border-style' value='solid' />\n" +
-    "            <format attr='border-width' value='1' />\n" +
-    "            <format attr='margin' value='6' />\n" +
-    "            <format attr='padding' value='16' />\n" +
-    `            <format attr='background-color' value='${bg}' />\n` +
-    "          </zone-style>\n"
-  );
-}
-
 function dashboardXml(
   dash: DashboardSpec,
   primaryCtx: DsCtx,
@@ -830,8 +816,9 @@ function dashboardXml(
   // sheet. KPIs, text, buttons, filters and images are pinned to their Figma
   // size — this is exactly the Template.twb rule (chart areas flexible, headers
   // / labels fixed-size), and it's what keeps KPI/header rows short instead of
-  // ballooning to an equal share of the height.
-  const zoneFlexible = (z: ZoneSpec): boolean => z.kind === "sheet" && !z.isKpi;
+  // ballooning to an equal share of the height. `pinned` covers sheet zones that
+  // are not charts (nav button-worksheets) so a 120×40 button stays button-sized.
+  const zoneFlexible = (z: ZoneSpec): boolean => z.kind === "sheet" && !z.isKpi && !z.pinned;
   const nodeFlexible = (node: LayoutNode): boolean => {
     if (!isContainer(node)) {
       const z = zoneById.get(node.zone);
@@ -844,8 +831,9 @@ function dashboardXml(
   // mode, sheets are card-wrapped and zones carry a `friendly-name` (the Figma
   // layer name) to mirror the LaDataViz reference output. `parentDir` lets a
   // non-flexible leaf pin its natural pixel size so it keeps its height in a
-  // vert flow (width in a horz flow) instead of stretching.
-  const emitZone = (z: ZoneSpec, tiled = false, parentDir?: "horz" | "vert"): string => {
+  // vert flow (width in a horz flow) instead of stretching; `allowPin` is the
+  // parent row's verdict on whether a WIDTH pin is safe (see emitContainer).
+  const emitZone = (z: ZoneSpec, tiled = false, parentDir?: "horz" | "vert", allowPin = true): string => {
     // Skip filter zones when showFilters is disabled.
     if (z.kind === "filter" && opts && !opts.showFilters) return "";
     const X = clampN(z.x, fw);
@@ -856,7 +844,7 @@ function dashboardXml(
     const fn = z.friendlyName ? ` friendly-name='${esc(z.friendlyName)}'` : "";
     // Chart sheets flex to fill; everything else is pinned to its Figma size.
     const fixedPx = zoneFlexible(z) ? 0 : Math.round(parentDir === "horz" ? z.w : z.h);
-    const fix = tiled && parentDir && fixedPx > 0 ? ` fixed-size='${fixedPx}' is-fixed='true'` : "";
+    const fix = tiled && parentDir && fixedPx > 0 && allowPin ? ` fixed-size='${fixedPx}' is-fixed='true'` : "";
 
     if (z.kind === "sheet" && z.worksheet) {
       sheetNames.push(z.worksheet);
@@ -866,9 +854,12 @@ function dashboardXml(
       // each zone's own showTitle setting is respected.
       const showTitle = opts && opts.showTitles === false ? "false" : z.showTitle ? "true" : "false";
       if (tiled) {
+        // Same borderless rounded white card as the Tableau-confirmed floating
+        // branch below, plus a 6px margin so sibling tiles keep a gutter (a
+        // tiled zone has no absolute gap of its own).
         o.push(`        <zone${fn}${fix} h='${H}' id='${nid()}' name='${esc(z.worksheet)}' show-title='${showTitle}' w='${W}' x='${X}' y='${Y}'>\n`);
         o.push("          <layout-cache cell-count-h='1' cell-count-w='1' type-h='cell' type-w='cell' />\n");
-        o.push(cardStyle(z.bg || "#FFFFFF"));
+        o.push(zoneStyle(z.bg || "#FFFFFF", "#000000", "none", "0", "6", "8", z.cornerRadius ?? 10));
         o.push("        </zone>\n");
       } else {
         // Floating worksheet zone — mirrors the LaDataViz Template.twbx SHEET/
@@ -976,14 +967,16 @@ function dashboardXml(
       const bg = z.bg || (isButton ? "#2563EB" : undefined);
       // Text zones: padding 0 + minimal margin (matches the LaDataViz reference).
       // Our old padding=6/margin=3 ate ~12px on each axis, which clipped glyph
-      // tops and truncated values in the small KPI zones.
+      // tops and truncated values in the small KPI zones. In TILED mode the
+      // margin drops to 0 so sibling text stripes of a grouped KPI card (and
+      // their tinted spacer tiles) fuse into one seamless card.
       o.push(
         zoneStyle(
           bg,
           isButton ? "#1E4FBF" : "#000000",
           isButton ? "solid" : "none",
           isButton ? "1" : "0",
-          isButton ? "3" : "1",
+          isButton ? "3" : tiled ? "0" : "1",
           isButton ? "10" : "0"
         )
       );
@@ -1009,12 +1002,41 @@ function dashboardXml(
     return { x, y, w: x2 - x, h: y2 - y };
   };
 
-  // Emit a layout-flow container. Mirrors LaDataViz Template.twb: friendly-name
-  // = the Figma frame name, distribute-evenly strategy, margin-only zone-style.
+  // The fixed-size pin a node WOULD take along `dir` (0 = flexible / no pin).
+  const pinCandidate = (node: LayoutNode, dir: "horz" | "vert"): number => {
+    if (!isContainer(node)) {
+      const z = zoneById.get(node.zone);
+      if (!z || zoneFlexible(z)) return 0;
+      return Math.round(dir === "horz" ? z.w : z.h);
+    }
+    if (!nodeFlexible(node)) {
+      const nb = boundsOf(node);
+      return nb ? Math.round(dir === "horz" ? nb.w : nb.h) : 0;
+    }
+    return 0;
+  };
+
+  // Emit a layout-flow container. GENERALIZED to the patterns the LaDataViz
+  // references (Template.twb, multi.twbx) actually ship — every construct we
+  // emit exists in a confirmed-working workbook, so ANY design lowers to a
+  // load-stable layout:
+  //   - VERT stacks: children pinned by HEIGHT (all reference pins are heights:
+  //     44/29/104/187/899) or flexible charts; `distribute-evenly` only when
+  //     the rows are genuinely even (the references OMIT it on heterogeneous
+  //     stacks like 'Main Content'/'Content').
+  //   - HORZ rows: ALWAYS `distribute-evenly` (every multi-child horz row in
+  //     both references carries it — an unequal strategy-less horz row is an
+  //     unproven construct, and shipping one collapsed columns into one-char
+  //     slivers). WIDTH pins are allowed only when SAFE: a pin ≤45% of the row
+  //     (a wide pinned text/panel would starve its siblings), and pins summing
+  //     ≤80% of the row (the flexible children always keep ≥20%). Unpinned
+  //     children share evenly — worst case a 70/30 design renders 50/50, but
+  //     nothing can ever be crushed invisible.
   const emitContainer = (
     c: ContainerSpec,
     placed: Set<string>,
-    parentDir?: "horz" | "vert"
+    parentDir?: "horz" | "vert",
+    allowPin = true
   ): string => {
     const b = boundsOf(c);
     if (!b) return "";
@@ -1023,24 +1045,69 @@ function dashboardXml(
     const W = Math.max(1, clampN(b.w, fw));
     const H = Math.max(1, clampN(b.h, fh));
     const fn = c.name ? ` friendly-name='${esc(c.name)}'` : "";
-    // A container that holds NO flexible chart (e.g. a header row or a KPI row)
-    // is pinned to its Figma extent along the parent's flow axis — mirrors the
-    // Template.twb `fixed-size='44' is-fixed='true'` on its header row. A
-    // container that DOES hold a chart stays flexible to absorb free space.
-    // NOTE: deliberately NO `layout-strategy-id='distribute-evenly'` — that
-    // forces every child to an equal share and stretches titles/sidebars.
-    const fixPx = parentDir && !nodeFlexible(c) ? Math.round(parentDir === "horz" ? b.w : b.h) : 0;
+    let de = "";
+    if (c.children.length > 1) {
+      if (c.direction === "horz") {
+        de = ` layout-strategy-id='distribute-evenly'`;
+      } else {
+        const extents = c.children
+          .map((ch) => {
+            const cb = boundsOf(ch);
+            return cb ? cb.h : 0;
+          })
+          .filter((v) => v > 0);
+        const even = extents.length > 1 && Math.max(...extents) <= Math.min(...extents) * 1.25;
+        if (even) de = ` layout-strategy-id='distribute-evenly'`;
+      }
+    }
+    const fixPx = parentDir && allowPin ? pinCandidate(c, parentDir) : 0;
     const fix = fixPx > 0 ? ` fixed-size='${fixPx}' is-fixed='true'` : "";
     const o: string[] = [
-      `        <zone${fn}${fix} h='${H}' id='${nid()}' param='${c.direction}' type-v2='layout-flow' w='${W}' x='${X}' y='${Y}'>\n`,
+      `        <zone${fn}${fix}${de} h='${H}' id='${nid()}' param='${c.direction}' type-v2='layout-flow' w='${W}' x='${X}' y='${Y}'>\n`,
     ];
+    // Decide which children may keep a WIDTH pin (horz rows only; height pins
+    // in vert stacks are always safe — reference-proven).
+    const childPinOk = new Map<LayoutNode, boolean>();
+    if (c.direction === "horz") {
+      const extentPx = Math.max(1, b.w);
+      const widths = c.children
+        .map((ch) => {
+          const cb = boundsOf(ch);
+          return cb ? cb.w : 0;
+        })
+        .filter((v) => v > 0);
+      const evenRow = widths.length > 1 && Math.max(...widths) <= Math.min(...widths) * 1.25;
+      if (evenRow) {
+        // An EVEN row (KPI strip, 50/50 chart pair) needs no pins at all —
+        // distribute-evenly IS the sizing, exactly like the reference rows.
+        // (Pinning some-but-not-all equal children would skew the strip.)
+        for (const ch of c.children) childPinOk.set(ch, false);
+      } else {
+        const cands = c.children.map((ch) => pinCandidate(ch, "horz"));
+        // 1) An individually-wide pin (>45% of the row) flexes instead.
+        const ok = cands.map((v) => v > 0 && v <= extentPx * 0.45);
+        // 2) Pins must leave the flexible children ≥20% of the row: drop the
+        //    largest pins until the sum fits.
+        for (;;) {
+          const sum = cands.reduce((s, v, i) => s + (ok[i] ? v : 0), 0);
+          if (sum <= extentPx * 0.8) break;
+          let maxI = -1;
+          for (let i = 0; i < cands.length; i++)
+            if (ok[i] && (maxI < 0 || cands[i] > cands[maxI])) maxI = i;
+          if (maxI < 0) break;
+          ok[maxI] = false;
+        }
+        c.children.forEach((ch, i) => childPinOk.set(ch, ok[i]));
+      }
+    }
     for (const ch of c.children) {
-      if (isContainer(ch)) o.push(emitContainer(ch, placed, c.direction));
+      const pinOk = c.direction === "horz" ? childPinOk.get(ch) === true : true;
+      if (isContainer(ch)) o.push(emitContainer(ch, placed, c.direction, pinOk));
       else {
         const z = zoneById.get(ch.zone);
         if (z) {
           placed.add(z.id);
-          o.push(emitZone(z, true, c.direction));
+          o.push(emitZone(z, true, c.direction, pinOk));
         }
       }
     }
@@ -1051,18 +1118,21 @@ function dashboardXml(
 
   const x: string[] = [`    <dashboard name='${esc(dash.name)}'>\n`];
   x.push("      <style />\n");
-  // Explicit `sizing-mode='fixed'` matches the proven LaDataViz reference
-  // (Template.twb). A fixed-size dashboard is scaled-to-fit (aspect preserved)
-  // by Tableau in presentation / slideshow mode; combined with the window's
-  // `maximized='true'` (see windowsXml) it opens filling the screen instead of
-  // sitting at actual pixel size with scrollbars.
+  const isTiled = dash.layoutMode === "tiled" && !!dash.root;
+  // FIXED size (min=max) for BOTH modes. The LaDataViz tiled references
+  // (Template.twb AND multi.twbx) both use fixed min=max sizing — a fixed-size
+  // dashboard is scaled-to-fit (aspect preserved) with the window's
+  // `maximized='true'` (see windowsXml), which preserves the DESIGNED
+  // proportions exactly. An automatic <size /> was tried for tiled (build 83)
+  // and let Tableau re-lay the flow at arbitrary window sizes, distorting the
+  // fixed/flexible balance (giant filters, crushed charts).
   x.push(
     `      <size maxheight='${fh}' maxwidth='${fw}' minheight='${fh}' minwidth='${fw}' sizing-mode='fixed' />\n`
   );
   x.push("        <zones>\n");
   x.push(`          <zone h='100000' id='2' type-v2='layout-basic' w='100000' x='0' y='0'>\n`);
 
-  if (dash.layoutMode === "tiled" && dash.root) {
+  if (isTiled && dash.root) {
     const placed = new Set<string>();
     x.push(emitContainer(dash.root, placed));
     // any zones not referenced by the container tree fall back to floating

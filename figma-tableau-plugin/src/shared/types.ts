@@ -174,6 +174,10 @@ export interface FaithfulZone {
   runs?: FaithfulTextRun[];
   // image
   imagePng?: string; // base64 (no data: prefix)
+  // True for a full-frame background image (rasterized from the whole frame).
+  // Placed at the back of the zone stack so it captures gradients / complex
+  // fills that can't be recreated as native Tableau zones.
+  isBackground?: boolean;
 }
 
 /** A whole Figma frame transpiled faithfully (z-ordered back-to-front). */
@@ -223,9 +227,15 @@ export interface MsgApplyTags {
   type: "apply-tags";
 }
 
-/** Ask the sandbox for a FAITHFUL transpile of the selected frame. */
+/**
+ * Ask the sandbox for a FAITHFUL transpile of the selected frame.
+ * `includeBackground` requests the frame be rasterized as a full-size
+ * background PNG (captures gradients, images, and complex fills that
+ * can't be recreated as native Tableau zones).
+ */
 export interface MsgRequestFaithful {
   type: "request-faithful";
+  includeBackground?: boolean;
 }
 
 /**
@@ -341,7 +351,32 @@ export interface MsgClearImport {
   type: "clear-import";
 }
 
-export type PluginToUi = MsgModelReady | MsgFaithfulReady | MsgImportRestored | MsgAccountInfo;
+// --- Persisted UI state (window size + active tab) --------------------------
+
+/**
+ * Serializable form of the plugin UI state — survives close/reopen via
+ * figma.clientStorage. Saved whenever the user resizes the window or switches
+ * tabs, and restored on the next plugin launch.
+ */
+export interface UiStoredData {
+  width: number;
+  height: number;
+  tab: "dashboard" | "library" | "account";
+}
+
+/** Sandbox persisted the UI state — restore it in the UI. */
+export interface MsgUiStateRestored {
+  type: "ui-state-restored";
+  data: UiStoredData | null;
+}
+
+/** UI wants to persist its current size + active tab. */
+export interface MsgSaveUiState {
+  type: "save-ui-state";
+  data: UiStoredData;
+}
+
+export type PluginToUi = MsgModelReady | MsgFaithfulReady | MsgImportRestored | MsgAccountInfo | MsgUiStateRestored;
 export type UiToPlugin =
   | MsgRequestParse
   | MsgResize
@@ -355,4 +390,5 @@ export type UiToPlugin =
   | MsgApplyTemplate
   | MsgRequestAccount
   | MsgLogExport
-  | MsgClearImport;
+  | MsgClearImport
+  | MsgSaveUiState;

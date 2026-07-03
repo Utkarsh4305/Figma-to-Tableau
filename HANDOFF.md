@@ -4,7 +4,27 @@
 > device without the local Claude memory**. It folds in the essential facts from
 > the private memory files (the Tableau 2026.2 recipe, the reference-export
 > workflow, and project state). Last updated: **2026-07-03**, build
-> `filter-topbar-86`.
+> `image-mode-87`.
+>
+> **Latest (build 87, 2026-07-03): IMAGE EXPORT MODE (standalone third mode).**
+> User: "the export as image is a work with either tiled or floating mode, please
+> seclude it, that is works properly independently, like those two." Previously
+> the "Export frame background as image" checkbox was a sub-option within
+> floating/tiled exports — it rasterized the frame as a background PNG behind
+> all the interactive zones. Now it's a third standalone export mode (Image)
+> alongside Floating and Tiled: the entire frame is rasterized as a single PNG
+> with NO worksheets, NO filters, NO text/rect zones — just the design as a
+> static bitmap in a `.twbx`. The three modes are pills on the Export card:
+> **Floating** (pixel-exact, default), **Tiled** (responsive flow containers),
+> **Image** (full-frame PNG only). When Image is active the background-image
+> checkbox is hidden (the entire export IS the image). Implementation:
+> new `buildImageOnlyModel()` in faithful.ts rasterizes frames to PNG-only
+> `FaithfulModel`s; new `imageOnlySpec()` in seed.ts builds a minimal
+> `WorkbookSpec` with no worksheets and one image zone per dashboard;
+> `LayoutMode` in spec.ts expanded to `"floating" | "tiled" | "image"`;
+> `MsgRequestFaithful.exportMode` added; `sendFaithful` in code.ts skips
+> parsing entirely for image mode. tsc clean, 18 suites green, build OK.
+> Not committed.
 >
 > **Latest (build 86, 2026-07-03): FILTER SIDEBAR → HEIGHT-PINNED TOP BAR.**
 > User on build 85: "everything is fine but due to filter so much space is
@@ -825,8 +845,8 @@ hitting it by accident and seeing a "messed" layout. The export now hard-codes
 `faithfulSpec(model,'flow')`, the tiled generator) still EXISTS and is still
 tested by `faithful_flow_smoke.ts` — it's just not reachable from the UI, so it
 can be re-exposed later if a real responsive use-case appears. Build tag is now
-`floating-only-42` (native nav buttons + design-color marks + dup-name fix +
-flow toggle removed — see §10 and §7.9).
+`image-mode-87` (Floating/Tiled/Image mode pills; image-only spec builder;
+background-image checkbox hidden in Image mode).
 
 **Tabs added (`nav-interactions-tabs-43`).** `App.tsx` now has a 3-tab bar under
 the brand block — **Export** (the existing workflow), **Syntax**, **Defaults**:

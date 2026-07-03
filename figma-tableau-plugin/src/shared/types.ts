@@ -232,10 +232,13 @@ export interface MsgApplyTags {
  * `includeBackground` requests the frame be rasterized as a full-size
  * background PNG (captures gradients, images, and complex fills that
  * can't be recreated as native Tableau zones).
+ * `exportMode` selects the layout strategy: "floating" (pixel-exact),
+ * "tiled" (responsive flow containers), or "image" (background PNG only).
  */
 export interface MsgRequestFaithful {
   type: "request-faithful";
   includeBackground?: boolean;
+  exportMode?: "floating" | "tiled" | "image";
 }
 
 /**

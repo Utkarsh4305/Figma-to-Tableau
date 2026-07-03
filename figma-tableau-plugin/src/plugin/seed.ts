@@ -1252,10 +1252,75 @@ function assembleFaithfulWorkbook(
 }
 
 /** Layout strategy for a faithful export. */
-export type FaithfulLayout = "flow" | "floating";
+export type FaithfulLayout = "flow" | "floating" | "image";
+
+/**
+ * Build a minimal WorkbookSpec with ONLY the background image zones — no
+ * worksheets, no actions, just one image zone per frame.
+ */
+function imageOnlySpec(models: FaithfulModel[]): WorkbookSpec {
+  const usedImgNames = new Set<string>();
+  const dashboards: DashboardSpec[] = models.map((m, i) => {
+    const name = (m.title || "Dashboard").slice(0, 80) || "Dashboard";
+    const dashName = (() => {
+      let n = name, j = 2;
+      while (usedImgNames.has(n)) n = `${name.slice(0, 76)} ${j++}`;
+      usedImgNames.add(n);
+      return n;
+    })();
+    const zones: ZoneSpec[] = m.zones
+      .filter((z) => z.kind === "image" && z.imagePng)
+      .map((z) => ({
+        id: nextId("z"),
+        kind: "image" as const,
+        friendlyName: z.name,
+        x: 0, y: 0, w: Math.round(m.width), h: Math.round(m.height),
+        image: z.imagePng,
+        imageFile: z.name === "Background" ? `background_${i}.png` : `${slugFile(z.name || "img")}_${i}.png`,
+        scaled: true,
+      }));
+    // If no image zone survived rasterization, emit a fallback
+    const safeZones = zones.length > 0 ? zones : [
+      { id: nextId("z"), kind: "rect" as const, friendlyName: "Empty", x: 0, y: 0,
+        w: Math.round(m.width), h: Math.round(m.height), bg: "#F4F5FB" },
+    ];
+    return {
+      id: nextId("db"),
+      name: dashName,
+      widthPx: Math.round(m.width),
+      heightPx: Math.round(m.height),
+      bg: m.background || "#FFFFFF",
+      zones: safeZones,
+      layoutMode: "floating" as const,
+    };
+  });
+
+  const first = models[0];
+  // Tableau's schema requires at least one <worksheet> in <worksheets>.
+  // Emit a hidden Text-mark sheet that is never placed on any dashboard zone.
+  const dummyWs: WorksheetSpec = {
+    id: nextId("ws"),
+    name: "Background Image",
+    mark: "Text",
+    measures: [],
+    dualAxis: false,
+    showLabels: false,
+  };
+  return {
+    workbookName: (first?.title || "Workbook").replace(/[\\/:*?"<>|]+/g, " ").trim() || "Workbook",
+    tableauVersion: "2026.2",
+    data: { fileName: "data.csv", fields: [], calcs: [], rows: [] },
+    worksheets: [dummyWs],
+    dashboards,
+    actions: [],
+    includeActions: false,
+    exportOptions: { ...DEFAULT_EXPORT_OPTIONS },
+  };
+}
 
 /** Single-frame faithful workbook (one dashboard). */
 export function faithfulSpec(model: FaithfulModel, layout: FaithfulLayout = "floating"): WorkbookSpec {
+  if (layout === "image") return imageOnlySpec([model]);
   return assembleFaithfulWorkbook([model], { layout });
 }
 
@@ -1264,9 +1329,11 @@ export function faithfulSpec(model: FaithfulModel, layout: FaithfulLayout = "flo
  * Tableau dashboard, all sharing the one sample dataset, with worksheet names and
  * image filenames kept unique across every dashboard. `layout='flow'` builds
  * responsive nested layout-flow containers; the default `'floating'` keeps the
- * Tableau-confirmed pixel-exact absolute layout.
+ * Tableau-confirmed pixel-exact absolute layout. `layout='image'` builds a
+ * minimalist spec with only background image zones and no worksheets.
  */
 export function faithfulSpecMulti(models: FaithfulModel[], layout: FaithfulLayout = "floating"): WorkbookSpec {
+  if (layout === "image") return imageOnlySpec(models);
   return assembleFaithfulWorkbook(models, { layout });
 }
 

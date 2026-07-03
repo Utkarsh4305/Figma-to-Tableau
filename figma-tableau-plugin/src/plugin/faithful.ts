@@ -1165,6 +1165,34 @@ export async function attachFaithfulImages(model: FaithfulModel): Promise<void> 
 }
 
 /**
+ * Build a FaithfulModel from a single background image rasterization of the
+ * frame (no interactive zones, no text/rect/sheet/filter/button — just the
+ * full frame rendered as a static PNG). Used by the standalone Image export
+ * mode: the whole design is captured as one bitmap zone, producing a .twbx
+ * that looks exactly like the Figma frame but has no live worksheets.
+ */
+export async function buildImageOnlyModel(node: SceneNode): Promise<FaithfulModel> {
+  const w = Math.round(node.width);
+  const h = Math.round(node.height);
+  const frame = node as FrameNode | SceneNode;
+  const name = ("name" in frame ? frame.name : "Dashboard") || "Dashboard";
+  let imagePng: string | undefined;
+  try {
+    const exporter = node as (SceneNode & { exportAsync?: (s: unknown) => Promise<Uint8Array> });
+    if (typeof exporter.exportAsync === "function") {
+      const bytes = await exporter.exportAsync({ format: "PNG", constraint: { type: "SCALE", value: 2 } });
+      imagePng = bytesToBase64(bytes);
+    }
+  } catch {
+    /* rasterization failure */
+  }
+  const zones: FaithfulZone[] = imagePng
+    ? [{ id: node.id + "_img", name: "Background", kind: "image", x: 0, y: 0, w, h, imagePng, isBackground: true }]
+    : [];
+  return { id: node.id, title: name, width: w, height: h, zones };
+}
+
+/**
  * Rasterize the entire frame as a background PNG and insert it at position 0
  * (behind every other zone). This captures gradients, images, and complex fills
  * that can't be recreated as native Tableau zones, while the interactive zones

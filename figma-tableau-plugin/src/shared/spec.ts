@@ -172,7 +172,7 @@ export interface ZoneSpec {
 // Tableau dashboards are laid out either with absolute-positioned objects
 // ("floating", our default — pixel-perfect to the Figma frame) or with nested
 // flow containers ("tiled", derived from Figma Auto Layout frames).
-export type LayoutMode = "floating" | "tiled";
+export type LayoutMode = "floating" | "tiled" | "image";
 
 /** A flow container (Tableau layout-flow) — used only in tiled mode. */
 export interface ContainerSpec {

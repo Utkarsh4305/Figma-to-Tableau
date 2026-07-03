@@ -10,7 +10,7 @@ import ComponentLibrary from "./components/ComponentLibrary";
 import DashboardTemplates from "./templates/DashboardTemplates";
 import { TAB_ICONS, SUBTAB_ICONS, SYNTAX_ICONS, ACCOUNT_ICONS, type SyntaxIconName } from "./icons";
 
-const BUILD = "filter-topbar-86";
+const BUILD = "image-mode-87";
 
 type Status = { kind: "ok" | "err" | "warn"; text: string } | null;
 
@@ -299,17 +299,18 @@ export default function App() {
     };
   }, []);
 
-  // Layout mode: floating (pixel-exact) or tiled (responsive flow containers).
-  // Stored in a ref so the once-registered faithful-ready handler reads the latest.
+  // Layout mode: floating (pixel-exact), tiled (responsive flow containers),
+  // or image (full-frame background PNG only — no interactive zones).
   // Defaults to floating so a hurried click always produces the pixel-exact result;
-  // the user deliberately opts into tiled.
-  const [layoutMode, setLayoutMode] = useState<"floating" | "tiled">("floating");
-  const layoutModeRef = useRef<"floating" | "tiled">("floating");
+  // the user deliberately opts into tiled or image.
+  const [layoutMode, setLayoutMode] = useState<"floating" | "tiled" | "image">("floating");
+  const layoutModeRef = useRef<"floating" | "tiled" | "image">("floating");
   layoutModeRef.current = layoutMode;
 
   // Background image: rasterize the whole frame as a PNG behind all zones,
   // faithfully preserving gradients, images, and complex fills. Opt-in because
-  // it adds ~1s to export time and increases .twbx size.
+  // it adds ~1s to export time and increases .twbx size. Irrelevant in image
+  // mode (the whole export IS the background image).
   const [includeBg, setIncludeBg] = useState(false);
   const includeBgRef = useRef(false);
   includeBgRef.current = includeBg;
@@ -351,32 +352,34 @@ export default function App() {
         const models = msg.models;
         void (async () => {
           try {
-            // One dashboard per selected frame (multi-dashboard export). The
-            // layout mode lets the user choose between pixel-exact FLOATING and
-            // responsive TILED (layout-flow containers). Defaults to floating
-            // so a hurried click always produces the exact result.
-            const fLayout = layoutModeRef.current === "tiled" ? "flow" as const : "floating" as const;
+            const isImageMode = layoutModeRef.current === "image";
+            // Image mode: minimal spec with only background image zones.
+            // Floating/Tiled: full faithful transpile with worksheets.
+            const fLayout = isImageMode ? "image" as const
+              : layoutModeRef.current === "tiled" ? "flow" as const : "floating" as const;
             const fSpec   = faithfulSpecMulti(models, fLayout);
             // Honor the name typed in the Export box (the file + .twb are named
             // from spec.workbookName); fall back to the frame-derived default.
             const typedName = workbookNameRef.current.trim();
             if (typedName) fSpec.workbookName = typedName;
-            // Honor the Export-options checkboxes (titles/tooltips/legends/
-            // filters + filter-shelf position). Without this the export used the
-            // hard-coded defaults and the toggles appeared to do nothing.
-            fSpec.exportOptions = { ...DEFAULT_EXPORT_OPTIONS, ...exportOptionsRef.current };
-            // Worksheet swap: if the user uploaded their real .twbx, replace any
-            // SHEET/ placeholder whose name matches an imported worksheet with
-            // that real sheet (on its real data) instead of a demo sample chart.
+            // Compute swap state BEFORE the image-mode guard so it's available
+            // for the status message regardless of export mode.
             let swapped = 0;
             let unmatched: string[] = [];
             const imp = importedRef.current;
-            if (imp) {
-              // Swap placed SHEET/ demos for the user's real imported worksheets,
-              // matched by base name across every dashboard (see applyImportedSwap).
-              const r = applyImportedSwap(fSpec, imp);
-              swapped = r.swapped;
-              unmatched = r.unmatched;
+            if (!isImageMode) {
+              // Honor the Export-options checkboxes (titles/tooltips/legends/
+              // filters + filter-shelf position). Without this the export used the
+              // hard-coded defaults and the toggles appeared to do nothing.
+              fSpec.exportOptions = { ...DEFAULT_EXPORT_OPTIONS, ...exportOptionsRef.current };
+              // Worksheet swap: if the user uploaded their real .twbx, replace any
+              // SHEET/ placeholder whose name matches an imported worksheet with
+              // that real sheet (on its real data) instead of a demo sample chart.
+              if (imp) {
+                const r = applyImportedSwap(fSpec, imp);
+                swapped = r.swapped;
+                unmatched = r.unmatched;
+              }
             }
             const res     = await exportSpecTwbx(fSpec);
             const allZones = models.flatMap((m) => m.zones);
@@ -395,18 +398,18 @@ export default function App() {
             const realSheetCount = allZones.filter(
               (z) => z.kind === "sheet" && !/^\s*nav\s*\//i.test(z.name || "")
             ).length;
-            const swapWarn = !imp
+            const swapWarn = !isImageMode && !imp
               ? realSheetCount > 0
                 ? ` ⚠ No Tableau workbook is loaded, so every chart uses demo data. Upload your .twb/.twbx under "Use my real Tableau sheets" (it's remembered between sessions), then export again.`
                 : ""
-              : swapped === 0
+              : !isImageMode && imp && swapped === 0
               ? ` ⚠ No SHEET/ layer matched an imported worksheet, so every chart is demo data. Name your SHEET/ layers to match: ${imp.worksheetNames.slice(0, 8).join(", ")}${imp.worksheetNames.length > 8 ? "…" : ""}.`
-              : unmatched.length
+              : !isImageMode && imp && unmatched.length
               ? ` ⚠ ${unmatched.length} SHEET/ placeholder(s) didn't match an imported sheet (still demo data): ${unmatched.slice(0, 6).join(", ")}${unmatched.length > 6 ? "…" : ""}.`
               : "";
             setStatus({
               kind: res.warnings.length || swapWarn ? "warn" : "ok",
-              text: `Exported — ${dashes} dashboard(s), ${res.zoneCount} zones, ${sheets} worksheet(s)${extra}. Download started.${swapWarn}`,
+              text: `Exported — ${dashes} dashboard(s), ${res.zoneCount} zones${isImageMode ? "" : `, ${sheets} worksheet(s)`}${extra}. Download started.${swapWarn}`,
             });
             toPlugin({ type: "notify", message: ".twbx downloaded — check your downloads." });
             // Bump the persisted export counter shown on the Account tab.
@@ -509,10 +512,12 @@ export default function App() {
   const exportFaithful = () => {
     pendingFaithfulRef.current = true;
     setBusy(true);
-    setStatus({ kind: "warn", text: "Transpiling design…" });
+    const isImageMode = layoutModeRef.current === "image";
+    setStatus({ kind: "warn", text: isImageMode ? "Rasterizing frame as image…" : "Transpiling design…" });
     toPlugin({
       type: "request-faithful",
       includeBackground: includeBgRef.current,
+      exportMode: layoutModeRef.current,
     });
   };
 
@@ -769,9 +774,9 @@ export default function App() {
             </details>
 
             <div className="export-row">
-              <div className="field-label">Layout mode</div>
+              <div className="field-label">Export mode</div>
               <div className="pill-row">
-                {(["floating", "tiled"] as const).map((mode) => (
+                {(["floating", "tiled", "image"] as const).map((mode) => (
                   <button
                     key={mode}
                     type="button"
@@ -784,17 +789,21 @@ export default function App() {
                     title={
                       mode === "floating"
                         ? "Pixel-exact positions match the Figma design exactly. Recommended."
-                        : "Responsive flow containers reflow to fill the dashboard — design may shift."
+                        : mode === "tiled"
+                        ? "Responsive flow containers reflow to fill the dashboard."
+                        : "Exports the entire frame as a static background image — no live worksheets."
                     }
                   >
-                    {mode === "floating" ? "Floating (pixel-exact)" : "Tiled (responsive)"}
+                    {mode === "floating" ? "Floating" : mode === "tiled" ? "Tiled" : "Image"}
                   </button>
                 ))}
               </div>
               <div className="layout-hint" style={{ marginTop: 4 }}>
                 {layoutMode === "floating"
                   ? "Every zone keeps its exact Figma position. The safe, confirmed default."
-                  : "Zones are rebuilt as Tableau layout-flow containers — the layout adapts when you change the dashboard size in Tableau."}
+                  : layoutMode === "tiled"
+                  ? "Zones are rebuilt as Tableau layout-flow containers — the layout adapts to the dashboard size."
+                  : "The whole frame is rasterized as a single PNG. No worksheets, filters, or interactive zones."}
               </div>
             </div>
 
@@ -844,19 +853,23 @@ export default function App() {
                   <option value="hidden">Hidden</option>
                 </select>
               </div>
-              <label className="toggle-item" style={{ marginTop: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={includeBg}
-                  onChange={() => setIncludeBg((v) => !v)}
-                />
-                <span>Export frame background as image</span>
-              </label>
-              {includeBg && (
-                <div className="layout-hint">
-                  Rasterizes the entire frame as a background PNG — captures
-                  gradients and complex fills. Increases export time and file size.
-                </div>
+              {layoutMode !== "image" && (
+                <>
+                  <label className="toggle-item" style={{ marginTop: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={includeBg}
+                      onChange={() => setIncludeBg((v) => !v)}
+                    />
+                    <span>Export frame background as image</span>
+                  </label>
+                  {includeBg && (
+                    <div className="layout-hint">
+                      Rasterizes the entire frame as a background PNG — captures
+                      gradients and complex fills. Increases export time and file size.
+                    </div>
+                  )}
+                </>
               )}
             </div>
 

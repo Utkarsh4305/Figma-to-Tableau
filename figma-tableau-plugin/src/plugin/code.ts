@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import { parseSelection, attachImages, applyAutoTags } from "./parser";
-import { parseFaithfulAll, attachFaithfulImages, expandNavTargets, collectFrames, attachBackgroundImage } from "./faithful";
+import { parseFaithfulAll, attachFaithfulImages, expandNavTargets, collectFrames, attachBackgroundImage, buildImageOnlyModel } from "./faithful";
 import type { UiToPlugin, PluginToUi } from "../shared/types";
 import { UI_SIZE, DOMAIN_ACCENTS } from "../shared/constants";
 
@@ -64,8 +64,23 @@ async function applyTagsAndResend(): Promise<void> {
 // Faithful transpile: recreate every SELECTED frame as native zones (one Tableau
 // dashboard each), rasterizing icons/vectors. Best-effort images must not block
 // the models.
-async function sendFaithful(options?: { includeBackground?: boolean }): Promise<void> {
+// When `options.exportMode === "image"`, the entire frame is rasterized as a
+// single background PNG — no interactive zones, no worksheets, just the design.
+async function sendFaithful(options?: { includeBackground?: boolean; exportMode?: string }): Promise<void> {
   try {
+    // Image-only mode: rasterize each frame as a single PNG — no parsing.
+    if (options?.exportMode === "image") {
+      const frames = collectFrames();
+      if (frames.length === 0) throw new Error("Select one or more frames to export as an image.");
+      const models = [];
+      for (const f of frames) {
+        const m = await buildImageOnlyModel(f);
+        models.push(m);
+      }
+      post({ type: "faithful-ready", models });
+      return;
+    }
+
     // dynamic-page docs: make sure every page (and its nodes' prototype reactions
     // + the frames those navigate to) is loaded before we read interactions.
     try {
@@ -1106,7 +1121,7 @@ figma.ui.onmessage = (msg: UiToPlugin) => {
       void applyTagsAndResend();
       break;
     case "request-faithful":
-      void sendFaithful({ includeBackground: msg.includeBackground });
+      void sendFaithful({ includeBackground: msg.includeBackground, exportMode: msg.exportMode });
       break;
     case "add-sheets":
       void addSheets(msg.names);

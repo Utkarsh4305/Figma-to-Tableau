@@ -167,6 +167,26 @@ export const DOMAIN_FIELDS: Record<string, { dims: [string, FieldType][]; meas: 
   },
 };
 
+// --- Billing / plan limits ---------------------------------------------------
+// Free plan: FREE_EXPORT_LIMIT exports (counted in figma.clientStorage), then
+// the export button gates until the user subscribes. Premium is a Razorpay
+// subscription handled by the companion server in /payment-server — the plugin
+// only opens its checkout page and polls its license endpoint.
+
+/** How many .twbx exports the free plan includes. */
+export const FREE_EXPORT_LIMIT = 15;
+
+/** Premium price, display only — the real amount lives on the Razorpay plan. */
+export const PREMIUM_PRICE_LABEL = "$10/month";
+
+/**
+ * Base URL of the payment-server (no trailing slash). Currently the local dev
+ * server (manifest devAllowedDomains already permits it). BEFORE SHIPPING:
+ * replace with the deployed URL and mirror it in manifest.json
+ * networkAccess.allowedDomains — the license fetch is blocked by Figma otherwise.
+ */
+export const PAYMENT_SERVER_URL = "http://localhost:3000";
+
 /** Default dashboard pixel size when a frame size can't be read. */
 export const DEFAULT_SIZE = { width: 1280, height: 800 };
 

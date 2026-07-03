@@ -8,7 +8,8 @@
   "documentAccess": "dynamic-page",
   "permissions": ["currentuser"],
   "networkAccess": {
-    "allowedDomains": ["https://discord.com"],
-    "reasoning": "Discord webhook for in-plugin feedback."
+    "allowedDomains": ["https://discord.com", "https://figma-tableau-pay.example.com"],
+    "devAllowedDomains": ["http://localhost:3000"],
+    "reasoning": "Discord webhook for in-plugin feedback; the plugin's own billing server (Razorpay subscription status checks for the Premium plan)."
   }
 }

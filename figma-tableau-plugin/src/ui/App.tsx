@@ -7,6 +7,7 @@ import { faithfulSpecMulti } from "../plugin/faithfulSpec";
 
 import { exportSpecTwbx, applyImportedSwap } from "../plugin/exporter";
 import { parseImport, parsedImportFromStored } from "../plugin/twbImport";
+import { FREE_EXPORT_LIMIT, PREMIUM_PRICE_LABEL, PAYMENT_SERVER_URL } from "../shared/constants";
 const FEEDBACK_WEBHOOK_URL = "https://discord.com/api/webhooks/1522511235969449994/d4bOsdn6-HiMg1EgA41CbsmsZ8ShOzTTV4g0yOnwlGMs3_5SaLmRu0C31i_uwwhQBM2l";
 
 import ComponentLibrary from "./components/ComponentLibrary";
@@ -176,14 +177,62 @@ export default function App() {
   // Whether a ui-state-restored has been applied yet (first mount only).
   const uiStateApplied = useRef(false);
 
-  // Account tab: the Figma user's name + the persisted all-time export counter,
-  // both read in the sandbox (figma.currentUser / figma.clientStorage).
-  const [account, setAccount] = useState<{ userName: string | null; exportCount: number }>({
-    userName: null,
-    exportCount: 0,
-  });
+  // Account tab: the Figma user's name/id + the persisted all-time export
+  // counter + cached Premium state, all read in the sandbox
+  // (figma.currentUser / figma.clientStorage).
+  const [account, setAccount] = useState<{
+    userName: string | null;
+    userId: string | null;
+    exportCount: number;
+    premium: boolean;
+    premiumValidUntil?: number;
+  }>({ userName: null, userId: null, exportCount: 0, premium: false });
   const [feedbackText, setFeedbackText] = useState("");
   const [sending, setSending] = useState(false);
+  const [checkingLicense, setCheckingLicense] = useState(false);
+  // One background license re-check per session (guards the account-info loop:
+  // set-premium → sandbox persists → account-info arrives again).
+  const licenseCheckedRef = useRef(false);
+
+  /** Ask the payment server whether this Figma user has an active subscription. */
+  const fetchLicense = async (uid: string) => {
+    const res = await fetch(`${PAYMENT_SERVER_URL}/api/license/${encodeURIComponent(uid)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return (await res.json()) as { premium: boolean; validUntil?: number; subscriptionId?: string };
+  };
+
+  /** Manual "Refresh status" — verify with the server and cache the result. */
+  const refreshLicense = async () => {
+    if (!account.userId) {
+      setStatus({ kind: "err", text: "Figma didn't provide a user id — restart the plugin and try again." });
+      return;
+    }
+    setCheckingLicense(true);
+    try {
+      const lic = await fetchLicense(account.userId);
+      toPlugin({ type: "set-premium", premium: !!lic.premium, validUntil: lic.validUntil, subscriptionId: lic.subscriptionId });
+      setStatus(
+        lic.premium
+          ? { kind: "ok", text: "Premium active — unlimited exports. Thank you!" }
+          : { kind: "warn", text: "No active subscription found for this Figma account. If you just paid, wait a few seconds and refresh again." }
+      );
+    } catch {
+      setStatus({ kind: "err", text: "Couldn't reach the billing server. Check your connection and try again." });
+    } finally {
+      setCheckingLicense(false);
+    }
+  };
+
+  /** Open the Razorpay checkout page (hosted by the payment server) in the browser. */
+  const openCheckout = () => {
+    if (!account.userId) {
+      setStatus({ kind: "err", text: "Figma didn't provide a user id — restart the plugin and try again." });
+      return;
+    }
+    const url = `${PAYMENT_SERVER_URL}/checkout?uid=${encodeURIComponent(account.userId)}&name=${encodeURIComponent(account.userName ?? "")}`;
+    window.open(url, "_blank");
+    setStatus({ kind: "warn", text: "Checkout opened in your browser. After paying, come back and click “Refresh status”." });
+  };
 
   const sendFeedback = async () => {
     const text = feedbackText.trim();
@@ -395,7 +444,28 @@ export default function App() {
       }
 
       if (msg.type === "account-info") {
-        setAccount({ userName: msg.userName, exportCount: msg.exportCount });
+        setAccount({
+          userName: msg.userName,
+          userId: msg.userId,
+          exportCount: msg.exportCount,
+          premium: msg.premium,
+          premiumValidUntil: msg.premiumValidUntil,
+        });
+        // Silent once-per-session license re-check: keeps the cached Premium
+        // state honest (renewals extend it, cancellations revoke it). A dead /
+        // unreachable server keeps the cache as-is — never punish offline users.
+        if (msg.userId && !licenseCheckedRef.current) {
+          licenseCheckedRef.current = true;
+          const uid = msg.userId;
+          void (async () => {
+            try {
+              const lic = await fetchLicense(uid);
+              toPlugin({ type: "set-premium", premium: !!lic.premium, validUntil: lic.validUntil, subscriptionId: lic.subscriptionId });
+            } catch {
+              /* offline or server not deployed — trust the cache */
+            }
+          })();
+        }
         return;
       }
 
@@ -483,7 +553,15 @@ export default function App() {
   const update = (updater: (s: WorkbookSpec) => WorkbookSpec) =>
     setSpec((s) => (s ? updater(s) : s));
 
+  // Free-plan gate (the sandbox enforces the same rule before transpiling).
+  const exportsLeft = Math.max(0, FREE_EXPORT_LIMIT - account.exportCount);
+  const limitReached = !account.premium && account.exportCount >= FREE_EXPORT_LIMIT;
+
   const exportFaithful = () => {
+    if (limitReached) {
+      setTab("account");
+      return;
+    }
     pendingFaithfulRef.current = true;
     setBusy(true);
     const isImageMode = layoutModeRef.current === "image";
@@ -585,14 +663,32 @@ export default function App() {
       <div className="plugin-footer">
         {toastEl}
 
-        <button
-          id="export-btn"
-          className="btn-primary"
-          disabled={busy}
-          onClick={exportFaithful}
-        >
-          {busy ? <><span className="spinner" /> Exporting…</> : "Export to Tableau"}
-        </button>
+        {limitReached ? (
+          <>
+            <div className="limit-note">
+              All {FREE_EXPORT_LIMIT} free exports used — Premium is unlimited.
+            </div>
+            <button className="btn-primary" onClick={() => setTab("account")}>
+              Upgrade — {PREMIUM_PRICE_LABEL}
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              id="export-btn"
+              className="btn-primary"
+              disabled={busy}
+              onClick={exportFaithful}
+            >
+              {busy ? <><span className="spinner" /> Exporting…</> : "Export to Tableau"}
+            </button>
+            {!account.premium && (
+              <div className="exports-left">
+                {exportsLeft} of {FREE_EXPORT_LIMIT} free exports left
+              </div>
+            )}
+          </>
+        )}
 
       </div>
     ) : null;
@@ -845,6 +941,7 @@ export default function App() {
       <>
         {tabBar}
         <div className="scroll-area">
+          {toastEl}
           <div>
             <div className="section-label">Profile</div>
             <div className="account-card account-profile">
@@ -853,7 +950,7 @@ export default function App() {
                 <div className="account-name">{account.userName ?? "Figma user"}</div>
                 <div className="account-sub">Signed in via Figma</div>
               </div>
-              <span className="plan-pill">Free</span>
+              <span className="plan-pill">{account.premium ? "Premium" : "Free"}</span>
             </div>
           </div>
 
@@ -863,18 +960,56 @@ export default function App() {
               <div className="account-row-head">
                 <span className="account-row-icon">{ACCOUNT_ICONS.plan}</span>
                 <div>
-                  <div className="account-name">Free — everything included</div>
+                  <div className="account-name">
+                    {account.premium ? "Premium — unlimited exports" : "Free plan"}
+                  </div>
                   <div className="account-sub">
-                    While the plugin is in beta, every feature is free. No payment needed.
+                    {account.premium
+                      ? `Subscription active${
+                          account.premiumValidUntil
+                            ? ` — paid through ${new Date(account.premiumValidUntil).toLocaleDateString()}`
+                            : ""
+                        }. Renews automatically via Razorpay.`
+                      : limitReached
+                      ? `All ${FREE_EXPORT_LIMIT} free exports used. Upgrade to keep exporting.`
+                      : `${exportsLeft} of ${FREE_EXPORT_LIMIT} free exports left.`}
                   </div>
                 </div>
               </div>
+              {!account.premium && (
+                <div className="usage-meter" role="progressbar"
+                  aria-valuemin={0} aria-valuemax={FREE_EXPORT_LIMIT}
+                  aria-valuenow={Math.min(account.exportCount, FREE_EXPORT_LIMIT)}>
+                  <div
+                    className="usage-meter-fill"
+                    style={{ width: `${Math.min(100, (account.exportCount / FREE_EXPORT_LIMIT) * 100)}%` }}
+                  />
+                </div>
+              )}
               <ul className="plan-features">
+                <li>{account.premium ? "Unlimited .twbx exports" : `${FREE_EXPORT_LIMIT} free .twbx exports, then ${PREMIUM_PRICE_LABEL} for unlimited`}</li>
                 <li>Multi-dashboard export — one Tableau dashboard per selected frame</li>
                 <li>Real worksheet swap from your uploaded .twb / .twbx</li>
                 <li>Native navigation buttons from Figma prototype links</li>
                 <li>{`15 domain templates + the component library`}</li>
               </ul>
+              {!account.premium && (
+                <button type="button" className="btn-primary" onClick={openCheckout}>
+                  Upgrade to Premium — {PREMIUM_PRICE_LABEL}
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn-secondary account-clear-btn"
+                disabled={checkingLicense}
+                onClick={() => void refreshLicense()}
+              >
+                {checkingLicense
+                  ? "Checking…"
+                  : account.premium
+                  ? "Refresh subscription status"
+                  : "Already subscribed? Refresh status"}
+              </button>
             </div>
           </div>
 

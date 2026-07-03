@@ -12,7 +12,8 @@ import { UI_SIZE } from "../shared/constants";
 import { findDashboardFrame } from "./builders";
 import { insertLibraryComponent, insertDefault } from "./insert";
 import { handleDrop, loadLabelFont } from "./drop";
-import { restoreImport, sendAccountInfo, logExport, saveUiState, restoreUiState, clearImport } from "./persistence";
+import { restoreImport, sendAccountInfo, logExport, saveUiState, restoreUiState, clearImport, exportAllowed, setPremium } from "./persistence";
+import { FREE_EXPORT_LIMIT, PREMIUM_PRICE_LABEL } from "../shared/constants";
 import { applyTemplate } from "./templates";
 import { post } from "./messaging";
 
@@ -225,7 +226,19 @@ figma.ui.onmessage = (msg: UiToPlugin) => {
       void applyTagsAndResend();
       break;
     case "request-faithful":
-      void sendFaithful({ includeBackground: msg.includeBackground, exportMode: msg.exportMode });
+      // Export gate: free plan stops at FREE_EXPORT_LIMIT exports. Checked here
+      // (the sandbox owns the counter + license cache) so the UI can't bypass it.
+      void (async () => {
+        if (await exportAllowed()) {
+          await sendFaithful({ includeBackground: msg.includeBackground, exportMode: msg.exportMode });
+        } else {
+          post({
+            type: "faithful-ready",
+            models: null,
+            error: `You've used all ${FREE_EXPORT_LIMIT} free exports. Upgrade to Premium (${PREMIUM_PRICE_LABEL}) on the Account tab for unlimited exports.`,
+          });
+        }
+      })();
       break;
     case "add-sheets":
       void addSheets(msg.names);
@@ -262,6 +275,9 @@ figma.ui.onmessage = (msg: UiToPlugin) => {
       break;
     case "clear-import":
       void clearImport();
+      break;
+    case "set-premium":
+      void setPremium({ premium: msg.premium, validUntil: msg.validUntil, subscriptionId: msg.subscriptionId });
       break;
   }
 };

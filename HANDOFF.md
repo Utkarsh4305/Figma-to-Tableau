@@ -4,9 +4,79 @@
 > device without the local Claude memory**. It folds in the essential facts from
 > the private memory files (the Tableau 2026.2 recipe, the reference-export
 > workflow, and project state). Last updated: **2026-07-03**, build
-> `image-mode-87` (post-modularization refactor).
+> `razorpay-billing-88`.
 >
-> **Latest (2026-07-03, after build 87): MODULARIZATION REFACTOR (no behavior
+> **Latest (build 88.1, 2026-07-03): STANDARD CHECKOUT (one-time orders) added
+> to the billing server + LIVE test credentials wired.** The server now has two
+> modes: with `RAZORPAY_PLAN_ID` set → the build-88 subscription flow; WITHOUT
+> it (current state) → **order mode**: `POST /api/create-order` ({uid, amount?
+> ≥100 paise, currency?, receipt?} → razorpay.orders.create, default
+> `ORDER_AMOUNT_PAISE`=85000 INR) + `POST /api/verify-payment`
+> (HMAC-SHA256(order_id|payment_id) timingSafeEqual, then FETCHES the order to
+> confirm amount ≥ configured price before granting — create-order accepts a
+> caller amount, so signature alone must not grant Premium) → extends
+> `validUntil` by `PREMIUM_DAYS` (31). Checkout page branches on a server-sent
+> `mode` boot flag (order mode: create-order → Razorpay modal with order_id →
+> verify-payment; dismiss + payment.failed handled). `payment-server/.env` now
+> holds REAL Razorpay test-mode keys (rzp_test_T91l2EdavMNwEZ; gitignored).
+> `PAYMENT_SERVER_URL` (shared/constants.ts) switched to
+> `http://localhost:3000` for dev testing — **switch back to the deployed URL
+> before shipping**. VERIFIED against the live Razorpay test API: create-order
+> returned a real order; amount<100→400, bad/missing sig→400, no-plan
+> subscription→503, valid locally-computed HMAC → license granted 31 days →
+> /api/license premium:true. tsc + build green. Not committed.
+> **TEST-PAYMENT GOTCHA (user hit it, root-caused via `GET /v1/payments`):**
+> Razorpay TEST accounts accept DOMESTIC (Indian) payments only — the classic
+> `4111 1111 1111 1111` Visa is INTERNATIONAL and fails with
+> `international_transaction_not_allowed` (the integration is fine; Razorpay
+> declines the card). Working test methods: UPI `success@razorpay` (most
+> reliable; `failure@razorpay` = simulated decline), any netbanking bank
+> ("Success" button on the test page), domestic Mastercard
+> `5267 3181 8797 5449` (any future expiry/CVV, OTP any 4–10 digits; <4 digits
+> simulates failure). To debug ANY failed payment, query
+> `https://api.razorpay.com/v1/payments?count=10` with Basic auth
+> (key_id:key_secret) and read `error_reason`/`error_description` — snippet in
+> payment-server/README.md. International cards can be enabled in the Razorpay
+> dashboard (Account & Settings → Payment Methods → International), not code.
+>
+> **Previous (build 88, 2026-07-03): FREE-PLAN GATE + RAZORPAY PREMIUM
+> ($10/month unlimited).** User: 15 free export tokens, then $10/month via
+> Razorpay. Two halves:
+> - **Plugin** — the existing `ft-export-count` (clientStorage) is now a hard
+>   gate: `exportAllowed()` in `persistence.ts` (premium OR count <
+>   `FREE_EXPORT_LIMIT`=15, `shared/constants.ts`) is enforced in the SANDBOX
+>   `request-faithful` handler (UI can't bypass) and mirrored in the UI
+>   (`limitReached` swaps the Export button for an Upgrade prompt; free plan
+>   shows "N of 15 free exports left" under the button + a usage meter on the
+>   Account tab). Premium state is cached in clientStorage key `ft-premium`
+>   ({premium, validUntil, subscriptionId}, 3-day grace past validUntil) via
+>   new `set-premium` msg; `account-info` now carries userId
+>   (figma.currentUser.id — the license key), premium, premiumValidUntil.
+>   Account tab: Free/Premium pill, plan card with meter + "Upgrade to Premium"
+>   (window.open → server checkout page) + "Refresh status" (fetch
+>   `GET /api/license/:uid` → set-premium), plus a silent once-per-session
+>   license re-check (`licenseCheckedRef`) that never revokes on network
+>   failure (offline users keep the cache). Toasts now also render on the
+>   Account tab. manifest.json allowedDomains gained the billing-server
+>   placeholder `https://figma-tableau-pay.example.com` + devAllowedDomains
+>   `http://localhost:3000` — **replace the placeholder (and
+>   `PAYMENT_SERVER_URL` in shared/constants.ts) with the real deployment URL,
+>   then re-import the manifest.**
+> - **Server** — new top-level `payment-server/` (Node 18 + Express + razorpay
+>   SDK, CommonJS, licenses.json file store): `GET /checkout?uid=&name=`
+>   (hosted Razorpay Checkout page), `POST /api/subscription` (creates a
+>   subscription on `RAZORPAY_PLAN_ID`; `notes.figma_uid` maps webhooks back to
+>   the user), `POST /api/verify` (HMAC payment_id|subscription_id),
+>   `POST /api/webhook` (raw-body HMAC; charged/activated extend validUntil to
+>   current_end, cancelled/halted stop extending), `GET /api/license/:uid`.
+>   Setup (Razorpay plan/webhook, deploy, test cards, counter reset via
+>   `figma.clientStorage.setAsync("ft-export-count", 0)`) documented in
+>   `payment-server/README.md`. CAVEAT noted there: Figma Community-distributed
+>   paid plugins are generally required to use Figma's own payments — this flow
+>   suits private/direct distribution. tsc clean, 18 suites green, build OK,
+>   server smoke-tested (healthz/license/checkout). Not committed.
+>
+> **Previous (2026-07-03, after build 87): MODULARIZATION REFACTOR (no behavior
 > change).** The four monoliths were split into focused modules — same exports,
 > same output, build tag unchanged (`image-mode-87`):
 > - `faithful.ts` (~1240 → 512 lines) → `faithful/zoneParsers.ts` (SHEET/BUTTON/
@@ -875,8 +945,11 @@ hitting it by accident and seeing a "messed" layout. The export now hard-codes
 `faithfulSpec(model,'flow')`, the tiled generator) still EXISTS and is still
 tested by `faithful_flow_smoke.ts` — it's just not reachable from the UI, so it
 can be re-exposed later if a real responsive use-case appears. Build tag is now
-`image-mode-87` (Floating/Tiled/Image mode pills; image-only spec builder;
-background-image checkbox hidden in Image mode).
+`razorpay-billing-88` (before it: `image-mode-87` — Floating/Tiled/Image mode
+pills; image-only spec builder; background-image checkbox hidden in Image mode).
+Build 88 adds the free-plan export gate (15 exports, then the Export button
+becomes an Upgrade prompt) + the Razorpay Premium flow on the Account tab —
+see the "Latest (build 88)" block at the top and `payment-server/README.md`.
 
 **Tabs added (`nav-interactions-tabs-43`).** `App.tsx` now has a 3-tab bar under
 the brand block — **Export** (the existing workflow), **Syntax**, **Defaults**:

@@ -341,7 +341,24 @@ export interface MsgRequestAccount {
 export interface MsgAccountInfo {
   type: "account-info";
   userName: string | null;
+  /** figma.currentUser.id — the key the payment server stores licenses under. */
+  userId: string | null;
   exportCount: number;
+  /** True when a Premium subscription is cached and not expired. */
+  premium: boolean;
+  /** ms epoch the cached subscription is paid through (undefined = no expiry known). */
+  premiumValidUntil?: number;
+}
+
+/**
+ * Persist the Premium license state (verified against the payment server by
+ * the UI) into figma.clientStorage, so the gate works offline next session.
+ */
+export interface MsgSetPremium {
+  type: "set-premium";
+  premium: boolean;
+  validUntil?: number;
+  subscriptionId?: string;
 }
 
 /** A .twbx export finished — bump the persisted export counter. */
@@ -394,4 +411,5 @@ export type UiToPlugin =
   | MsgRequestAccount
   | MsgLogExport
   | MsgClearImport
+  | MsgSetPremium
   | MsgSaveUiState;

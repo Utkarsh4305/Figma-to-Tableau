@@ -1102,6 +1102,38 @@ select {
 
 .account-clear-btn { width: auto; align-self: flex-start; padding: 7px 12px; }
 
+/* Free-plan usage meter (exports used out of FREE_EXPORT_LIMIT) */
+.usage-meter {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.usage-meter-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--blue);
+  transition: width 0.2s;
+}
+
+/* Footer notes around the export button (free plan) */
+.exports-left {
+  margin-top: 6px;
+  font-size: 10px;
+  text-align: center;
+  color: var(--text-2);
+}
+
+.limit-note {
+  margin-bottom: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--text-2);
+}
+
 .feedback-input {
   width: 100%;
   padding: 8px 10px;

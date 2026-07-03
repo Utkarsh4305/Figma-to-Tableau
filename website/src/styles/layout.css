@@ -1,41 +1,83 @@
-/* ---------------------------------------------------------------------------
-   layout.css — navbar + footer.
---------------------------------------------------------------------------- */
+/* === Navbar ============================================================ */
 
-/* --- Navbar ----------------------------------------------------------------- */
-
+/* Frosted glass pill */
 .nav {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  height: 62px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  background: linear-gradient(120deg, rgba(255, 253, 247, 0.62), rgba(255, 249, 238, 0.4));
+  backdrop-filter: blur(26px) saturate(1.9);
+  -webkit-backdrop-filter: blur(26px) saturate(1.9);
+  box-shadow:
+    0 8px 32px rgba(60, 45, 20, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.3);
+  transition: box-shadow 0.3s ease, border-color 0.3s ease, background 0.3s ease;
+  width: min(92vw, 1180px);
+}
+
+.nav--scrolled {
+  background: linear-gradient(120deg, rgba(255, 253, 247, 0.82), rgba(255, 249, 238, 0.65));
+  box-shadow:
+    0 12px 48px rgba(60, 45, 20, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* Reading-progress thread above everything */
+.scroll-progress {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  z-index: 100;
-  height: var(--nav-h);
-  transition: background 0.3s ease, border-color 0.3s ease, backdrop-filter 0.3s ease;
-  border-bottom: 1px solid transparent;
-}
-
-.nav--scrolled {
-  background: var(--bg-glass);
-  backdrop-filter: blur(16px) saturate(1.4);
-  border-bottom-color: var(--border);
+  height: 3px;
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, var(--accent), var(--amber) 55%, var(--cyan));
+  z-index: 200;
+  pointer-events: none;
 }
 
 .nav__inner {
   height: 100%;
   display: flex;
   align-items: center;
-  gap: 32px;
+  gap: 8px;
+  padding: 0 16px;
 }
 
+/* Logo */
 .logo {
   display: inline-flex;
   align-items: center;
   gap: 10px;
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: 16.5px;
+  font-size: 16px;
   letter-spacing: -0.01em;
+  padding: 0 8px;
+  color: var(--text);
+}
+
+.logo__icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(244, 81, 44, 0.32);
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.logo:hover .logo__icon {
+  transform: rotate(-8deg) scale(1.06);
 }
 
 .logo em {
@@ -47,33 +89,41 @@
 
 .nav__links {
   display: flex;
-  gap: 6px;
+  gap: 2px;
   margin-inline: auto;
 }
 
 .nav__link {
-  padding: 8px 12px;
-  border-radius: 9px;
-  font-size: 14.5px;
-  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--text-dim);
   transition: color 0.2s ease, background 0.2s ease;
+  letter-spacing: -0.01em;
 }
 
 .nav__link:hover {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(37, 29, 16, 0.06);
 }
 
 .nav__actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .nav__actions .btn--primary {
-  padding: 9px 18px;
-  font-size: 14px;
+  padding: 9px 20px;
+  font-size: 13.5px;
+  font-weight: 700;
+  border-radius: 999px;
+}
+
+.nav__actions .btn--quiet {
+  font-size: 13.5px;
+  font-weight: 600;
 }
 
 .nav__burger {
@@ -88,6 +138,10 @@
 }
 
 @media (max-width: 960px) {
+  .nav {
+    top: 12px;
+    height: 56px;
+  }
   .nav__links,
   .nav__actions {
     display: none;
@@ -99,31 +153,35 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    padding: 12px 24px 20px;
-    background: var(--bg-glass);
-    backdrop-filter: blur(18px);
-    border-bottom: 1px solid var(--border);
+    padding: 64px 24px 24px;
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(24px);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    margin-top: 8px;
+    box-shadow: var(--shadow-floating);
   }
   .nav__drawer .nav__link {
-    padding: 12px 10px;
+    padding: 13px 10px;
     font-size: 16px;
+    font-weight: 600;
   }
   .nav__drawer .btn--primary {
-    margin-top: 10px;
+    margin-top: 12px;
   }
 }
 
-/* --- Footer ----------------------------------------------------------------- */
+/* === Footer ============================================================ */
 
 .footer {
   border-top: 1px solid var(--border);
-  background: linear-gradient(180deg, transparent, rgba(77, 141, 255, 0.04));
-  padding: 72px 0 36px;
+  background: linear-gradient(180deg, #fbf8f1 0%, #f4efe4 100%);
+  padding: 80px 0 40px;
 }
 
 .footer__top {
   display: flex;
-  gap: 64px;
+  gap: 72px;
   justify-content: space-between;
   flex-wrap: wrap;
 }
@@ -131,13 +189,14 @@
 .footer__brand p {
   margin-top: 18px;
   color: var(--text-dim);
-  font-size: 14.5px;
-  line-height: 1.7;
+  font-size: 14px;
+  line-height: 1.75;
+  max-width: 280px;
 }
 
 .footer__cols {
   display: flex;
-  gap: clamp(32px, 6vw, 88px);
+  gap: clamp(36px, 6vw, 96px);
   flex-wrap: wrap;
 }
 
@@ -149,17 +208,17 @@
 }
 
 .footer__col h4 {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11.5px;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   color: var(--text-faint);
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .footer__col a {
   font-size: 14.5px;
+  font-weight: 500;
   color: var(--text-dim);
   transition: color 0.2s ease;
 }
@@ -169,7 +228,7 @@
 }
 
 .footer__bottom {
-  margin-top: 56px;
+  margin-top: 60px;
   padding-top: 24px;
   border-top: 1px solid var(--border);
   display: flex;
@@ -179,4 +238,5 @@
   flex-wrap: wrap;
   color: var(--text-faint);
   font-size: 13px;
+  font-weight: 500;
 }

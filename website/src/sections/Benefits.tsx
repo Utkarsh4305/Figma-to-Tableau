@@ -4,7 +4,7 @@ import CountUp from "../components/ui/CountUp";
 import { stagger, fadeUp, viewportOnce } from "../lib/motion";
 
 const STATS = [
-  { value: <CountUp to={90} suffix="%" />, label: "less manual rebuild work", note: "layouts arrive done — you bind data, not draw zones" },
+  { value: <CountUp to={90} suffix="%" />, label: "less manual rebuild work", note: "layouts arrive done—you bind data, not draw zones" },
   { value: <CountUp to={10} suffix="×" />, label: "faster design iterations", note: "change the Figma file, re-export, done" },
   { value: <>1:1</>, label: "pixel-faithful layouts", note: "geometry, colors and text land where the design says" },
   { value: <CountUp to={3} />, label: "export modes", note: "floating, tiled, or single-image dashboards" },
@@ -24,6 +24,7 @@ const AUDIENCE = [
 export default function Benefits() {
   return (
     <section className="section section--tight" id="benefits">
+      <div className="orb orb--orange" style={{ width: 350, height: 350, top: 100, left: "-5%" }} />
       <div className="container">
         <SectionHeading
           eyebrow="Why teams switch"
@@ -32,7 +33,7 @@ export default function Benefits() {
               The handoff that used to take <span className="grad-text">weeks</span>
             </>
           }
-          blurb="Design-to-dashboard automation turns the slowest step of BI delivery — rebuilding approved designs by hand — into a click."
+          blurb="Design-to-dashboard automation turns the slowest step of BI delivery into a click."
         />
         <motion.div
           className="stats"
@@ -42,7 +43,7 @@ export default function Benefits() {
           viewport={viewportOnce}
         >
           {STATS.map((s) => (
-            <motion.div key={s.label} className="stat glass glass--hover" variants={fadeUp}>
+            <motion.div key={s.label} className="stat" variants={fadeUp}>
               <span className="stat__value grad-text">{s.value}</span>
               <span className="stat__label">{s.label}</span>
               <span className="stat__note">{s.note}</span>

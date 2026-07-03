@@ -4,6 +4,13 @@ import SiteLayout from "./components/layout/SiteLayout";
 import Home from "./pages/Home";
 import Upgrade from "./pages/Upgrade";
 import PricingPage from "./pages/PricingPage";
+import Docs from "./pages/Docs";
+import Blog from "./pages/Blog";
+import Login from "./pages/Login";
+import Account from "./pages/Account";
+import Activate from "./pages/Activate";
+import Privacy from "./pages/Privacy";
+import Terms from "./pages/Terms";
 import Placeholder from "./pages/Placeholder";
 import NotFound from "./pages/NotFound";
 
@@ -31,24 +38,8 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/upgrade" element={<Upgrade />} />
           <Route path="/pricing" element={<PricingPage />} />
-          <Route
-            path="/docs"
-            element={
-              <Placeholder
-                title="Documentation"
-                blurb="Layer-naming syntax (SHEET/, KPI/, Nav/…), export modes, worksheet swapping, and troubleshooting guides are moving here from the plugin's Library tab."
-              />
-            }
-          />
-          <Route
-            path="/blog"
-            element={
-              <Placeholder
-                title="Blog"
-                blurb="Deep dives on design-to-dashboard workflows, Tableau layout internals, and release notes."
-              />
-            }
-          />
+          <Route path="/docs" element={<Docs />} />
+          <Route path="/blog" element={<Blog />} />
           <Route
             path="/contact"
             element={
@@ -69,51 +60,11 @@ export default function App() {
               />
             }
           />
-          <Route
-            path="/login"
-            element={
-              <Placeholder
-                title="Sign in"
-                blurb="Account sign-in is coming with the web dashboard. Today your license is tied to your Figma account — manage it from the plugin's Account tab."
-              />
-            }
-          />
-          <Route
-            path="/account"
-            element={
-              <Placeholder
-                title="Account dashboard"
-                blurb="Subscription management, invoices, and usage analytics are on the roadmap. Your Premium status currently lives in the plugin's Account tab."
-              />
-            }
-          />
-          <Route
-            path="/activate"
-            element={
-              <Placeholder
-                title="License activation"
-                blurb="Licenses activate automatically after checkout — open the plugin and click “Refresh status” on the Account tab. Manual key activation lands here later."
-              />
-            }
-          />
-          <Route
-            path="/privacy"
-            element={
-              <Placeholder
-                title="Privacy policy"
-                blurb="Short version: your designs never leave Figma — generation happens locally in the plugin. Billing is processed by Razorpay; we store only your Figma user id and license status."
-              />
-            }
-          />
-          <Route
-            path="/terms"
-            element={
-              <Placeholder
-                title="Terms of service"
-                blurb="The formal terms are being finalized ahead of public launch."
-              />
-            }
-          />
+          <Route path="/login" element={<Login />} />
+          <Route path="/account" element={<Account />} />
+          <Route path="/activate" element={<Activate />} />
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/terms" element={<Terms />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

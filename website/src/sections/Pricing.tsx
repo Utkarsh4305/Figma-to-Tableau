@@ -55,7 +55,8 @@ const PLANS = [
 export default function Pricing({ standalone = false }: { standalone?: boolean }) {
   return (
     <section className={`section ${standalone ? "section--page" : ""}`} id="pricing">
-      <div className="orb orb--blue" style={{ width: 500, height: 500, top: 120, left: "-8%" }} />
+      <div className="orb orb--blue" style={{ width: 400, height: 400, top: 120, left: "-6%" }} />
+      <div className="orb orb--purple" style={{ width: 350, height: 350, bottom: 60, right: "-4%" }} />
       <div className="container">
         <SectionHeading
           center
@@ -77,7 +78,7 @@ export default function Pricing({ standalone = false }: { standalone?: boolean }
           {PLANS.map((p) => (
             <motion.div
               key={p.name}
-              className={`plan glass ${p.highlight ? "plan--highlight" : ""} ${p.soon ? "plan--soon" : ""}`}
+              className={`plan ${p.highlight ? "plan--highlight" : ""} ${p.soon ? "plan--soon" : ""}`}
               variants={fadeUp}
             >
               {p.highlight && (

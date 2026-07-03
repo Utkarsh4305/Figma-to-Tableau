@@ -3,28 +3,19 @@ import { motion } from "framer-motion";
 import { Check, Lock, ShieldCheck, Sparkles, ArrowRight } from "lucide-react";
 import { checkoutUrl, PREMIUM_PRICE, PREMIUM_PERIOD, FREE_EXPORT_LIMIT, PLUGIN_URL } from "../config";
 
-/**
- * The page every premium CTA in the plugin lands on:
- *   /upgrade?uid=<figma user id>&name=<display name>
- *
- * With a uid we can hand off straight to the backend's secure Razorpay
- * checkout. Without one (someone browsing the site), we explain that the
- * license is tied to a Figma account and point them at the plugin.
- */
 export default function Upgrade() {
   const [params] = useSearchParams();
   const uid = (params.get("uid") ?? "").trim();
   const name = (params.get("name") ?? "").trim();
 
   return (
-    <section className="page page--upgrade noise">
-      <div className="bg-grid" />
-      <div className="orb orb--violet" style={{ width: 520, height: 520, top: -120, right: "10%" }} />
+    <section className="page page--upgrade">
+      <div className="orb orb--purple" style={{ width: 520, height: 520, top: -120, right: "10%" }} />
       <div className="orb orb--blue" style={{ width: 460, height: 460, top: 240, left: "-4%" }} />
 
       <div className="container upgrade">
         <motion.div
-          className="upgrade__card glass"
+          className="upgrade__card"
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
@@ -55,7 +46,7 @@ export default function Upgrade() {
               </a>
               <p className="upgrade__note">
                 <ShieldCheck size={14} /> Payments processed by Razorpay. After paying, return to Figma and click{" "}
-                <b>“Refresh status”</b> in the plugin's Account tab — Premium activates instantly.
+                <b>"Refresh status"</b> in the plugin's Account tab — Premium activates instantly.
               </p>
             </>
           ) : (

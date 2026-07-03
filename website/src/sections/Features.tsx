@@ -16,57 +16,60 @@ const FEATURES = [
   {
     icon: LayoutTemplate,
     title: "Automatic layout conversion",
-    text: "Every frame becomes a dashboard with pixel-faithful zones — floating, tiled, or a single-image mode when you just need the visual.",
+    text: "Every frame becomes a dashboard with pixel-faithful zones—floating, tiled, or single-image mode.",
     hue: "blue",
   },
   {
     icon: Replace,
     title: "Worksheet swapping",
-    text: "Import an existing workbook and SHEET/ layers bind to your real worksheets — live charts and data land exactly where the design says.",
-    hue: "violet",
+    text: "Import an existing workbook and SHEET/ layers bind to your real worksheets—live charts land exactly where the design says.",
+    hue: "purple",
   },
   {
     icon: Navigation,
     title: "Native navigation",
-    text: "Figma prototype interactions become real Tableau navigation actions. Multi-page dashboard flows survive the export.",
+    text: "Figma prototype interactions become real Tableau navigation actions. Multi-page flows survive the export.",
     hue: "cyan",
   },
   {
     icon: Layers,
     title: "Multi-dashboard export",
-    text: "Select N frames, get N dashboards in one workbook — shared data sources, deduplicated sheets, one download.",
-    hue: "blue",
+    text: "Select N frames, get N dashboards in one workbook—shared data sources, deduplicated sheets.",
+    hue: "orange",
   },
   {
     icon: Type,
     title: "Text that never clips",
-    text: "A text-fitting engine measures every string and normalizes fonts so Tableau renders your copy at the designed size — no overflow, no ellipsis.",
-    hue: "violet",
+    text: "A text-fitting engine measures every string and normalizes fonts so Tableau renders your copy at the designed size.",
+    hue: "green",
   },
   {
     icon: Palette,
     title: "15 domain templates",
-    text: "Clinical, sales, finance, operations, executive and more — production-grade starting points with per-domain palettes.",
-    hue: "cyan",
+    text: "Clinical, sales, finance, operations, executive and more—production-grade starting points with per-domain palettes.",
+    hue: "blue",
   },
   {
     icon: Ruler,
     title: "Pixel-perfect fidelity",
-    text: "Rounded cards, tinted canvases, exact spacing. The workbook opens in Tableau 2026.2 looking like the design — verified against real exports.",
-    hue: "blue",
+    text: "Rounded cards, tinted canvases, exact spacing. The workbook opens in Tableau looking like the design.",
+    hue: "purple",
   },
   {
     icon: BrainCircuit,
     title: "AI-assisted, by design",
-    text: "The layer grammar is machine-readable end to end — the foundation for upcoming AI layout suggestions and auto-mapping.",
-    hue: "violet",
+    text: "The layer grammar is machine-readable—the foundation for upcoming AI layout suggestions and auto-mapping.",
+    hue: "cyan",
     soon: true,
   },
 ];
 
+const HUE_ORDER = ["blue", "purple", "cyan", "orange", "green", "blue", "purple", "cyan"] as const;
+
 export default function Features() {
   return (
     <section className="section" id="features">
+      <div className="orb orb--purple" style={{ width: 400, height: 400, top: 200, right: "-8%" }} />
       <div className="container">
         <SectionHeading
           eyebrow="Features"
@@ -75,7 +78,7 @@ export default function Features() {
               Everything between <span className="grad-text">design and production</span>
             </>
           }
-          blurb="Built by studying what Tableau actually loads — not what the spec says it should."
+          blurb="Built by studying what Tableau actually loads—not what the spec says it should."
         />
         <motion.div
           className="features"
@@ -84,9 +87,14 @@ export default function Features() {
           whileInView="show"
           viewport={viewportOnce}
         >
-          {FEATURES.map((f) => (
-            <motion.article key={f.title} className="feature glass glass--hover" variants={fadeUp}>
-              <span className={`feature__icon feature__icon--${f.hue}`}>
+          {FEATURES.map((f, i) => (
+            <motion.article
+              key={f.title}
+              className="feature"
+              variants={fadeUp}
+              whileHover={{ y: -8, transition: { duration: 0.3 } }}
+            >
+              <span className={`feature__icon feature__icon--${HUE_ORDER[i]}`}>
                 <f.icon size={20} strokeWidth={1.8} />
               </span>
               <h3>

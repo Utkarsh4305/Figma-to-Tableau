@@ -1,54 +1,68 @@
-/* ---------------------------------------------------------------------------
-   global.css — design tokens, reset, typography, and the shared component
-   vocabulary (buttons, glass cards, section shells, pills). Section-specific
-   styles live in sections.css; page shells in pages.css.
---------------------------------------------------------------------------- */
-
 :root {
-  /* Surfaces */
-  --bg: #07090f;
-  --bg-elev: #0b0e16;
-  --bg-card: rgba(255, 255, 255, 0.025);
-  --bg-glass: rgba(13, 17, 28, 0.72);
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.14);
+  /* ── "Riso candy on warm paper" ─────────────────────────
+     Warm paper canvas, ink type, vermilion primary and a
+     candy set (figma purple / sky / green / amber / tableau
+     orange) used flat — no big blue-purple gradients. */
+  --bg: #fbf8f1;
+  --bg-elev: #f4efe4;
+  --bg-warm: #fdf3e7;
+  --bg-soft: #f6f1fa;
+  --bg-card: rgba(255, 255, 255, 0.92);
+  --bg-glass: rgba(255, 253, 247, 0.6);
 
-  /* Ink */
-  --text: #e8ebf4;
-  --text-dim: #9aa3b8;
-  --text-faint: #667089;
+  --border: rgba(37, 29, 16, 0.08);
+  --border-strong: rgba(37, 29, 16, 0.16);
 
-  /* Brand — Figma creativity × Tableau professionalism */
-  --blue: #4d8dff;
-  --cyan: #3bd6ff;
-  --violet: #8b5cf6;
-  --magenta: #c65cf6;
-  --green: #34d399;
-  --amber: #fbbf24;
-  --red: #f87171;
+  --text: #251d10;
+  --text-dim: #5f5544;
+  --text-faint: #9a9080;
 
-  --grad-brand: linear-gradient(120deg, var(--blue) 0%, var(--violet) 55%, var(--cyan) 110%);
-  --grad-text: linear-gradient(100deg, #79aaff 0%, #a78bfa 50%, #67e3ff 100%);
+  /* legacy names kept so nothing references a missing var —
+     values remapped to the candy palette */
+  --blue: #f4512c;          /* primary accent: vermilion */
+  --blue-light: #ff7a55;
+  --blue-dark: #d63a17;
+  --accent: #f4512c;
+  --accent-deep: #d63a17;
+  --purple: #8a4dff;        /* figma violet, darkened for contrast */
+  --purple-light: #a259ff;
+  --orange: #f28e2b;        /* tableau orange */
+  --orange-deep: #dd7714;
+  --cyan: #18a0fb;          /* figma sky */
+  --green: #0acf83;
+  --pink: #ff5ca8;
+  --red: #ef4444;
+  --teal: #12b5a0;
+  --amber: #ffb524;
 
-  /* Type */
-  --font-display: "Clash Display", "Segoe UI", sans-serif;
-  --font-body: "Satoshi", "Segoe UI", sans-serif;
+  --grad-brand: linear-gradient(135deg, #f4512c 0%, #ffb524 100%);
+  --grad-warm: linear-gradient(135deg, #f28e2b 0%, #ffb524 100%);
+  --grad-cyan: linear-gradient(135deg, #18a0fb 0%, #0acf83 100%);
+  --grad-green: linear-gradient(135deg, var(--green) 0%, var(--teal) 100%);
+  --grad-text: linear-gradient(120deg, #f4512c, #ffb524);
+  --grad-hero: linear-gradient(180deg, #fdf3e7 0%, #fbf8f1 100%);
+
+  --font-display: "Clash Display", "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Satoshi", "Inter", "Segoe UI", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
-  /* Rhythm */
+  --radius-xs: 6px;
   --radius-sm: 10px;
   --radius: 16px;
-  --radius-lg: 24px;
-  --container: 1160px;
-  --nav-h: 68px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --container: 1180px;
+  --nav-h: 72px;
 
-  /* Shadow / glow */
-  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 20px 50px -20px rgba(0, 0, 0, 0.6);
-  --glow-blue: 0 0 60px -12px rgba(77, 141, 255, 0.55);
-  --glow-violet: 0 0 70px -10px rgba(139, 92, 246, 0.5);
+  --shadow-sm: 0 1px 2px rgba(60, 45, 20, 0.06), 0 4px 16px rgba(60, 45, 20, 0.05);
+  --shadow-card: 0 2px 8px rgba(60, 45, 20, 0.05), 0 12px 40px rgba(60, 45, 20, 0.07);
+  --shadow-hover: 0 6px 20px rgba(60, 45, 20, 0.07), 0 24px 64px rgba(60, 45, 20, 0.09);
+  --shadow-floating: 0 10px 40px rgba(60, 45, 20, 0.09), 0 40px 100px rgba(60, 45, 20, 0.11);
+  --shadow-blue: 0 4px 24px rgba(244, 81, 44, 0.28);
+  --shadow-blue-lg: 0 8px 40px rgba(244, 81, 44, 0.38);
+  --glow-blue: 0 0 80px -16px rgba(244, 81, 44, 0.4);
+  --glow-purple: 0 0 80px -16px rgba(138, 77, 255, 0.32);
 }
-
-/* --- Reset ---------------------------------------------------------------- */
 
 *,
 *::before,
@@ -91,15 +105,12 @@ button {
   cursor: pointer;
 }
 
-h1,
-h2,
-h3,
-h4 {
+h1, h2, h3, h4 {
   font-family: var(--font-display);
   font-weight: 600;
-  line-height: 1.12;
+  line-height: 1.1;
   margin: 0;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.02em;
 }
 
 p {
@@ -107,7 +118,7 @@ p {
 }
 
 ::selection {
-  background: rgba(77, 141, 255, 0.35);
+  background: rgba(255, 181, 36, 0.45);
 }
 
 :focus-visible {
@@ -129,8 +140,7 @@ p {
   }
 }
 
-/* --- Layout shells --------------------------------------------------------- */
-
+/* ── Layout utilities ───────────────────────────────────── */
 .container {
   width: min(var(--container), calc(100% - 48px));
   margin-inline: auto;
@@ -138,41 +148,50 @@ p {
 
 .section {
   position: relative;
-  padding: 110px 0;
+  padding: 112px 0;
 }
 
 .section--tight {
   padding: 80px 0;
 }
 
-/* --- Shared vocabulary ------------------------------------------------------ */
-
+/* ── Eyebrow: a slightly-tilted sticker ─────────────────── */
 .eyebrow {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 14px;
+  padding: 6px 16px;
   border-radius: 999px;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.03);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.08em;
+  border: 1.5px solid var(--text);
+  background: #fff;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--text-dim);
+  color: var(--text);
+  transform: rotate(-1.6deg);
+  box-shadow: 2.5px 2.5px 0 rgba(37, 29, 16, 0.14);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.eyebrow:hover {
+  transform: rotate(0.5deg);
+  box-shadow: 1.5px 1.5px 0 rgba(37, 29, 16, 0.14);
 }
 
 .eyebrow .dot {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--grad-brand);
-  box-shadow: 0 0 10px rgba(77, 141, 255, 0.9);
+  background: var(--accent);
+  flex-shrink: 0;
 }
 
+/* ── Section heading ────────────────────────────────────── */
 .section-heading {
   max-width: 680px;
-  margin-bottom: 56px;
+  margin-bottom: 64px;
 }
 
 .section-heading--center {
@@ -181,77 +200,108 @@ p {
 }
 
 .section-heading h2 {
-  font-size: clamp(30px, 4.2vw, 44px);
-  margin: 18px 0 14px;
+  font-size: clamp(32px, 4.2vw, 52px);
+  font-weight: 600;
+  margin: 18px 0 16px;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
 }
 
 .section-heading p {
   color: var(--text-dim);
   font-size: 17px;
+  line-height: 1.75;
 }
 
+/* ── Accent-word helpers ────────────────────────────────────
+   .grad-text = an amber marker swipe behind ink text (the old
+   blue→purple gradient text is gone on purpose).
+   .grad-warm / .grad-cyan = flat candy colors. */
 .grad-text {
-  background: var(--grad-text);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: inherit;
+  background: linear-gradient(120deg, rgba(255, 181, 36, 0.65), rgba(255, 181, 36, 0.3));
+  border-radius: 0.35em 0.6em 0.4em 0.5em / 0.55em 0.35em 0.6em 0.4em;
+  padding: 0.02em 0.14em;
+  margin-inline: -0.06em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 
-/* --- Buttons ---------------------------------------------------------------- */
+.grad-warm {
+  color: var(--orange-deep);
+}
 
+.grad-cyan {
+  color: var(--cyan);
+}
+
+.word-figma {
+  color: var(--purple-light);
+}
+
+.word-tableau {
+  color: var(--orange-deep);
+}
+
+/* ── Buttons ────────────────────────────────────────────── */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 12px 22px;
-  border-radius: 12px;
-  font-weight: 600;
+  padding: 12px 26px;
+  border-radius: 999px;
+  font-weight: 700;
   font-size: 15px;
-  letter-spacing: 0.01em;
-  transition: transform 0.18s ease, box-shadow 0.25s ease, background 0.25s ease,
-    border-color 0.25s ease;
+  letter-spacing: -0.01em;
+  transition: transform 0.2s ease, box-shadow 0.25s ease, background 0.25s ease, border-color 0.25s ease, color 0.25s ease;
   white-space: nowrap;
 }
 
 .btn:active {
-  transform: translateY(1px) scale(0.99);
+  transform: translateY(1px) scale(0.98) !important;
 }
 
+/* Primary = ink pill; hover flips it vermilion */
 .btn--primary {
-  color: #fff;
-  background: var(--grad-brand);
-  background-size: 160% 160%;
-  box-shadow: var(--glow-blue);
-  animation: btn-grad 6s ease infinite;
+  position: relative;
+  overflow: hidden;
+  color: #fff8ee;
+  background: var(--text);
+  box-shadow: 0 4px 20px rgba(37, 29, 16, 0.22);
+}
+
+.btn--primary::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.28) 50%, transparent 65%);
+  transform: translateX(-130%);
+  transition: transform 0.7s ease;
+  pointer-events: none;
 }
 
 .btn--primary:hover {
-  box-shadow: 0 0 70px -8px rgba(77, 141, 255, 0.75);
-  transform: translateY(-1px);
+  background: var(--accent);
+  box-shadow: var(--shadow-blue-lg);
+  transform: translateY(-2px);
 }
 
-@keyframes btn-grad {
-  0%,
-  100% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
+.btn--primary:hover::after {
+  transform: translateX(130%);
 }
 
 .btn--ghost {
   color: var(--text);
-  border: 1px solid var(--border-strong);
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(8px);
+  border: 1.5px solid var(--border-strong);
+  background: #fff;
 }
 
 .btn--ghost:hover {
-  border-color: rgba(255, 255, 255, 0.28);
-  background: rgba(255, 255, 255, 0.06);
-  transform: translateY(-1px);
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(244, 81, 44, 0.05);
+  transform: translateY(-2px);
 }
 
 .btn--quiet {
@@ -264,90 +314,124 @@ p {
 }
 
 .btn--lg {
-  padding: 15px 28px;
+  padding: 15px 34px;
   font-size: 16px;
   border-radius: 14px;
 }
 
-/* --- Glass card -------------------------------------------------------------- */
-
+/* ── Glass card ─────────────────────────────────────────── */
 .glass {
   position: relative;
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   background: var(--bg-card);
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(16px);
   box-shadow: var(--shadow-card);
 }
 
 .glass--hover {
-  transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.3s ease;
+  transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.4s ease;
 }
 
 .glass--hover:hover {
-  transform: translateY(-4px);
-  border-color: rgba(120, 150, 255, 0.35);
-  box-shadow: var(--shadow-card), 0 30px 70px -30px rgba(77, 141, 255, 0.35);
+  transform: translateY(-6px);
+  border-color: rgba(244, 81, 44, 0.22);
+  box-shadow: var(--shadow-hover), 0 0 48px -24px rgba(244, 81, 44, 0.2);
 }
 
-/* --- Atmosphere: grid + orbs + noise ----------------------------------------- */
-
+/* ── Background grid ────────────────────────────────────── */
 .bg-grid {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background-image: linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
-  background-size: 56px 56px;
+  background-image:
+    linear-gradient(rgba(37, 29, 16, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37, 29, 16, 0.045) 1px, transparent 1px);
+  background-size: 60px 60px;
   mask-image: radial-gradient(ellipse 90% 70% at 50% 30%, #000 20%, transparent 75%);
 }
 
+/* ── Orbs / glows ───────────────────────────────────────── */
 .orb {
   position: absolute;
   border-radius: 50%;
   filter: blur(90px);
   pointer-events: none;
-  opacity: 0.5;
 }
 
 .orb--blue {
-  background: radial-gradient(circle, rgba(77, 141, 255, 0.55), transparent 65%);
+  background: radial-gradient(circle, rgba(244, 81, 44, 0.2), transparent 65%);
 }
 
-.orb--violet {
-  background: radial-gradient(circle, rgba(139, 92, 246, 0.5), transparent 65%);
+.orb--purple {
+  background: radial-gradient(circle, rgba(162, 89, 255, 0.18), transparent 65%);
 }
 
 .orb--cyan {
-  background: radial-gradient(circle, rgba(59, 214, 255, 0.4), transparent 65%);
+  background: radial-gradient(circle, rgba(24, 160, 251, 0.16), transparent 65%);
 }
 
-.noise::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.5;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+.orb--orange {
+  background: radial-gradient(circle, rgba(255, 181, 36, 0.24), transparent 65%);
 }
 
-/* --- Mono chip (plugin syntax tags: SHEET/, KPI/, Nav/) ----------------------- */
+.orb--pink {
+  background: radial-gradient(circle, rgba(255, 92, 168, 0.15), transparent 65%);
+}
 
+/* ── Chip ───────────────────────────────────────────────── */
 .chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 10px;
+  padding: 5px 12px;
   border-radius: 8px;
   border: 1px solid var(--border);
-  background: rgba(10, 13, 22, 0.85);
+  background: var(--bg-card);
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-dim);
-  backdrop-filter: blur(6px);
 }
 
 .chip b {
-  color: var(--cyan);
+  color: var(--blue);
+  font-weight: 700;
+}
+
+/* ── Decorative blob ────────────────────────────────────── */
+.blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  pointer-events: none;
+  opacity: 0.18;
+}
+
+.squiggle {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0.12;
+}
+
+/* ── Floating badge ─────────────────────────────────────── */
+.floating-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: white;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+  font-size: 13px;
   font-weight: 600;
+  color: var(--text);
+}
+
+.floating-badge__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
 }

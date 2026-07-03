@@ -13,11 +13,11 @@ const ITEMS = [
   },
   {
     q: "Can it use my real data and worksheets?",
-    a: "Yes — import an existing workbook into the plugin and any SHEET/ layer whose name matches one of your worksheets is swapped in, so the generated dashboard shows your live charts, not placeholders.",
+    a: "Yes—import an existing workbook into the plugin and any SHEET/ layer whose name matches one of your worksheets is swapped in, so the generated dashboard shows your live charts, not placeholders.",
   },
   {
     q: "Does my design or data leave Figma?",
-    a: "No. Generation runs locally inside the Figma plugin sandbox. The only network calls are the license check and checkout — your frames and any imported workbook never touch our servers.",
+    a: "No. Generation runs locally inside the Figma plugin sandbox. The only network calls are the license check and checkout—your frames and any imported workbook never touch our servers.",
   },
   {
     q: "What does the free plan include?",
@@ -25,7 +25,7 @@ const ITEMS = [
   },
   {
     q: "How is the license managed?",
-    a: "It's tied to your Figma account. Pay once through our secure Razorpay checkout, then click “Refresh status” in the plugin's Account tab — Premium activates instantly and keeps working offline with a 3-day grace period.",
+    a: "It's tied to your Figma account. Pay once through our secure Razorpay checkout, then click 'Refresh status' in the plugin's Account tab—Premium activates instantly and keeps working offline with a 3-day grace period.",
   },
   {
     q: "Which Tableau versions are supported?",

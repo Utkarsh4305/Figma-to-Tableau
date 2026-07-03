@@ -2,14 +2,13 @@ import { Link } from "react-router-dom";
 import Logo from "./Logo";
 import { PLUGIN_URL, SUPPORT_EMAIL } from "../../config";
 
-const COLUMNS: { title: string; links: { label: string; to: string; external?: boolean }[] }[] = [
+const COLUMNS = [
   {
     title: "Product",
     links: [
       { label: "How it works", to: "/#how-it-works" },
       { label: "Features", to: "/#features" },
       { label: "Pricing", to: "/pricing" },
-      { label: "Buy Premium", to: "/upgrade" },
       { label: "Get the plugin", to: PLUGIN_URL, external: true },
     ],
   },
@@ -27,7 +26,7 @@ const COLUMNS: { title: string; links: { label: string; to: string; external?: b
     links: [
       { label: "Contact", to: "/contact" },
       { label: "Support", to: "/support" },
-      { label: `Email us`, to: `mailto:${SUPPORT_EMAIL}`, external: true },
+      { label: "Email us", to: `mailto:${SUPPORT_EMAIL}`, external: true },
     ],
   },
   {
@@ -72,7 +71,7 @@ export default function Footer() {
           </div>
         </div>
         <div className="footer__bottom">
-          <span>© {new Date().getFullYear()} Figma to Tableau. Not affiliated with Figma, Inc. or Salesforce/Tableau.</span>
+          <span>&copy; {new Date().getFullYear()} Figma to Tableau. Not affiliated with Figma, Inc. or Salesforce/Tableau.</span>
           <span className="chip">
             <b>.twbx</b> Tableau 2026.2 ready
           </span>

@@ -3,11 +3,6 @@ import { motion } from "framer-motion";
 import { ArrowLeft, Mail } from "lucide-react";
 import { SUPPORT_EMAIL } from "../config";
 
-/**
- * Shared shell for routes that exist by design but ship later (docs, blog,
- * auth, account dashboard…). Keeps a stable URL + polished page so links from
- * the plugin/backend never dead-end.
- */
 export default function Placeholder({
   title,
   blurb,
@@ -18,12 +13,11 @@ export default function Placeholder({
   showSupportEmail?: boolean;
 }) {
   return (
-    <section className="page page--placeholder noise">
-      <div className="bg-grid" />
+    <section className="page page--placeholder">
       <div className="orb orb--blue" style={{ width: 480, height: 480, top: -140, left: "20%" }} />
       <div className="container container--narrow">
         <motion.div
-          className="placeholder glass"
+          className="placeholder"
           initial={{ opacity: 0, y: 26 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}

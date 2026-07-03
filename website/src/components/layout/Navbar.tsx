@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { motion, useScroll, useSpring } from "framer-motion";
 import { Menu, X } from "lucide-react";
 import Logo from "./Logo";
 import { PLUGIN_URL } from "../../config";
@@ -17,9 +16,6 @@ export default function Navbar() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
 
-  const { scrollYProgress } = useScroll();
-  const progress = useSpring(scrollYProgress, { stiffness: 140, damping: 28, restDelta: 0.001 });
-
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
     onScroll();
@@ -31,7 +27,6 @@ export default function Navbar() {
 
   return (
     <>
-      <motion.div className="scroll-progress" style={{ scaleX: progress }} aria-hidden="true" />
       <header className={`nav ${scrolled ? "nav--scrolled" : ""}`}>
       <div className="nav__inner">
         <Logo />

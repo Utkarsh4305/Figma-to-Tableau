@@ -29,19 +29,6 @@
     inset 0 -1px 0 rgba(255, 255, 255, 0.3);
 }
 
-/* Reading-progress thread above everything */
-.scroll-progress {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  transform-origin: 0 50%;
-  background: linear-gradient(90deg, var(--accent), var(--amber) 55%, var(--cyan));
-  z-index: 200;
-  pointer-events: none;
-}
-
 .nav__inner {
   height: 100%;
   display: flex;

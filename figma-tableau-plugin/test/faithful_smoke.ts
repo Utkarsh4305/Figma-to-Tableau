@@ -4,7 +4,7 @@
 // LaDataViz pattern. Writes test-out/Faithful_Test.twb(x).
 import { writeFileSync, mkdirSync } from "fs";
 import { resolve } from "path";
-import { faithfulSpec } from "../src/plugin/seed";
+import { faithfulSpec } from "../src/plugin/faithfulSpec";
 import { generateSpecWorkbook, buildSpecBlob } from "../src/plugin/exporter";
 import type { FaithfulModel } from "../src/shared/types";
 

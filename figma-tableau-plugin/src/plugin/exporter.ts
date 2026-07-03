@@ -285,15 +285,24 @@ function allRawAssets(spec: WorkbookSpec): RawAsset[] {
 
 /** Generate + package + download a WorkbookSpec. */
 export async function exportSpecTwbx(spec: WorkbookSpec): Promise<ExportResult> {
-  const res = generateSpecWorkbook(spec);
-  await downloadTwbx({
-    workbookName: spec.workbookName || "Workbook",
-    twbXml: res.twbXml,
-    csvFile: res.csvFile,
-    csvText: res.csvText,
-    images: collectImageAssets(spec),
-    rawAssets: allRawAssets(spec),
-  });
+  let res: ExportResult;
+  try {
+    res = generateSpecWorkbook(spec);
+  } catch (e) {
+    throw new Error(`Failed to generate workbook XML: ${(e as Error).message}`);
+  }
+  try {
+    await downloadTwbx({
+      workbookName: spec.workbookName || "Workbook",
+      twbXml: res.twbXml,
+      csvFile: res.csvFile,
+      csvText: res.csvText,
+      images: collectImageAssets(spec),
+      rawAssets: allRawAssets(spec),
+    });
+  } catch (e) {
+    throw new Error(`Failed to package .twbx: ${(e as Error).message}`);
+  }
   return res;
 }
 

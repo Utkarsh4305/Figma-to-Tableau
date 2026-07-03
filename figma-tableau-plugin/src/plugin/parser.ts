@@ -547,8 +547,8 @@ export async function attachImages(model: DashboardModel): Promise<void> {
     try {
       const node = (await figma.getNodeByIdAsync(e.id)) as SceneNode | null;
       if (node) e.imagePng = await exportPng(node);
-    } catch {
-      /* leave imagePng undefined — the element just won't render as a bitmap */
+    } catch (e) {
+      console.warn("Image export failed for element:", e);
     }
   }
 }
@@ -611,7 +611,8 @@ export async function applyAutoTags(): Promise<number> {
     let node: SceneNode | null = null;
     try {
       node = (await figma.getNodeByIdAsync(e.id)) as SceneNode | null;
-    } catch {
+    } catch (e) {
+      console.warn("getNodeByIdAsync failed in auto-tag:", e);
       node = null;
     }
     if (!node) continue;

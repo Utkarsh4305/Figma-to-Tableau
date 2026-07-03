@@ -1,36 +1,21 @@
 import { useEffect, useRef, useState } from "react";
-import type { DashboardModel, PluginToUi, UiToPlugin } from "../shared/types";
+import type { DashboardModel, PluginToUi } from "../shared/types";
 import type { WorkbookSpec, ExportOptions } from "../shared/spec";
 import { DEFAULT_EXPORT_OPTIONS } from "../shared/spec";
-import { seedSpecFromModel, blankSpec, faithfulSpecMulti } from "../plugin/seed";
+import { seedSpecFromModel, blankSpec } from "../plugin/seed";
+import { faithfulSpecMulti } from "../plugin/faithfulSpec";
 
 import { exportSpecTwbx, applyImportedSwap } from "../plugin/exporter";
-import { parseImport, parsedImportFromStored, type ParsedImport } from "../plugin/twbImport";
+import { parseImport, parsedImportFromStored } from "../plugin/twbImport";
 import ComponentLibrary from "./components/ComponentLibrary";
 import DashboardTemplates from "./templates/DashboardTemplates";
 import { TAB_ICONS, SUBTAB_ICONS, SYNTAX_ICONS, ACCOUNT_ICONS, type SyntaxIconName } from "./icons";
+import { useExportConfig, useWindowSize, useToast, useImport } from "./hooks";
 
 const BUILD = "image-mode-87";
 
-type Status = { kind: "ok" | "err" | "warn"; text: string } | null;
-
-function toPlugin(msg: UiToPlugin) {
+function toPlugin(msg: any) {
   parent.postMessage({ pluginMessage: msg }, "*");
-}
-
-/** Debounce a save-UI-state call so rapid resize events don't hammer
- *  clientStorage on every pixel. Returns a function the caller invokes
- *  whenever the saved values should be flushed. */
-function createUiSaver(): (w: number, h: number, tab: string) => void {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let lastW = 0, lastH = 0, lastTab = "";
-  return (w: number, h: number, tab: string) => {
-    lastW = w; lastH = h; lastTab = tab;
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(() => {
-      toPlugin({ type: "save-ui-state", data: { width: lastW, height: lastH, tab: lastTab as any } });
-    }, 600);
-  };
 }
 
 
@@ -187,19 +172,18 @@ export default function App() {
   const [model,      setModel]      = useState<DashboardModel | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [spec,       setSpec]       = useState<WorkbookSpec | null>(null);
-  const [status,     setStatus]     = useState<Status>(null);
-  const [busy,       setBusy]       = useState(false);
-  const [importedNames, setImportedNames] = useState<string[]>([]);
-  const [checkedSheets, setCheckedSheets] = useState<Record<string, boolean>>({});
   const [tab, setTab] = useState<"dashboard" | "library" | "account">("dashboard");
   const [frameNames, setFrameNames] = useState<string[]>([]);
-  // Debounced UI-state persistence (window size + active tab).
-  const saveUiState = useRef(createUiSaver());
+  const [parsing, setParsing] = useState(false);
+
+  const { setStatus, busy, setBusy, toastEl } = useToast();
+  const { layoutMode, setLayoutMode, layoutModeRef, includeBg, setIncludeBg, includeBgRef } = useExportConfig();
+  const { importedRef, importedNames, setImportedNames, checkedSheets, setCheckedSheets,
+          toggleSheet, allChecked, toggleAllSheets, checkedSheetNames, clearStoredImport } = useImport();
+  const { currentSizeRef, saveUiState, resizeHandle } = useWindowSize(tab);
+
   // Whether a ui-state-restored has been applied yet (first mount only).
   const uiStateApplied = useRef(false);
-  // Track the CURRENT size as-sent-to-the-sandbox so we can save it accurately
-  // even though the sandbox clamps it (we never read back the clamped value).
-  const currentSizeRef = useRef<{ w: number; h: number }>({ w: 420, h: 580 });
 
   // Account tab: the Figma user's name + the persisted all-time export counter,
   // both read in the sandbox (figma.currentUser / figma.clientStorage).
@@ -234,15 +218,6 @@ export default function App() {
   };
   const breakdownCache = useRef<string | null>(null);
   if (model) breakdownCache.current = layerBreakdown(model);
-
-  // Auto-dismiss SUCCESS toasts only. Warnings and errors carry actionable
-  // guidance (which SHEET/ names to use, why charts are demo data…) — they stay
-  // until the user dismisses them.
-  useEffect(() => {
-    if (!status || status.kind !== "ok") return;
-    const timer = setTimeout(() => setStatus(null), 5000);
-    return () => clearTimeout(timer);
-  }, [status]);
 
   // A clicked button/checkbox/tab keeps browser focus, so a LATER keypress that
   // lands in the plugin iframe (Space, Enter — e.g. the user reaching for
@@ -299,32 +274,13 @@ export default function App() {
     };
   }, []);
 
-  // Layout mode: floating (pixel-exact), tiled (responsive flow containers),
-  // or image (full-frame background PNG only — no interactive zones).
-  // Defaults to floating so a hurried click always produces the pixel-exact result;
-  // the user deliberately opts into tiled or image.
-  const [layoutMode, setLayoutMode] = useState<"floating" | "tiled" | "image">("floating");
-  const layoutModeRef = useRef<"floating" | "tiled" | "image">("floating");
-  layoutModeRef.current = layoutMode;
-
-  // Background image: rasterize the whole frame as a PNG behind all zones,
-  // faithfully preserving gradients, images, and complex fills. Opt-in because
-  // it adds ~1s to export time and increases .twbx size. Irrelevant in image
-  // mode (the whole export IS the background image).
-  const [includeBg, setIncludeBg] = useState(false);
-  const includeBgRef = useRef(false);
-  includeBgRef.current = includeBg;
-
   // Imported real worksheets (the swap feature) — held in a ref so the once-
   // registered faithful-ready handler reads the latest upload. Persisted across
   // plugin sessions via figma.clientStorage (restored on mount).
-  const importedRef        = useRef<ParsedImport | null>(null);
   const seededFrameRef     = useRef<string | null>(null);
   const manualRef          = useRef(false);
   const forceReseedRef     = useRef(false);
   const pendingFaithfulRef = useRef(false);
-  const modelRef           = useRef<DashboardModel | null>(null);
-  modelRef.current = model;
   // The workbook-name box edits `spec.workbookName`, but the faithful export
   // builds a fresh spec — mirror the current name into a ref so the once-
   // registered faithful-ready handler can apply it (→ the .twbx file name matches).
@@ -467,10 +423,12 @@ export default function App() {
       if (msg.error || !msg.model) {
         setModel(null);
         setFrameNames([]);
+        setParsing(false);
         setParseError(msg.error ?? "Nothing to parse.");
         return;
       }
 
+      setParsing(false);
       setParseError(null);
       setModel(msg.model);
       setFrameNames(msg.frameNames?.length ? msg.frameNames : [msg.model.title]);
@@ -501,6 +459,7 @@ export default function App() {
     };
 
     window.addEventListener("message", handler);
+    setParsing(true);
     toPlugin({ type: "request-parse" });
     toPlugin({ type: "request-account" });
     return () => window.removeEventListener("message", handler);
@@ -549,13 +508,6 @@ export default function App() {
     }
   };
 
-  const toggleSheet = (name: string) =>
-    setCheckedSheets((c) => ({ ...c, [name]: !c[name] }));
-  const allChecked = importedNames.length > 0 && importedNames.every((n) => checkedSheets[n]);
-  const toggleAllSheets = () =>
-    setCheckedSheets(Object.fromEntries(importedNames.map((n) => [n, !allChecked])));
-  const checkedSheetNames = importedNames.filter((n) => checkedSheets[n]);
-
   // Drop the checked sheets into the Figma frame as SHEET/<name> placeholders.
   const addSheetsToFigma = () => {
     if (!checkedSheetNames.length) return;
@@ -588,68 +540,6 @@ export default function App() {
     </div>
   );
 
-  // Forget the imported workbook: clear the sandbox's persisted copy AND this
-  // session's in-memory copy, so the next export goes back to demo data.
-  // Feedback comes via figma.notify (the Account tab has no toast area).
-  const clearStoredImport = () => {
-    toPlugin({ type: "clear-import" });
-    importedRef.current = null;
-    setImportedNames([]);
-    setCheckedSheets({});
-  };
-
-  // ── Window size: free drag-resize via the always-visible corner grip chip
-  // (the bare iframe edge never shows a resize cursor inside Figma). The
-  // sandbox clamps to ≥360×420.
-  // Corner grip: pointer capture keeps the drag alive even though the iframe is
-  // resizing under the cursor. Rendered as a visible chip (not a bare cursor
-  // zone) so it's discoverable inside the plugin window.
-  const resizingRef = useRef(false);
-  const resizeHandle = (
-    <div
-      className="resize-handle"
-      title="Drag to resize the plugin window"
-      onPointerDown={(e) => {
-        e.preventDefault();
-        resizingRef.current = true;
-        e.currentTarget.setPointerCapture(e.pointerId);
-      }}
-      onPointerMove={(e) => {
-        if (!resizingRef.current) return;
-        const w = Math.round(e.clientX + 8);
-        const h = Math.round(e.clientY + 8);
-        currentSizeRef.current = { w, h };
-        toPlugin({ type: "resize", width: w, height: h });
-        saveUiState.current(w, h, tab);
-      }}
-      onPointerUp={(e) => {
-        resizingRef.current = false;
-        try {
-          e.currentTarget.releasePointerCapture(e.pointerId);
-        } catch {
-          /* capture already released */
-        }
-      }}
-    >
-      {/* Double-headed ↖↘ arrow so the chip unmistakably reads "drag to resize". */}
-      <svg
-        width="13"
-        height="13"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <path d="M7 7l10 10" />
-        <path d="M7 13V7h6" />
-        <path d="M17 11v6h-6" />
-      </svg>
-    </div>
-  );
-
   // ── Top-level tabs
   const tabBar = (
     <div className="tab-bar">
@@ -678,22 +568,7 @@ export default function App() {
   if (tab === "dashboard") {
     const dashboardFooter = spec ? (
       <div className="plugin-footer">
-        {status && (
-          <div className={`toast ${status.kind}`} role="status">
-            <span className="toast-icon">
-              {status.kind === "ok" ? "✓" : status.kind === "err" ? "✕" : "!"}
-            </span>
-            <span className="toast-text">{status.text}</span>
-            <button
-              type="button"
-              className="toast-close"
-              aria-label="Dismiss"
-              onClick={() => setStatus(null)}
-            >
-              ✕
-            </button>
-          </div>
-        )}
+        {toastEl}
 
         <button
           id="export-btn"
@@ -775,27 +650,23 @@ export default function App() {
 
             <div className="export-row">
               <div className="field-label">Export mode</div>
-              <div className="pill-row">
+              <div className="toggle-row">
                 {(["floating", "tiled", "image"] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    className={`pill-btn ${layoutMode === mode ? "active" : ""}`}
-                    onClick={() => {
-                      setLayoutMode(mode);
-                      const s = currentSizeRef.current;
-                      saveUiState.current(s.w, s.h, tab);
-                    }}
-                    title={
-                      mode === "floating"
-                        ? "Pixel-exact positions match the Figma design exactly. Recommended."
-                        : mode === "tiled"
-                        ? "Responsive flow containers reflow to fill the dashboard."
-                        : "Exports the entire frame as a static background image — no live worksheets."
-                    }
-                  >
-                    {mode === "floating" ? "Floating" : mode === "tiled" ? "Tiled" : "Image"}
-                  </button>
+                  <label key={mode} className="toggle-item">
+                    <input
+                      type="radio"
+                      name="export-mode"
+                      checked={layoutMode === mode}
+                      onChange={() => {
+                        setLayoutMode(mode);
+                        const s = currentSizeRef.current;
+                        saveUiState.current(s.w, s.h, tab);
+                      }}
+                    />
+                    <span>
+                      {mode === "floating" ? "Floating" : mode === "tiled" ? "Tiled" : "Image"}
+                    </span>
+                  </label>
                 ))}
               </div>
               <div className="layout-hint" style={{ marginTop: 4 }}>
@@ -844,7 +715,7 @@ export default function App() {
                       exportOptions: {
                         ...DEFAULT_EXPORT_OPTIONS,
                         ...s.exportOptions,
-                        filterShelfPosition: e.target.value as "left" | "right" | "hidden",
+                        filterShelfPosition: e.target.value as "right" | "hidden",
                       },
                     }))
                   }
@@ -939,9 +810,12 @@ export default function App() {
       </>
     ) : (
       <>
-        {/* A "no frame" parse failure is a fresh-start situation, not an error —
-            show how the plugin works instead of a raw error string. */}
-        {parseError && !/select (a|one or more) frame/i.test(parseError) ? (
+        {parsing ? (
+          <div className="onboard" style={{ textAlign: "center", padding: "32px 16px" }}>
+            <span className="spinner" style={{ margin: "0 auto 12px", display: "block" }} />
+            <div className="onboard-title">Parsing selection…</div>
+          </div>
+        ) : parseError && !/select (a|one or more) frame/i.test(parseError) ? (
           <div className="error-card">{parseError}</div>
         ) : (
           <div className="onboard">
@@ -962,12 +836,14 @@ export default function App() {
             </ol>
           </div>
         )}
-        <button
-          className="scratch-btn"
-          onClick={() => { manualRef.current = true; setSpec(blankSpec()); }}
-        >
-          Start from scratch
-        </button>
+        {!parsing && (
+          <button
+            className="scratch-btn"
+            onClick={() => { manualRef.current = true; setSpec(blankSpec()); }}
+          >
+            Start from scratch
+          </button>
+        )}
       </>
     );
 
@@ -1127,7 +1003,7 @@ export default function App() {
       {tabBar}
       <div className="scroll-area">
         <div className="empty-state">
-          <div className="empty-sub">Select a tab above.</div>
+          <div className="empty-sub">Unknown tab.</div>
         </div>
       </div>
       {resizeHandle}

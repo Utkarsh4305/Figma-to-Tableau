@@ -47,9 +47,12 @@ export async function buildTwbxBlob(parts: TwbxParts): Promise<Blob> {
   const zip = new JSZip();
   const safeName = parts.workbookName.replace(/[\\/:*?"<>|]+/g, "_") || "Workbook";
   zip.file(`${safeName}.twb`, parts.twbXml);
-  zip.folder(DATA_DIR)!.file(parts.csvFile, parts.csvText);
+  const dataDir = zip.folder(DATA_DIR);
+  if (!dataDir) throw new Error(`Failed to create ${DATA_DIR} directory in package`);
+  dataDir.file(parts.csvFile, parts.csvText);
   if (parts.images && parts.images.length) {
-    const img = zip.folder(IMAGE_DIR)!;
+    const img = zip.folder(IMAGE_DIR);
+    if (!img) throw new Error(`Failed to create ${IMAGE_DIR} directory in package`);
     for (const a of parts.images) img.file(a.file, a.base64, { base64: true });
   }
   // Imported data/image files keep their EXACT package path so the imported

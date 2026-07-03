@@ -7,7 +7,7 @@
 //   - every <simple-id> uuid in the windows section is unique (the nav change
 //     keyed the dashboard window uuid by name, so collisions would dupe uuids)
 //   - generateSpecWorkbook does NOT throw the duplicate-identity guard
-import { faithfulSpecMulti } from "../src/plugin/seed";
+import { faithfulSpecMulti } from "../src/plugin/faithfulSpec";
 import { generateSpecWorkbook } from "../src/plugin/exporter";
 import type { FaithfulModel } from "../src/shared/types";
 

@@ -7,7 +7,7 @@
 //   - a sheetOnly model adds a worksheet but NO dashboard
 //   - the nav-action targets that worksheet
 //   - only the ONE real (selected) dashboard exists
-import { faithfulSpecMulti } from "../src/plugin/seed";
+import { faithfulSpecMulti } from "../src/plugin/faithfulSpec";
 import { generateSpecWorkbook } from "../src/plugin/exporter";
 import type { FaithfulModel } from "../src/shared/types";
 

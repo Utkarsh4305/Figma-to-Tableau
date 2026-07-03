@@ -4,7 +4,7 @@
 // (Excel-backed federated datasource). Writes test-out/Imported_Swap_Test.twbx.
 import { readFileSync, writeFileSync, mkdirSync } from "fs";
 import { resolve } from "path";
-import { faithfulSpec } from "../src/plugin/seed";
+import { faithfulSpec } from "../src/plugin/faithfulSpec";
 import { parseImport } from "../src/plugin/twbImport";
 import { generateSpecWorkbook, buildSpecBlob } from "../src/plugin/exporter";
 import type { FaithfulModel } from "../src/shared/types";

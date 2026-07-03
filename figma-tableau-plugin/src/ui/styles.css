@@ -19,6 +19,10 @@
   --accent:      var(--figma-color-text-brand, #60a5fa);
   --radius:      8px;
   --radius-sm:   6px;
+  --blue-bg:     rgba(96, 165, 250, 0.12);
+  --blue-border: #1f2d3d;
+  --red-border:  #3d1f1f;
+  --amber-border: #3d2e1a;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -38,29 +42,6 @@ body {
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
-}
-
-/* ── Brand block ─────────────────────────────────────────── */
-.brand {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: 32px 16px 24px;
-  border-bottom: 1px solid var(--border);
-}
-
-.brand-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
-  letter-spacing: -0.2px;
-}
-
-.brand-sub {
-  font-size: 11px;
-  color: var(--text-3);
 }
 
 /* ── Scroll area ─────────────────────────────────────────── */
@@ -91,12 +72,6 @@ body {
   gap: 10px;
   text-align: center;
   padding: 20px;
-}
-
-.empty-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
 }
 
 .empty-sub {
@@ -453,8 +428,8 @@ select {
   text-transform: none;
   letter-spacing: 0;
   color: var(--blue);
-  background: rgba(96, 165, 250, 0.12);
-  border: 1px solid #1f2d3d;
+  background: var(--blue-bg);
+  border: 1px solid var(--blue-border);
   border-radius: 999px;
   padding: 1px 8px;
 }
@@ -590,9 +565,9 @@ select {
   z-index: 10;
 }
 
-.toast.ok   { color: var(--blue);  border-color: #1f2d3d; }
-.toast.err  { color: var(--red);   border-color: #3d1f1f; }
-.toast.warn { color: var(--amber); border-color: #3d2e1a; }
+.toast.ok   { color: var(--blue);  border-color: var(--blue-border); }
+.toast.err  { color: var(--red);   border-color: var(--red-border); }
+.toast.warn { color: var(--amber); border-color: var(--amber-border); }
 
 .toast-icon { flex: 0 0 auto; }
 
@@ -906,171 +881,6 @@ select {
 
 .syntax-desc b { color: var(--text); font-weight: 600; }
 
-/* ── Defaults tab ────────────────────────────────────────── */
-.defaults-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.default-card {
-  text-align: left;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-2);
-  color: var(--text);
-  cursor: pointer;
-  font-family: inherit;
-  transition: border-color 0.15s, background 0.15s;
-  /* Reliable HTML5 drag onto the Figma canvas (Chromium blocks drag on some
-     elements / when text is selectable). */
-  -webkit-user-drag: element;
-  user-select: none;
-}
-
-.default-card:hover { border-color: var(--border-focus); background: var(--bg-3); }
-.default-label { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
-
-.default-hint {
-  display: block;
-  font-size: 10px;
-  color: var(--text-2);
-  word-break: break-all;
-}
-
-/* ── Analyze tab ──────────────────────────────────────────── */
-.analyze-btn {
-  margin-bottom: 8px;
-}
-
-.mapping-panel {
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-
-.mapping-stats {
-  display: flex;
-  gap: 12px;
-  padding: 10px 14px;
-  font-size: 11px;
-  color: var(--text-2);
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-3);
-}
-
-.mapping-filter {
-  margin: 0;
-  border: none !important;
-  border-bottom: 1px solid var(--border) !important;
-  border-radius: 0 !important;
-  background: var(--bg-2) !important;
-  padding: 10px 14px;
-  font-size: 12px;
-}
-
-.mapping-list {
-  max-height: 360px;
-  overflow-y: auto;
-}
-
-.mapping-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
-  transition: background 0.1s;
-}
-
-.mapping-row:last-child { border-bottom: none; }
-.mapping-row:hover { background: var(--bg-hover); }
-
-.mapping-left { flex: 1; min-width: 0; }
-
-.mapping-name {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
-  margin-bottom: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.mapping-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.mapping-type-cell {
-  cursor: pointer;
-}
-
-.mapping-type-label {
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: var(--bg-3);
-  border: 1px solid var(--border);
-  transition: border-color 0.15s;
-}
-
-.mapping-type-label:hover {
-  border-color: var(--border-focus);
-}
-
-.mapping-type-cell select {
-  font-size: 11px;
-  padding: 2px 6px;
-  min-width: 110px;
-}
-
-.mapping-confidence {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--text-2);
-}
-
-.mapping-role {
-  font-size: 10px;
-  color: var(--text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
-
-.mapping-reasons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.mapping-reason {
-  font-size: 10px;
-  color: var(--text-2);
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: var(--bg-3);
-}
-
-.mapping-right {
-  flex: 0 0 auto;
-  max-width: 140px;
-  text-align: right;
-}
-
-.mapping-tableau {
-  font-size: 10px;
-  color: var(--blue);
-  line-height: 1.4;
-}
-
 /* ── Component Library tab ────────────────────────────────── */
 .library-grid {
   display: grid;
@@ -1090,14 +900,9 @@ select {
   color: var(--text);
   cursor: pointer;
   font-family: inherit;
-  transition: border-color 0.15s, background 0.15s;
-  /* Reliable HTML5 drag onto the Figma canvas (see .default-card). */
+  transition: border-color 0.15s, background 0.15s, transform 0.15s, box-shadow 0.15s;
   -webkit-user-drag: element;
   user-select: none;
-}
-
-.library-card {
-  transition: border-color 0.15s, background 0.15s, transform 0.15s, box-shadow 0.15s;
 }
 
 .library-card:hover {
@@ -1231,7 +1036,7 @@ select {
 
 .template-apply-sm:hover {
   border-color: var(--blue);
-  background: rgba(96, 165, 250, 0.12);
+  background: var(--blue-bg);
   color: var(--blue);
 }
 
@@ -1302,8 +1107,8 @@ select {
   font-size: 10px;
   font-weight: 600;
   color: var(--blue);
-  background: rgba(96, 165, 250, 0.12);
-  border: 1px solid #1f2d3d;
+  background: var(--blue-bg);
+  border: 1px solid var(--blue-border);
   border-radius: 999px;
   padding: 2px 9px;
 }
@@ -1471,7 +1276,6 @@ select {
 /* ── Keyboard focus ───────────────────────────────────────── */
 button:focus-visible,
 [role="button"]:focus-visible,
-.upload-btn:focus-visible,
 summary:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
@@ -1479,36 +1283,6 @@ summary:focus-visible {
 }
 
 /* ── Layout mode pills ────────────────────────────────────── */
-.pill-row {
-  display: flex;
-  gap: 6px;
-}
-
-.pill-btn {
-  flex: 1;
-  padding: 7px 10px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-3);
-  color: var(--text-2);
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-  transition: border-color 0.15s, background 0.15s, color 0.15s;
-}
-
-.pill-btn:hover {
-  border-color: var(--border-focus);
-  color: var(--text);
-}
-
-.pill-btn.active {
-  border-color: var(--blue);
-  background: rgba(96, 165, 250, 0.12);
-  color: var(--blue);
-}
-
 .layout-hint {
   font-size: 10px;
   line-height: 1.5;

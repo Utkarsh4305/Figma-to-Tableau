@@ -11,7 +11,7 @@
 // Writes test-out/Faithful_NavLink_Test.twb(x).
 import { writeFileSync, mkdirSync } from "fs";
 import { resolve } from "path";
-import { faithfulSpecMulti } from "../src/plugin/seed";
+import { faithfulSpecMulti } from "../src/plugin/faithfulSpec";
 import { generateSpecWorkbook, buildSpecBlob } from "../src/plugin/exporter";
 import type { FaithfulModel } from "../src/shared/types";
 

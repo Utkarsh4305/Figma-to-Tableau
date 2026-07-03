@@ -5,7 +5,7 @@
 // must be reported via SwapResult.unmatched so the failure is never silent.
 import { readFileSync } from "fs";
 import { resolve } from "path";
-import { faithfulSpecMulti } from "../src/plugin/seed";
+import { faithfulSpecMulti } from "../src/plugin/faithfulSpec";
 import { parseImport } from "../src/plugin/twbImport";
 import { generateSpecWorkbook, applyImportedSwap } from "../src/plugin/exporter";
 import type { FaithfulModel } from "../src/shared/types";

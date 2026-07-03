@@ -4,7 +4,7 @@
 //   - swap in (a SHEET/ layer carrying the real "&" matches it),
 //   - splice with the name escaped exactly ONCE (no "&amp;amp;" double-escape, so
 //     the dashboard zone still resolves the worksheet instead of showing a demo).
-import { faithfulSpecMulti } from "../src/plugin/seed";
+import { faithfulSpecMulti } from "../src/plugin/faithfulSpec";
 import { parseImport } from "../src/plugin/twbImport";
 import { generateSpecWorkbook, applyImportedSwap } from "../src/plugin/exporter";
 import type { FaithfulModel } from "../src/shared/types";

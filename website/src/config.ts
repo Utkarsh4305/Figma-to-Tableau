@@ -3,8 +3,13 @@
  * lives here (or in VITE_* env vars that override it).
  */
 
-/** The billing backend (repo /backend) — hosts Razorpay checkout + license API. */
-export const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:3000";
+/**
+ * The billing backend (repo /backend) — hosts Razorpay checkout + license API.
+ * Production default is the Render deployment; local dev overrides it via
+ * VITE_BACKEND_URL=http://localhost:3000 in website/.env.
+ */
+export const BACKEND_URL =
+  import.meta.env.VITE_BACKEND_URL ?? "https://figma-tableau-backend-xuvn.onrender.com";
 
 /**
  * Razorpay publishable key id (rzp_test_… / rzp_live_…). Safe to expose on the
@@ -12,7 +17,8 @@ export const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "http://localhost
  * stays on the backend. Set VITE_RAZORPAY_KEY_ID to enable inline checkout on
  * the pricing page; when empty, the buy button falls back to the /upgrade flow.
  */
-export const RAZORPAY_KEY_ID = import.meta.env.VITE_RAZORPAY_KEY_ID ?? "";
+export const RAZORPAY_KEY_ID =
+  import.meta.env.VITE_RAZORPAY_KEY_ID ?? "rzp_test_T91l2EdavMNwEZ";
 
 /** Where "Get the plugin" points — the Figma Community listing once published. */
 export const PLUGIN_URL = "https://www.figma.com/community/plugins";

@@ -80,6 +80,10 @@ html {
   -webkit-text-size-adjust: 100%;
   scrollbar-width: thin;
   scrollbar-color: var(--accent) var(--bg-elev);
+  /* Clip stray horizontal overflow (decorative orbs / marquee) without
+     creating a scroll container — unlike `hidden`, `clip` keeps position:
+     sticky (docs TOC) working. */
+  overflow-x: clip;
 }
 
 ::-webkit-scrollbar {
@@ -109,7 +113,7 @@ body {
   font-size: 16px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 img,

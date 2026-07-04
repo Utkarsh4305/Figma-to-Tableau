@@ -182,21 +182,20 @@ export const PREMIUM_PRICE_LABEL = "$10/month";
 
 /**
  * Base URL of the billing backend (repo /backend, no trailing slash).
- * Currently the local dev server (manifest devAllowedDomains already permits
- * it). BEFORE SHIPPING: replace with the deployed URL and mirror it in
- * manifest.json networkAccess.allowedDomains — the license fetch is blocked
- * by Figma otherwise.
+ * Points at the Render deployment (mirrored in manifest.json
+ * networkAccess.allowedDomains — the license fetch is blocked by Figma
+ * otherwise). For local dev against localhost:3000, swap this back and rely on
+ * manifest devAllowedDomains.
  */
-export const PAYMENT_SERVER_URL = "http://localhost:3000";
+export const PAYMENT_SERVER_URL = "https://figma-tableau-backend-xuvn.onrender.com";
 
 /**
  * Base URL of the marketing website (repo /website, no trailing slash).
  * Every premium CTA opens `${WEBSITE_URL}/upgrade?uid=…&name=…` there, which
- * hands off to the backend's Razorpay checkout. Currently the local Vite dev
- * server. BEFORE SHIPPING: replace with the deployed site and mirror it in
- * manifest.json networkAccess.allowedDomains.
+ * hands off to the backend's Razorpay checkout. Points at the Vercel
+ * deployment (mirrored in manifest.json networkAccess.allowedDomains).
  */
-export const WEBSITE_URL = "http://localhost:5173";
+export const WEBSITE_URL = "https://ryvenor.vercel.app";
 
 /** Default dashboard pixel size when a frame size can't be read. */
 export const DEFAULT_SIZE = { width: 1280, height: 800 };

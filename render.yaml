@@ -1,0 +1,44 @@
+# Render blueprint for the Figma-to-Tableau billing backend (repo /backend).
+#
+# Deploy: Render Dashboard > New > Blueprint > pick this repo. Render reads this
+# file, creates the web service, and prompts for the secret env vars below.
+#
+# NOTE (free tier): the instance has NO persistent disk, so backend/licenses.json
+# is wiped on every restart/redeploy — license records (who paid) reset. Fine for
+# testing; before real customers move to a mounted disk (Starter plan) or a DB.
+# Free instances also sleep after ~15 min idle and cold-start on the next request.
+services:
+  - type: web
+    name: figma-tableau-backend
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      # Secrets — set these in the Render dashboard (Blueprint prompts on first
+      # deploy). The server exits at boot if the two Razorpay keys are missing.
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      # Optional — a subscription plan id switches checkout to monthly billing.
+      # Leave unset for one-time-order mode (each payment grants PREMIUM_DAYS).
+      - key: RAZORPAY_PLAN_ID
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      # One-time-order pricing (paise). 85000 = ₹850. Change per your pricing.
+      - key: ORDER_AMOUNT_PAISE
+        value: "85000"
+      - key: ORDER_CURRENCY
+        value: INR
+      - key: PREMIUM_DAYS
+        value: "31"
+      # Annual one-time order (paise). 850000 = ₹8,500 ≈ $100.
+      - key: ANNUAL_AMOUNT_PAISE
+        value: "850000"
+      - key: ANNUAL_DAYS
+        value: "365"

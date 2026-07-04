@@ -18,18 +18,18 @@ services:
     healthCheckPath: /healthz
     autoDeploy: true
     envVars:
-      # Secrets — set these in the Render dashboard (Blueprint prompts on first
-      # deploy). The server exits at boot if the two Razorpay keys are missing.
+      # Razorpay keys — PLACEHOLDERS so the blueprint deploys without prompting.
+      # After the first deploy, edit these in the Render dashboard (Environment
+      # tab) with your real keys; saving triggers an automatic redeploy. The
+      # server boots on the placeholders (they're non-empty) but Razorpay calls
+      # fail until the real values are set.
       - key: RAZORPAY_KEY_ID
-        sync: false
+        value: rzp_test_REPLACE_ME
       - key: RAZORPAY_KEY_SECRET
-        sync: false
-      # Optional — a subscription plan id switches checkout to monthly billing.
-      # Leave unset for one-time-order mode (each payment grants PREMIUM_DAYS).
-      - key: RAZORPAY_PLAN_ID
-        sync: false
-      - key: RAZORPAY_WEBHOOK_SECRET
-        sync: false
+        value: REPLACE_ME
+      # Optional — add in the dashboard if you use them. A subscription plan id
+      # switches checkout to monthly billing; without one it's one-time orders.
+      # RAZORPAY_PLAN_ID, RAZORPAY_WEBHOOK_SECRET
       # One-time-order pricing (paise). 85000 = ₹850. Change per your pricing.
       - key: ORDER_AMOUNT_PAISE
         value: "85000"

@@ -1,46 +1,51 @@
 :root {
-  /* ── "Riso candy on warm paper" ─────────────────────────
-     Warm paper canvas, ink type, vermilion primary and a
-     candy set (figma purple / sky / green / amber / tableau
-     orange) used flat — no big blue-purple gradients. */
-  --bg: #fbf8f1;
-  --bg-elev: #f4efe4;
-  --bg-warm: #fdf3e7;
-  --bg-soft: #f6f1fa;
+  /* ── "Pastel teal" ──────────────────────────────────────
+     The spring-teal marker highlight is the anchor. Everything
+     else is built to sit *with* it: a deeper teal for anything
+     actionable (same hue family, not a clashing accent), and
+     soft professional pastels — dusty pink for Figma, warm tan
+     for Tableau — on a pale mint/blush paper. */
+  --bg: #f4fbf9;
+  --bg-elev: #e7f5f1;
+  --bg-warm: #eaf7f2;
+  --bg-soft: #fbf0f5;
   --bg-card: rgba(255, 255, 255, 0.92);
-  --bg-glass: rgba(255, 253, 247, 0.6);
+  --bg-glass: rgba(244, 251, 249, 0.6);
 
-  --border: rgba(37, 29, 16, 0.08);
-  --border-strong: rgba(37, 29, 16, 0.16);
+  --border: rgba(15, 32, 28, 0.08);
+  --border-strong: rgba(15, 32, 28, 0.16);
 
-  --text: #251d10;
-  --text-dim: #5f5544;
-  --text-faint: #9a9080;
+  --text: #122320;
+  --text-dim: #52645f;
+  --text-faint: #8fa39c;
 
   /* legacy names kept so nothing references a missing var —
-     values remapped to the candy palette */
-  --blue: #f4512c;          /* primary accent: vermilion */
-  --blue-light: #ff7a55;
-  --blue-dark: #d63a17;
-  --accent: #f4512c;
-  --accent-deep: #d63a17;
-  --purple: #8a4dff;        /* figma violet, darkened for contrast */
-  --purple-light: #a259ff;
-  --orange: #f28e2b;        /* tableau orange */
-  --orange-deep: #dd7714;
-  --cyan: #18a0fb;          /* figma sky */
+     values remapped to the pastel-teal palette */
+  --blue: #0d9488;           /* primary accent: deep professional teal, same family as the highlight */
+  --blue-light: #5eead4;
+  --blue-dark: #0b7a70;
+  --accent: #0d9488;
+  --accent-deep: #0b7a70;
+  --purple: #d9689f;         /* figma accent: dusty pastel pink */
+  --purple-light: #e58ab5;
+  --orange: #a67c52;         /* tableau accent: warm pastel tan */
+  --orange-deep: #8b5e34;
+  --cyan: #18a0fb;           /* figma sky */
   --green: #0acf83;
-  --pink: #ff5ca8;
+  --pink: #e58ab5;
   --red: #ef4444;
   --teal: #12b5a0;
-  --amber: #ffb524;
+  --amber: #00d9a0;          /* the anchor: spring-teal marker highlight */
 
-  --grad-brand: linear-gradient(135deg, #f4512c 0%, #ffb524 100%);
-  --grad-warm: linear-gradient(135deg, #f28e2b 0%, #ffb524 100%);
+  --grad-brand: linear-gradient(135deg, #0d9488 0%, #00d9a0 100%);
+  --grad-warm: linear-gradient(135deg, #a67c52 0%, #00d9a0 100%);
   --grad-cyan: linear-gradient(135deg, #18a0fb 0%, #0acf83 100%);
   --grad-green: linear-gradient(135deg, var(--green) 0%, var(--teal) 100%);
-  --grad-text: linear-gradient(120deg, #f4512c, #ffb524);
-  --grad-hero: linear-gradient(180deg, #fdf3e7 0%, #fbf8f1 100%);
+  --grad-text: linear-gradient(120deg, #0d9488, #00d9a0);
+  --grad-hero: linear-gradient(180deg, #eaf7f2 0%, #f4fbf9 100%);
+
+  /* faint grain for card surfaces so flat fills don't read as generic UI */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
 
   --font-display: "Clash Display", "Inter", "Segoe UI", system-ui, sans-serif;
   --font-body: "Satoshi", "Inter", "Segoe UI", system-ui, sans-serif;
@@ -54,14 +59,14 @@
   --container: 1180px;
   --nav-h: 72px;
 
-  --shadow-sm: 0 1px 2px rgba(60, 45, 20, 0.06), 0 4px 16px rgba(60, 45, 20, 0.05);
-  --shadow-card: 0 2px 8px rgba(60, 45, 20, 0.05), 0 12px 40px rgba(60, 45, 20, 0.07);
-  --shadow-hover: 0 6px 20px rgba(60, 45, 20, 0.07), 0 24px 64px rgba(60, 45, 20, 0.09);
-  --shadow-floating: 0 10px 40px rgba(60, 45, 20, 0.09), 0 40px 100px rgba(60, 45, 20, 0.11);
-  --shadow-blue: 0 4px 24px rgba(244, 81, 44, 0.28);
-  --shadow-blue-lg: 0 8px 40px rgba(244, 81, 44, 0.38);
-  --glow-blue: 0 0 80px -16px rgba(244, 81, 44, 0.4);
-  --glow-purple: 0 0 80px -16px rgba(138, 77, 255, 0.32);
+  --shadow-sm: 0 1px 2px rgba(18, 35, 32, 0.06), 0 4px 16px rgba(18, 35, 32, 0.05);
+  --shadow-card: 0 2px 8px rgba(18, 35, 32, 0.05), 0 12px 40px rgba(18, 35, 32, 0.07);
+  --shadow-hover: 0 6px 20px rgba(18, 35, 32, 0.07), 0 24px 64px rgba(18, 35, 32, 0.09);
+  --shadow-floating: 0 10px 40px rgba(18, 35, 32, 0.09), 0 40px 100px rgba(18, 35, 32, 0.11);
+  --shadow-blue: 0 4px 24px rgba(13, 148, 136, 0.26);
+  --shadow-blue-lg: 0 8px 40px rgba(13, 148, 136, 0.36);
+  --glow-blue: 0 0 80px -16px rgba(13, 148, 136, 0.4);
+  --glow-purple: 0 0 80px -16px rgba(217, 104, 159, 0.3);
 }
 
 *,
@@ -139,7 +144,7 @@ p {
 }
 
 ::selection {
-  background: rgba(255, 181, 36, 0.45);
+  background: rgba(0, 217, 160, 0.4);
 }
 
 :focus-visible {
@@ -235,12 +240,12 @@ p {
 }
 
 /* ── Accent-word helpers ────────────────────────────────────
-   .grad-text = an amber marker swipe behind ink text (the old
-   blue→purple gradient text is gone on purpose).
+   .grad-text = a spring-teal marker swipe behind ink text (the
+   old blue→purple gradient text is gone on purpose).
    .grad-warm / .grad-cyan = flat candy colors. */
 .grad-text {
   color: inherit;
-  background: linear-gradient(120deg, rgba(255, 181, 36, 0.65), rgba(255, 181, 36, 0.3));
+  background: linear-gradient(120deg, rgba(0, 217, 160, 0.55), rgba(0, 217, 160, 0.22));
   border-radius: 0.35em 0.6em 0.4em 0.5em / 0.55em 0.35em 0.6em 0.4em;
   padding: 0.02em 0.14em;
   margin-inline: -0.06em;
@@ -283,13 +288,13 @@ p {
   transform: translateY(1px) scale(0.98) !important;
 }
 
-/* Primary = ink pill; hover flips it vermilion */
+/* Primary = solid indigo pill (no ink/black fill) */
 .btn--primary {
   position: relative;
   overflow: hidden;
-  color: #fff8ee;
-  background: var(--text);
-  box-shadow: 0 4px 20px rgba(37, 29, 16, 0.22);
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-deep) 100%);
+  box-shadow: var(--shadow-blue);
 }
 
 .btn--primary::after {
@@ -303,8 +308,7 @@ p {
 }
 
 .btn--primary:hover {
-  background: var(--accent);
-  box-shadow: var(--shadow-blue-lg);
+  box-shadow: var(--shadow-blue-lg), 0 0 0 3px rgba(0, 217, 160, 0.22);
   transform: translateY(-2px);
 }
 
@@ -321,7 +325,7 @@ p {
 .btn--ghost:hover {
   border-color: var(--accent);
   color: var(--accent);
-  background: rgba(244, 81, 44, 0.05);
+  background: rgba(13, 148, 136, 0.06);
   transform: translateY(-2px);
 }
 
@@ -344,8 +348,9 @@ p {
 .glass {
   position: relative;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
-  background: var(--bg-card);
+  border: 1px solid rgba(13, 148, 136, 0.14);
+  background-color: var(--bg-card);
+  background-image: var(--grain);
   backdrop-filter: blur(16px);
   box-shadow: var(--shadow-card);
 }
@@ -356,8 +361,8 @@ p {
 
 .glass--hover:hover {
   transform: translateY(-6px);
-  border-color: rgba(244, 81, 44, 0.22);
-  box-shadow: var(--shadow-hover), 0 0 48px -24px rgba(244, 81, 44, 0.2);
+  border-color: rgba(13, 148, 136, 0.3);
+  box-shadow: var(--shadow-hover), 0 0 48px -24px rgba(13, 148, 136, 0.25);
 }
 
 /* ── Background grid ────────────────────────────────────── */
@@ -381,11 +386,11 @@ p {
 }
 
 .orb--blue {
-  background: radial-gradient(circle, rgba(244, 81, 44, 0.2), transparent 65%);
+  background: radial-gradient(circle, rgba(13, 148, 136, 0.2), transparent 65%);
 }
 
 .orb--purple {
-  background: radial-gradient(circle, rgba(162, 89, 255, 0.18), transparent 65%);
+  background: radial-gradient(circle, rgba(217, 104, 159, 0.16), transparent 65%);
 }
 
 .orb--cyan {
@@ -393,7 +398,7 @@ p {
 }
 
 .orb--orange {
-  background: radial-gradient(circle, rgba(255, 181, 36, 0.24), transparent 65%);
+  background: radial-gradient(circle, rgba(0, 217, 160, 0.22), transparent 65%);
 }
 
 .orb--pink {

@@ -19,8 +19,7 @@ const {
   RAZORPAY_PLAN_ID,
   ORDER_CURRENCY,
   SUBSCRIPTION_MODE,
-  orderAmount,
-  premiumDays,
+  planFor,
 } = require("../config");
 
 const router = express.Router();
@@ -47,31 +46,37 @@ router.post("/api/subscription", async (req, res) => {
 });
 
 /**
- * Create a Razorpay ORDER (Standard Checkout). Body: { amount (paise),
- * currency, receipt, uid } — amount/currency default to the configured
- * Premium price. Returns { order_id, amount, currency }.
+ * Create a Razorpay ORDER (Standard Checkout). Body: { plan ("monthly" |
+ * "annual"), uid, currency, receipt }. The PLAN picks the price server-side
+ * (the client never sends an amount for a plan); the plan name is stored in
+ * the order notes so verification can grant the right duration. Returns
+ * { order_id, amount, currency, plan }.
  */
 router.post("/api/create-order", async (req, res) => {
   const body = req.body || {};
   const uid = String(body.uid || "").trim();
-  const amount = body.amount === undefined ? orderAmount : Math.round(Number(body.amount));
+  const planName = String(body.plan || "monthly").toLowerCase().trim();
+  const plan = planFor(planName);
+  // A named plan is authoritative; only fall back to a caller-supplied amount
+  // when no plan is given (kept for backward compatibility).
+  const amount =
+    body.plan === undefined && body.amount !== undefined
+      ? Math.round(Number(body.amount))
+      : plan.amount;
   const currency = String(body.currency || ORDER_CURRENCY).toUpperCase();
   const receipt = String(body.receipt || `ftt_${Date.now()}`).slice(0, 40);
   if (!Number.isFinite(amount) || amount < 100) {
     return res.status(400).json({ error: "amount must be an integer >= 100 (paise)." });
   }
+  const notes = { plan: planName };
+  if (uid) notes.figma_uid = uid;
   try {
-    const order = await razorpay.orders.create({
-      amount,
-      currency,
-      receipt,
-      notes: uid ? { figma_uid: uid } : undefined,
-    });
+    const order = await razorpay.orders.create({ amount, currency, receipt, notes });
     if (uid) {
       const prev = getLicense(uid);
       setLicense(uid, { lastOrderId: order.id, status: prev && prev.status ? prev.status : "created" });
     }
-    res.json({ order_id: order.id, amount: order.amount, currency: order.currency });
+    res.json({ order_id: order.id, amount: order.amount, currency: order.currency, plan: planName });
   } catch (e) {
     const status = e && e.statusCode === 401 ? 401 : 500;
     console.error("order create failed:", e && e.error ? e.error : e);
@@ -98,9 +103,10 @@ router.post("/api/verify-payment", async (req, res) => {
     crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(String(razorpay_signature)));
   if (!ok) return res.status(400).json({ error: "Signature verification failed." });
 
-  // Signature alone proves the payment, not the price — /api/create-order
-  // accepts a caller-supplied amount, so confirm the order actually covers the
-  // configured Premium price before granting the license.
+  // Signature alone proves the payment, not the price or the plan — the order
+  // is the source of truth. Fetch it, read the plan we stored in its notes at
+  // creation, and confirm the amount actually covers that plan before granting
+  // the matching duration (monthly ≈ 31 days, annual ≈ 365).
   if (uid) {
     let order = null;
     try {
@@ -109,14 +115,16 @@ router.post("/api/verify-payment", async (req, res) => {
       console.error("order fetch after verify failed:", e && e.error ? e.error : e);
       return res.status(502).json({ error: "Payment verified but the order couldn't be confirmed — refresh your status in a minute." });
     }
-    if (!order || Number(order.amount) < orderAmount) {
-      return res.status(400).json({ error: "Order amount doesn't cover the Premium price." });
+    const plan = planFor(order && order.notes ? order.notes.plan : "monthly");
+    if (!order || Number(order.amount) < plan.amount) {
+      return res.status(400).json({ error: "Order amount doesn't cover the plan price." });
     }
     const prev = getLicense(uid);
     const base = prev && prev.validUntil && prev.validUntil > Date.now() ? prev.validUntil : Date.now();
     const rec = setLicense(String(uid), {
       status: "paid",
-      validUntil: base + premiumDays * 24 * 3600 * 1000,
+      plan: order.notes ? order.notes.plan : "monthly",
+      validUntil: base + plan.days * 24 * 3600 * 1000,
       lastOrderId: razorpay_order_id,
       lastPaymentId: razorpay_payment_id,
     });

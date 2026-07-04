@@ -66,12 +66,13 @@ const FEATURES = [
 
 const HUE_ORDER = ["blue", "purple", "cyan", "orange", "green", "blue", "purple", "cyan"] as const;
 
-export default function Features() {
+export default function Features({ standalone = false }: { standalone?: boolean }) {
   return (
-    <section className="section" id="features">
+    <section className={`section ${standalone ? "section--page" : ""}`} id="features">
       <div className="orb orb--purple" style={{ width: 400, height: 400, top: 200, right: "-8%" }} />
       <div className="container">
         <SectionHeading
+          center={standalone}
           eyebrow="Features"
           title={
             <>

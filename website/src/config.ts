@@ -6,15 +6,26 @@
 /** The billing backend (repo /backend) — hosts Razorpay checkout + license API. */
 export const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:3000";
 
+/**
+ * Razorpay publishable key id (rzp_test_… / rzp_live_…). Safe to expose on the
+ * client — it only identifies your account for the Checkout modal; the secret
+ * stays on the backend. Set VITE_RAZORPAY_KEY_ID to enable inline checkout on
+ * the pricing page; when empty, the buy button falls back to the /upgrade flow.
+ */
+export const RAZORPAY_KEY_ID = import.meta.env.VITE_RAZORPAY_KEY_ID ?? "";
+
 /** Where "Get the plugin" points — the Figma Community listing once published. */
 export const PLUGIN_URL = "https://www.figma.com/community/plugins";
 
 /** Support inbox shown on /support and /contact. */
 export const SUPPORT_EMAIL = "support@figmatotableau.dev";
 
-/** Display price — the real amount lives on the backend / Razorpay plan. */
+/** Display prices — the real charged amounts live on the backend (per plan). */
 export const PREMIUM_PRICE = "$10";
 export const PREMIUM_PERIOD = "/month";
+/** Annual plan: one payment a year, cheaper than 12× monthly. */
+export const PREMIUM_ANNUAL_PRICE = "$100";
+export const PREMIUM_ANNUAL_PERIOD = "/year";
 export const FREE_EXPORT_LIMIT = 15;
 
 /**

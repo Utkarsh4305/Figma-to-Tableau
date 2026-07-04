@@ -1,9 +1,24 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
-import { Check, Sparkles, Building2 } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
+import { Check, Sparkles, Building2, Lock } from "lucide-react";
 import SectionHeading from "../components/ui/SectionHeading";
 import { stagger, fadeUp, viewportOnce } from "../lib/motion";
-import { PLUGIN_URL, PREMIUM_PRICE, PREMIUM_PERIOD, FREE_EXPORT_LIMIT } from "../config";
+import {
+  PLUGIN_URL,
+  PREMIUM_PRICE,
+  PREMIUM_PERIOD,
+  PREMIUM_ANNUAL_PRICE,
+  PREMIUM_ANNUAL_PERIOD,
+  FREE_EXPORT_LIMIT,
+} from "../config";
+import {
+  openPremiumCheckout,
+  razorpayReady,
+  resolveUid,
+  type BillingPlan,
+  type CheckoutStatus,
+} from "../lib/razorpay";
 
 const PLANS = [
   {
@@ -53,6 +68,27 @@ const PLANS = [
 ];
 
 export default function Pricing({ standalone = false }: { standalone?: boolean }) {
+  const [params] = useSearchParams();
+  const [status, setStatus] = useState<CheckoutStatus | null>(null);
+  const [billing, setBilling] = useState<BillingPlan>("monthly");
+
+  // The plugin links here as /pricing?uid=<figma id>&name=<name>; a plain web
+  // visitor gets a stable per-browser fallback id so the payment still records.
+  const name = (params.get("name") ?? "").trim();
+
+  const buyPremium = () => {
+    if (status?.state === "loading") return;
+    openPremiumCheckout({
+      uid: resolveUid(params.get("uid") ?? ""),
+      name,
+      plan: billing,
+      onStatus: setStatus,
+    });
+  };
+
+  const premiumPrice = billing === "annual" ? PREMIUM_ANNUAL_PRICE : PREMIUM_PRICE;
+  const premiumPeriod = billing === "annual" ? PREMIUM_ANNUAL_PERIOD : PREMIUM_PERIOD;
+
   return (
     <section className={`section ${standalone ? "section--page" : ""}`} id="pricing">
       <div className="orb orb--blue" style={{ width: 400, height: 400, top: 120, left: "-6%" }} />
@@ -68,6 +104,26 @@ export default function Pricing({ standalone = false }: { standalone?: boolean }
           }
           blurb="One saved rebuild covers a year of Premium."
         />
+
+        <div className="billing-toggle" role="group" aria-label="Billing period">
+          <button
+            type="button"
+            className={`billing-toggle__opt ${billing === "monthly" ? "is-active" : ""}`}
+            aria-pressed={billing === "monthly"}
+            onClick={() => setBilling("monthly")}
+          >
+            Monthly
+          </button>
+          <button
+            type="button"
+            className={`billing-toggle__opt ${billing === "annual" ? "is-active" : ""}`}
+            aria-pressed={billing === "annual"}
+            onClick={() => setBilling("annual")}
+          >
+            Annual <span className="billing-toggle__save">Save 17%</span>
+          </button>
+        </div>
+
         <motion.div
           className="plans"
           variants={stagger(0, 0.12)}
@@ -93,9 +149,12 @@ export default function Pricing({ standalone = false }: { standalone?: boolean }
               )}
               <h3>{p.name}</h3>
               <div className="plan__price">
-                <span className="plan__amount">{p.price}</span>
-                <span className="plan__period">{p.period}</span>
+                <span className="plan__amount">{p.highlight ? premiumPrice : p.price}</span>
+                <span className="plan__period">{p.highlight ? premiumPeriod : p.period}</span>
               </div>
+              {p.highlight && billing === "annual" && (
+                <span className="plan__save-note">2 months free vs monthly</span>
+              )}
               <p className="plan__blurb">{p.blurb}</p>
               <ul className="plan__features">
                 {p.features.map((f) => (
@@ -105,7 +164,22 @@ export default function Pricing({ standalone = false }: { standalone?: boolean }
                   </li>
                 ))}
               </ul>
-              {p.cta.external ? (
+              {p.highlight && razorpayReady ? (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn--primary"
+                    onClick={buyPremium}
+                    disabled={status?.state === "loading"}
+                  >
+                    <Lock size={15} strokeWidth={2.2} />
+                    {status?.state === "loading" ? "Working…" : p.cta.label}
+                  </button>
+                  {status && (
+                    <p className={`plan__status plan__status--${status.state}`}>{status.message}</p>
+                  )}
+                </>
+              ) : p.cta.external ? (
                 <a href={p.cta.to} target="_blank" rel="noreferrer" className={`btn ${p.cta.ghost ? "btn--ghost" : "btn--primary"}`}>
                   {p.cta.label}
                 </a>

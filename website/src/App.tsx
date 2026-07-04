@@ -4,6 +4,7 @@ import SiteLayout from "./components/layout/SiteLayout";
 import Home from "./pages/Home";
 import Upgrade from "./pages/Upgrade";
 import PricingPage from "./pages/PricingPage";
+import FeaturesPage from "./pages/FeaturesPage";
 import Docs from "./pages/Docs";
 import Blog from "./pages/Blog";
 import Login from "./pages/Login";
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/upgrade" element={<Upgrade />} />
           <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/features" element={<FeaturesPage />} />
           <Route path="/docs" element={<Docs />} />
           <Route path="/blog" element={<Blog />} />
           <Route

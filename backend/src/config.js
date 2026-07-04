@@ -20,6 +20,11 @@ const {
   ORDER_AMOUNT_PAISE = "85000",
   ORDER_CURRENCY = "INR",
   PREMIUM_DAYS = "31",
+  // Annual one-time order: a single ~$100 payment granting ANNUAL_DAYS of
+  // Premium. Amount is in the currency's smallest unit (paise for INR):
+  // 850000 = ₹8,500 ≈ $100.
+  ANNUAL_AMOUNT_PAISE = "850000",
+  ANNUAL_DAYS = "365",
 } = process.env;
 
 if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
@@ -32,9 +37,23 @@ if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
 const SUBSCRIPTION_MODE = !!RAZORPAY_PLAN_ID;
 const orderAmount = Math.round(Number(ORDER_AMOUNT_PAISE));
 const premiumDays = Math.max(1, Number(PREMIUM_DAYS) || 31);
+const annualAmount = Math.round(Number(ANNUAL_AMOUNT_PAISE));
+const annualDays = Math.max(1, Number(ANNUAL_DAYS) || 365);
 if (!SUBSCRIPTION_MODE && (!Number.isFinite(orderAmount) || orderAmount < 100)) {
   console.error("ORDER_AMOUNT_PAISE must be a number >= 100 (paise).");
   process.exit(1);
+}
+
+// Server-authoritative one-time-order plans. The client sends a plan NAME only
+// (never an amount or a day count), and the backend maps it to the price and
+// the Premium duration — so a cheap order can never claim a long license.
+const PLANS = {
+  monthly: { amount: orderAmount, days: premiumDays },
+  annual: { amount: annualAmount, days: annualDays },
+};
+/** Resolve a plan name to its { amount, days }; unknown names fall back to monthly. */
+function planFor(name) {
+  return PLANS[String(name || "").toLowerCase().trim()] || PLANS.monthly;
 }
 
 module.exports = {
@@ -48,4 +67,8 @@ module.exports = {
   SUBSCRIPTION_MODE,
   orderAmount,
   premiumDays,
+  annualAmount,
+  annualDays,
+  PLANS,
+  planFor,
 };

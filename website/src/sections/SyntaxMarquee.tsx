@@ -3,17 +3,17 @@
  * product in one scrolling line. Pauses on hover; chips tilt like stickers.
  */
 const CHIPS: Array<{ prefix: string; rest: string; color: string }> = [
-  { prefix: "SHEET/", rest: "Revenue Trend[line]", color: "#f4512c" },
-  { prefix: "KPI/", rest: "Conversion", color: "#8a4dff" },
+  { prefix: "SHEET/", rest: "Revenue Trend[line]", color: "#0d9488" },
+  { prefix: "KPI/", rest: "Conversion", color: "#d9689f" },
   { prefix: "FILTER/", rest: "Region", color: "#18a0fb" },
   { prefix: "Nav/", rest: "Overview", color: "#0aa268" },
-  { prefix: "SHEET/", rest: "Mix[pie]:filter", color: "#dd7714" },
-  { prefix: "TEXT/", rest: "Q3 Summary", color: "#8a4dff" },
-  { prefix: "BUTTON/", rest: "Details > Sales", color: "#f4512c" },
+  { prefix: "SHEET/", rest: "Mix[pie]:filter", color: "#8b5e34" },
+  { prefix: "TEXT/", rest: "Q3 Summary", color: "#d9689f" },
+  { prefix: "BUTTON/", rest: "Details > Sales", color: "#0d9488" },
   { prefix: "SHEET/", rest: "By Site[bar]", color: "#18a0fb" },
   { prefix: "IMG/", rest: "Logo", color: "#0aa268" },
-  { prefix: "SHEET/", rest: "Heat[heatmap]:showTitle", color: "#dd7714" },
-  { prefix: "CONTAINER/", rest: "Header", color: "#8a4dff" },
+  { prefix: "SHEET/", rest: "Heat[heatmap]:showTitle", color: "#8b5e34" },
+  { prefix: "CONTAINER/", rest: "Header", color: "#d9689f" },
   { prefix: "URL/", rest: "status.example.com", color: "#18a0fb" },
 ];
 

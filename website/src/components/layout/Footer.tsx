@@ -7,7 +7,7 @@ const COLUMNS = [
     title: "Product",
     links: [
       { label: "How it works", to: "/#how-it-works" },
-      { label: "Features", to: "/#features" },
+      { label: "Features", to: "/features" },
       { label: "Pricing", to: "/pricing" },
       { label: "Get the plugin", to: PLUGIN_URL, external: true },
     ],

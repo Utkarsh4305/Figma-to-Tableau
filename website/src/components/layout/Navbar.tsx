@@ -6,7 +6,7 @@ import { PLUGIN_URL } from "../../config";
 
 const LINKS = [
   { label: "How it works", to: "/#how-it-works" },
-  { label: "Features", to: "/#features" },
+  { label: "Features", to: "/features" },
   { label: "Pricing", to: "/pricing" },
   { label: "Docs", to: "/docs" },
 ];

@@ -7,9 +7,10 @@
 //   create-order (backend)  →  Razorpay modal  →  verify-payment (backend)
 //
 // Premium is keyed to a Figma user id. When the plugin links here it passes
-// ?uid=<figma id>, so the license unlocks the plugin directly. A plain web
-// visitor gets a stable per-browser id instead, so the payment still completes
-// and is recorded — they finish activation from the plugin's Account tab.
+// ?uid=<figma id>, so the license unlocks the plugin directly. Callers must
+// supply that uid — inline checkout is only offered to visitors who arrived
+// from the plugin, so a payment can never be stranded on an id the plugin
+// can't query (direct web visitors are routed to /upgrade instead).
 // ---------------------------------------------------------------------------
 
 import { BACKEND_URL, RAZORPAY_KEY_ID } from "../config";
@@ -54,19 +55,6 @@ function loadRazorpay(): Promise<boolean> {
 /** Whether inline checkout can run at all (publishable key configured). */
 export const razorpayReady = Boolean(RAZORPAY_KEY_ID);
 
-/** A stable per-browser fallback id for visitors who didn't arrive from the plugin. */
-export function resolveUid(urlUid?: string): string {
-  const fromUrl = (urlUid ?? "").trim();
-  if (fromUrl) return fromUrl;
-  const KEY = "ft-web-uid";
-  let v = localStorage.getItem(KEY);
-  if (!v) {
-    v = `web_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
-    localStorage.setItem(KEY, v);
-  }
-  return v;
-}
-
 export type BillingPlan = "monthly" | "annual";
 
 /** Open the Razorpay modal for Premium. Reports progress via onStatus. */
@@ -80,6 +68,13 @@ export async function openPremiumCheckout(opts: {
 
   if (!RAZORPAY_KEY_ID) {
     onStatus({ state: "error", message: "Payments aren't configured yet. Set VITE_RAZORPAY_KEY_ID." });
+    return;
+  }
+
+  // A license is keyed to the Figma user id; refuse to take a payment we
+  // couldn't attach to an account (guards against orphaned purchases).
+  if (!uid.trim()) {
+    onStatus({ state: "error", message: "Start your upgrade from the plugin's Account tab so we can link Premium to your Figma account." });
     return;
   }
 

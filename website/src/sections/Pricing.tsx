@@ -15,7 +15,6 @@ import {
 import {
   openPremiumCheckout,
   razorpayReady,
-  resolveUid,
   type BillingPlan,
   type CheckoutStatus,
 } from "../lib/razorpay";
@@ -72,18 +71,19 @@ export default function Pricing({ standalone = false }: { standalone?: boolean }
   const [status, setStatus] = useState<CheckoutStatus | null>(null);
   const [billing, setBilling] = useState<BillingPlan>("monthly");
 
-  // The plugin links here as /pricing?uid=<figma id>&name=<name>; a plain web
-  // visitor gets a stable per-browser fallback id so the payment still records.
+  // The plugin links here as /pricing?uid=<figma id>&name=<name>. Inline
+  // checkout is ONLY offered when that Figma uid is present — a license is keyed
+  // to the Figma account, so a direct web visitor (no uid) has nothing the
+  // plugin could later unlock. Those visitors are routed to /upgrade, which
+  // tells them to start checkout from the plugin. This prevents orphaned
+  // payments (money in, plugin never unlocks).
+  const uid = (params.get("uid") ?? "").trim();
   const name = (params.get("name") ?? "").trim();
+  const canBuyInline = razorpayReady && !!uid;
 
   const buyPremium = () => {
     if (status?.state === "loading") return;
-    openPremiumCheckout({
-      uid: resolveUid(params.get("uid") ?? ""),
-      name,
-      plan: billing,
-      onStatus: setStatus,
-    });
+    openPremiumCheckout({ uid, name, plan: billing, onStatus: setStatus });
   };
 
   const premiumPrice = billing === "annual" ? PREMIUM_ANNUAL_PRICE : PREMIUM_PRICE;
@@ -164,7 +164,7 @@ export default function Pricing({ standalone = false }: { standalone?: boolean }
                   </li>
                 ))}
               </ul>
-              {p.highlight && razorpayReady ? (
+              {p.highlight && canBuyInline ? (
                 <>
                   <button
                     type="button"

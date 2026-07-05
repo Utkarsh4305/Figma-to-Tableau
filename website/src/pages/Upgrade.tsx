@@ -1,12 +1,38 @@
+import { useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Check, Lock, ShieldCheck, Sparkles, ArrowRight } from "lucide-react";
-import { checkoutUrl, PREMIUM_PRICE, PREMIUM_PERIOD, FREE_EXPORT_LIMIT, PLUGIN_URL } from "../config";
+import {
+  PREMIUM_PRICE,
+  PREMIUM_PERIOD,
+  PREMIUM_ANNUAL_PRICE,
+  PREMIUM_ANNUAL_PERIOD,
+  FREE_EXPORT_LIMIT,
+  PLUGIN_URL,
+} from "../config";
+import {
+  openPremiumCheckout,
+  razorpayReady,
+  type BillingPlan,
+  type CheckoutStatus,
+} from "../lib/razorpay";
 
 export default function Upgrade() {
   const [params] = useSearchParams();
   const uid = (params.get("uid") ?? "").trim();
   const name = (params.get("name") ?? "").trim();
+  const [billing, setBilling] = useState<BillingPlan>("monthly");
+  const [status, setStatus] = useState<CheckoutStatus | null>(null);
+
+  const price = billing === "annual" ? PREMIUM_ANNUAL_PRICE : PREMIUM_PRICE;
+  const period = billing === "annual" ? PREMIUM_ANNUAL_PERIOD : PREMIUM_PERIOD;
+
+  // Inline Razorpay checkout keyed to the Figma uid — passes the selected plan
+  // so annual actually charges (and grants) the annual amount, not monthly.
+  const buy = () => {
+    if (status?.state === "loading") return;
+    openPremiumCheckout({ uid, name, plan: billing, onStatus: setStatus });
+  };
 
   return (
     <section className="page page--upgrade">
@@ -26,10 +52,34 @@ export default function Upgrade() {
           <h1>
             {name ? `${name}, unlock` : "Unlock"} <span className="grad-text">unlimited exports</span>
           </h1>
+
+          {uid && razorpayReady && (
+            <div className="billing-toggle" role="group" aria-label="Billing period">
+              <button
+                type="button"
+                className={`billing-toggle__opt ${billing === "monthly" ? "is-active" : ""}`}
+                aria-pressed={billing === "monthly"}
+                onClick={() => setBilling("monthly")}
+              >
+                Monthly
+              </button>
+              <button
+                type="button"
+                className={`billing-toggle__opt ${billing === "annual" ? "is-active" : ""}`}
+                aria-pressed={billing === "annual"}
+                onClick={() => setBilling("annual")}
+              >
+                Annual <span className="billing-toggle__save">Save 17%</span>
+              </button>
+            </div>
+          )}
+
           <div className="plan__price">
-            <span className="plan__amount">{PREMIUM_PRICE}</span>
-            <span className="plan__period">{PREMIUM_PERIOD}</span>
+            <span className="plan__amount">{price}</span>
+            <span className="plan__period">{period}</span>
           </div>
+          {billing === "annual" && <span className="plan__save-note">2 months free vs monthly</span>}
+
           <ul className="plan__features">
             <li><Check size={15} strokeWidth={2.4} /> Unlimited .twbx exports — no more {FREE_EXPORT_LIMIT}-export cap</li>
             <li><Check size={15} strokeWidth={2.4} /> All export modes, worksheet swapping, navigation</li>
@@ -37,13 +87,21 @@ export default function Upgrade() {
             <li><Check size={15} strokeWidth={2.4} /> Priority support</li>
           </ul>
 
-          {uid ? (
+          {uid && razorpayReady ? (
             <>
-              <a href={checkoutUrl(uid, name)} className="btn btn--primary btn--lg upgrade__cta">
+              <button
+                type="button"
+                className="btn btn--primary btn--lg upgrade__cta"
+                onClick={buy}
+                disabled={status?.state === "loading"}
+              >
                 <Lock size={16} strokeWidth={2.2} />
-                Continue to secure checkout
+                {status?.state === "loading" ? "Working…" : `Pay ${price}${period} securely`}
                 <ArrowRight size={17} strokeWidth={2.2} />
-              </a>
+              </button>
+              {status && (
+                <p className={`plan__status plan__status--${status.state}`}>{status.message}</p>
+              )}
               <p className="upgrade__note">
                 <ShieldCheck size={14} /> Payments processed by Razorpay. After paying, return to Figma and click{" "}
                 <b>"Refresh status"</b> in the plugin's Account tab — Premium activates instantly.
@@ -75,8 +133,8 @@ export default function Upgrade() {
           <h2>What happens next</h2>
           <ol>
             <li>
-              <b>Pay once a month, cancel anytime.</b> Razorpay handles cards, UPI and netbanking on a secure
-              hosted checkout.
+              <b>Pick monthly or annual, pay once.</b> Razorpay handles cards, UPI and netbanking on a secure
+              checkout — annual saves ~2 months versus monthly.
             </li>
             <li>
               <b>Your license activates server-side.</b> It's keyed to your Figma user id — no license keys to

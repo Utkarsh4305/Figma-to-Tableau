@@ -54,13 +54,18 @@
   width: 32px;
   height: 32px;
   border-radius: 9px;
-  background: var(--accent);
+  /* the SVG carries the gradient badge now — container just holds the glow */
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   box-shadow: 0 4px 12px rgba(13, 148, 136, 0.32);
   transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.logo__icon svg {
+  display: block;
+  border-radius: 9px;
 }
 
 .logo:hover .logo__icon {

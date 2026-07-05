@@ -1,7 +1,13 @@
-<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="40" height="40" rx="10" fill="#1e1e1e"/>
-  <rect x="8"  y="22" width="5" height="10" rx="1.5" fill="#f0f0f0" opacity="0.4"/>
-  <rect x="17" y="16" width="5" height="16" rx="1.5" fill="#f0f0f0" opacity="0.7"/>
-  <rect x="26" y="10" width="5" height="22" rx="1.5" fill="#f0f0f0"/>
-  <circle cx="28.5" cy="8" r="2" fill="#f0f0f0" opacity="0.5"/>
+<svg width="128" height="128" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="ftBadge" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0d9488"/>
+      <stop offset="1" stop-color="#00d9a0"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#ftBadge)"/>
+  <rect x="17.5" y="32" width="7.5" height="15" rx="2.6" fill="#ffffff" opacity="0.55"/>
+  <rect x="28.25" y="25" width="7.5" height="22" rx="2.6" fill="#ffffff" opacity="0.78"/>
+  <rect x="39" y="18" width="7.5" height="29" rx="2.6" fill="#ffffff"/>
+  <circle cx="42.75" cy="12.5" r="3.4" fill="#c6fff0"/>
 </svg>

@@ -1,6 +1,6 @@
 {
   "name": "Figma to Tableau",
-  "id": "figma-to-tableau-twbx",
+  "id": "1655128229926477488",
   "api": "1.0.0",
   "main": "dist/code.js",
   "ui": "dist/index.html",

@@ -23,7 +23,7 @@ const BARS = [0.85, 0.62, 0.74, 0.43, 0.91, 0.56, 0.78];
 
 export default function Demo() {
   return (
-    <section className="section" id="demo" style={{ background: "linear-gradient(180deg, #fbf0f5 0%, #f4fbf9 100%)" }}>
+    <section className="section" id="demo" style={{ background: "linear-gradient(180deg, #eaf7f2 0%, #f4fbf9 100%)" }}>
       <div className="orb orb--cyan"   style={{ width: 360, height: 360, top: 60,    left: "-4%"  }} />
       <div className="orb orb--orange" style={{ width: 280, height: 280, bottom: 60, right: "6%"  }} />
       <div className="container">

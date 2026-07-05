@@ -1178,7 +1178,7 @@
   padding: 100px 48px;
   border-radius: var(--radius-xl);
   border: 1.5px solid rgba(13, 148, 136, 0.15);
-  background: linear-gradient(135deg, #eaf7f2 0%, #fbf0f5 50%, #eaf7f2 100%);
+  background: linear-gradient(135deg, #eaf7f2 0%, #dff3ec 50%, #eaf7f2 100%);
   box-shadow: var(--shadow-card), 0 0 100px -40px rgba(13, 148, 136, 0.2);
 }
 

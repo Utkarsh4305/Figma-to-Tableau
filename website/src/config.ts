@@ -9,7 +9,7 @@
  * VITE_BACKEND_URL=http://localhost:3000 in website/.env.
  */
 export const BACKEND_URL =
-  import.meta.env.VITE_BACKEND_URL ?? "https://figma-tableau-backend-xuvn.onrender.com";
+  import.meta.env.VITE_BACKEND_URL ?? "https://figma-tableau-backend.onrender.com";
 
 /**
  * Razorpay publishable key id (rzp_test_… / rzp_live_…). Safe to expose on the

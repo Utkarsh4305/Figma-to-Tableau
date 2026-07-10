@@ -187,7 +187,7 @@ export const PREMIUM_PRICE_LABEL = "$10/month";
  * otherwise). For local dev against localhost:3000, swap this back and rely on
  * manifest devAllowedDomains.
  */
-export const PAYMENT_SERVER_URL = "https://figma-tableau-backend-xuvn.onrender.com";
+export const PAYMENT_SERVER_URL = "https://figma-tableau-backend.onrender.com";
 
 /**
  * Base URL of the marketing website (repo /website, no trailing slash).

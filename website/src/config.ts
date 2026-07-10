@@ -56,7 +56,7 @@ export function detectCurrency(): Currency {
 /** Per-currency display prices (mirror backend PRICING). */
 export const PRICES: Record<Currency, { monthly: string; annual: string }> = {
   USD: { monthly: "$10", annual: "$100" },
-  INR: { monthly: "₹850", annual: "₹8,500" },
+  INR: { monthly: "₹900", annual: "₹9,000" },
 };
 
 /**

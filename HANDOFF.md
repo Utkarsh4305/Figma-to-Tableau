@@ -35,12 +35,12 @@
 >   `website/README.md` for the ship checklist.
 > - **Plugin CTAs** — `openCheckout` (both the export-gate Upgrade button and
 >   the Account tab CTA) now opens `${WEBSITE_URL}/upgrade?uid=…&name=…` (new
->   `WEBSITE_URL` in `shared/constants.ts`, currently `http://localhost:5173`
->   — replace before shipping); license polling still hits
->   `PAYMENT_SERVER_URL` directly. manifest devAllowedDomains gained
->   `http://localhost:5173`, allowedDomains gained the website placeholder
->   `https://figma-tableau.example.com` → **re-import the manifest**. tsc + 16
->   suites + build green. Not committed.
+>   `WEBSITE_URL` in `shared/constants.ts`, since 2026-07-10
+>   `https://pixelmentis.com` — the site's custom domain); license polling
+>   still hits `PAYMENT_SERVER_URL` directly. manifest devAllowedDomains
+>   gained `http://localhost:5173`, allowedDomains carries
+>   `https://pixelmentis.com` + `https://www.pixelmentis.com` → **re-import
+>   the manifest** after any change here. tsc + 16 suites + build green.
 >
 > **Latest (build 88.1, 2026-07-03): STANDARD CHECKOUT (one-time orders) added
 > to the billing server + LIVE test credentials wired.** The server now has two
@@ -53,8 +53,10 @@
 > caller amount, so signature alone must not grant Premium) → extends
 > `validUntil` by `PREMIUM_DAYS` (31). Checkout page branches on a server-sent
 > `mode` boot flag (order mode: create-order → Razorpay modal with order_id →
-> verify-payment; dismiss + payment.failed handled). `payment-server/.env` now
-> holds REAL Razorpay test-mode keys (rzp_test_T91l2EdavMNwEZ; gitignored).
+> verify-payment; dismiss + payment.failed handled). `backend/.env` now
+> holds REAL Razorpay test-mode keys (rzp_test_TBisZXcohsbIVD as of 2026-07-10;
+> gitignored — the same public key id is also the default in
+> `website/src/config.ts` and `website/.env{,.production}`).
 > `PAYMENT_SERVER_URL` (shared/constants.ts) switched to
 > `http://localhost:3000` for dev testing — **switch back to the deployed URL
 > before shipping**. VERIFIED against the live Razorpay test API: create-order

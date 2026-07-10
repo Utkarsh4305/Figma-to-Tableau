@@ -18,7 +18,7 @@ export const BACKEND_URL =
  * the pricing page; when empty, the buy button falls back to the /upgrade flow.
  */
 export const RAZORPAY_KEY_ID =
-  import.meta.env.VITE_RAZORPAY_KEY_ID ?? "rzp_test_T91l2EdavMNwEZ";
+  import.meta.env.VITE_RAZORPAY_KEY_ID ?? "rzp_test_TBisZXcohsbIVD";
 
 /** Where "Get the plugin" points — the Figma Community listing once published. */
 export const PLUGIN_URL = "https://www.figma.com/community/plugins";

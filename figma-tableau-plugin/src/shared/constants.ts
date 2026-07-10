@@ -192,10 +192,10 @@ export const PAYMENT_SERVER_URL = "https://figma-tableau-backend-xuvn.onrender.c
 /**
  * Base URL of the marketing website (repo /website, no trailing slash).
  * Every premium CTA opens `${WEBSITE_URL}/upgrade?uid=…&name=…` there, which
- * hands off to the backend's Razorpay checkout. Points at the Vercel
- * deployment (mirrored in manifest.json networkAccess.allowedDomains).
+ * hands off to the backend's Razorpay checkout. Points at the custom domain
+ * on Vercel (mirrored in manifest.json networkAccess.allowedDomains).
  */
-export const WEBSITE_URL = "https://ryvenor.vercel.app";
+export const WEBSITE_URL = "https://www.pixelmentis.com";
 
 /** Default dashboard pixel size when a frame size can't be read. */
 export const DEFAULT_SIZE = { width: 1280, height: 800 };

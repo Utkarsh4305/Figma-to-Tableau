@@ -18,15 +18,14 @@ services:
     healthCheckPath: /healthz
     autoDeploy: true
     envVars:
-      # Razorpay keys — PLACEHOLDERS so the blueprint deploys without prompting.
-      # After the first deploy, edit these in the Render dashboard (Environment
-      # tab) with your real keys; saving triggers an automatic redeploy. The
-      # server boots on the placeholders (they're non-empty) but Razorpay calls
-      # fail until the real values are set.
+      # Razorpay TEST-MODE keys (baked in so the deployed backend can create
+      # orders). Test keys only ever move test money, but they still live in
+      # git history once pushed — NEVER put LIVE keys here; set those in the
+      # Render dashboard (Environment tab) instead, which overrides + redeploys.
       - key: RAZORPAY_KEY_ID
-        value: rzp_test_REPLACE_ME
+        value: rzp_test_TBisZXcohsbIVD
       - key: RAZORPAY_KEY_SECRET
-        value: REPLACE_ME
+        value: oBZzQDdWLvbFuB189DDQkKPn
       # Optional — add in the dashboard if you use them. A subscription plan id
       # switches checkout to monthly billing; without one it's one-time orders.
       # RAZORPAY_PLAN_ID, RAZORPAY_WEBHOOK_SECRET

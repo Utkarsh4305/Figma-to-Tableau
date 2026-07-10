@@ -8,13 +8,19 @@ const express = require("express");
 const {
   RAZORPAY_KEY_ID,
   PRICE_LABEL,
-  ORDER_CURRENCY,
+  DEFAULT_CURRENCY,
   SUBSCRIPTION_MODE,
-  orderAmount,
+  PRICING,
   premiumDays,
 } = require("../config");
 
 const router = express.Router();
+
+/** Format a smallest-unit amount as a display string, e.g. "$10" / "₹850". */
+function money(amount, currency) {
+  const sym = currency === "INR" ? "₹" : "$";
+  return sym + (amount / 100).toLocaleString("en-US");
+}
 
 router.get("/checkout", (req, res) => {
   const uid = String(req.query.uid || "").trim();
@@ -25,14 +31,18 @@ router.get("/checkout", (req, res) => {
 
 /** Minimal hosted page that runs Razorpay Checkout (subscription or one-time order). */
 function checkoutPage(uid, name) {
+  // Per-currency monthly labels; the page picks one from the visitor's region.
+  const orderLabels = {
+    INR: `${money(PRICING.INR.monthly.amount, "INR")} — ${premiumDays} days`,
+    USD: `${money(PRICING.USD.monthly.amount, "USD")} — ${premiumDays} days`,
+  };
   // Values are embedded as JSON to keep them safely escaped inside the script.
-  const priceLabel = SUBSCRIPTION_MODE
-    ? PRICE_LABEL
-    : `${(orderAmount / 100).toLocaleString()} ${ORDER_CURRENCY} — ${premiumDays} days`;
   const boot = JSON.stringify({
     uid,
     name,
-    priceLabel,
+    subLabel: PRICE_LABEL,
+    orderLabels,
+    defaultCurrency: DEFAULT_CURRENCY,
     mode: SUBSCRIPTION_MODE ? "subscription" : "order",
     keyId: RAZORPAY_KEY_ID,
   });
@@ -69,7 +79,17 @@ function checkoutPage(uid, name) {
 <script>
   var BOOT = ${boot};
   var isSub = BOOT.mode === "subscription";
-  document.getElementById("price").textContent = BOOT.priceLabel;
+  // Bill Indian visitors in INR (unlocks UPI/netbanking); everyone else in USD.
+  function detectCurrency() {
+    try {
+      var tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+      if (/Asia\\/(Kolkata|Calcutta)/i.test(tz)) return "INR";
+    } catch (e) {}
+    return BOOT.defaultCurrency || "USD";
+  }
+  var CURRENCY = detectCurrency();
+  var priceLabel = isSub ? BOOT.subLabel : (BOOT.orderLabels[CURRENCY] || BOOT.orderLabels.USD);
+  document.getElementById("price").textContent = priceLabel;
   document.getElementById("blurb").textContent = isSub
     ? "Unlimited .twbx exports, billed monthly. Cancel anytime."
     : "Unlimited .twbx exports. One payment covers the period below.";
@@ -84,7 +104,7 @@ function checkoutPage(uid, name) {
     var rzp = new Razorpay(Object.assign({
       key: BOOT.keyId,
       name: "Pixelmentis",
-      description: "Premium — unlimited exports (" + BOOT.priceLabel + ")",
+      description: "Premium — unlimited exports (" + priceLabel + ")",
       prefill: { name: BOOT.name || undefined },
       notes: { figma_uid: BOOT.uid },
       handler: function (resp) {
@@ -140,7 +160,7 @@ function checkoutPage(uid, name) {
       fetch("/api/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid: BOOT.uid }),
+        body: JSON.stringify({ uid: BOOT.uid, currency: CURRENCY }),
       })
         .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
         .then(function (data) {

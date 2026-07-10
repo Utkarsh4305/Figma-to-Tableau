@@ -8,8 +8,9 @@ import {
   PLUGIN_URL,
   PREMIUM_PRICE,
   PREMIUM_PERIOD,
-  PREMIUM_ANNUAL_PRICE,
   PREMIUM_ANNUAL_PERIOD,
+  PRICES,
+  detectCurrency,
   FREE_EXPORT_LIMIT,
 } from "../config";
 import {
@@ -81,12 +82,15 @@ export default function Pricing({ standalone = false }: { standalone?: boolean }
   const name = (params.get("name") ?? "").trim();
   const canBuyInline = razorpayReady && !!uid;
 
+  // Region-based currency: INR for India (UPI/netbanking), USD elsewhere (cards).
+  const currency = detectCurrency();
+
   const buyPremium = () => {
     if (status?.state === "loading") return;
-    openPremiumCheckout({ uid, name, plan: billing, onStatus: setStatus });
+    openPremiumCheckout({ uid, name, plan: billing, currency, onStatus: setStatus });
   };
 
-  const premiumPrice = billing === "annual" ? PREMIUM_ANNUAL_PRICE : PREMIUM_PRICE;
+  const premiumPrice = billing === "annual" ? PRICES[currency].annual : PRICES[currency].monthly;
   const premiumPeriod = billing === "annual" ? PREMIUM_ANNUAL_PERIOD : PREMIUM_PERIOD;
 
   return (

@@ -3,10 +3,10 @@ import { useSearchParams, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Check, Lock, ShieldCheck, Sparkles, ArrowRight } from "lucide-react";
 import {
-  PREMIUM_PRICE,
   PREMIUM_PERIOD,
-  PREMIUM_ANNUAL_PRICE,
   PREMIUM_ANNUAL_PERIOD,
+  PRICES,
+  detectCurrency,
   FREE_EXPORT_LIMIT,
   PLUGIN_URL,
 } from "../config";
@@ -24,14 +24,16 @@ export default function Upgrade() {
   const [billing, setBilling] = useState<BillingPlan>("monthly");
   const [status, setStatus] = useState<CheckoutStatus | null>(null);
 
-  const price = billing === "annual" ? PREMIUM_ANNUAL_PRICE : PREMIUM_PRICE;
+  // Region-based currency: INR for India (UPI/netbanking), USD elsewhere (cards).
+  const currency = detectCurrency();
+  const price = billing === "annual" ? PRICES[currency].annual : PRICES[currency].monthly;
   const period = billing === "annual" ? PREMIUM_ANNUAL_PERIOD : PREMIUM_PERIOD;
 
   // Inline Razorpay checkout keyed to the Figma uid — passes the selected plan
-  // so annual actually charges (and grants) the annual amount, not monthly.
+  // and currency so it charges (and grants) the right amount in the right money.
   const buy = () => {
     if (status?.state === "loading") return;
-    openPremiumCheckout({ uid, name, plan: billing, onStatus: setStatus });
+    openPremiumCheckout({ uid, name, plan: billing, currency, onStatus: setStatus });
   };
 
   return (

@@ -13,7 +13,7 @@
 // can't query (direct web visitors are routed to /upgrade instead).
 // ---------------------------------------------------------------------------
 
-import { BACKEND_URL, RAZORPAY_KEY_ID } from "../config";
+import { BACKEND_URL, RAZORPAY_KEY_ID, detectCurrency, type Currency } from "../config";
 
 export type CheckoutState = "loading" | "success" | "error" | "cancelled";
 export interface CheckoutStatus {
@@ -62,9 +62,10 @@ export async function openPremiumCheckout(opts: {
   uid: string;
   name?: string;
   plan?: BillingPlan;
+  currency?: Currency;
   onStatus: (s: CheckoutStatus) => void;
 }): Promise<void> {
-  const { uid, name, plan = "monthly", onStatus } = opts;
+  const { uid, name, plan = "monthly", currency = detectCurrency(), onStatus } = opts;
 
   if (!RAZORPAY_KEY_ID) {
     onStatus({ state: "error", message: "Payments aren't configured yet. Set VITE_RAZORPAY_KEY_ID." });
@@ -91,7 +92,7 @@ export async function openPremiumCheckout(opts: {
     const r = await fetch(`${BACKEND_URL}/api/create-order`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ uid, plan }),
+      body: JSON.stringify({ uid, plan, currency }),
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     order = await r.json();

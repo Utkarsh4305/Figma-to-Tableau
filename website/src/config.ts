@@ -35,6 +35,31 @@ export const PREMIUM_ANNUAL_PERIOD = "/year";
 export const FREE_EXPORT_LIMIT = 15;
 
 /**
+ * Dual-currency billing. Indian visitors are charged in INR (which unlocks UPI,
+ * netbanking and wallets at Razorpay); everyone else in USD (card checkout —
+ * the only rail that carries a foreign currency). The backend is authoritative
+ * on the amount; these strings are display-only and must mirror its price table.
+ */
+export type Currency = "INR" | "USD";
+
+/** Best-effort region → currency from the browser's time zone. */
+export function detectCurrency(): Currency {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    if (/Asia\/(Kolkata|Calcutta)/i.test(tz)) return "INR";
+  } catch {
+    /* Intl unavailable — fall through to USD */
+  }
+  return "USD";
+}
+
+/** Per-currency display prices (mirror backend PRICING). */
+export const PRICES: Record<Currency, { monthly: string; annual: string }> = {
+  USD: { monthly: "$10", annual: "$100" },
+  INR: { monthly: "₹850", annual: "₹8,500" },
+};
+
+/**
  * Build the secure-checkout URL for a Figma user. The plugin opens
  * /upgrade?uid=…&name=… on this site; the upgrade page hands off here.
  */

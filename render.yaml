@@ -28,16 +28,20 @@ services:
       # Optional — add in the dashboard if you use them. A subscription plan id
       # switches checkout to monthly billing; without one it's one-time orders.
       # RAZORPAY_PLAN_ID, RAZORPAY_WEBHOOK_SECRET
-      # One-time-order pricing in the currency's smallest unit (cents for
-      # USD). 1000 = $10/month. Change per your pricing.
-      - key: ORDER_AMOUNT_PAISE
-        value: "1000"
+      # Dual-currency one-time-order pricing. Indian visitors pay INR (unlocks
+      # UPI/netbanking), everyone else USD (cards). Amounts are in the
+      # currency's smallest unit (cents for USD, paise for INR).
       - key: ORDER_CURRENCY
         value: USD
+      - key: USD_MONTHLY_CENTS
+        value: "1000"
+      - key: USD_ANNUAL_CENTS
+        value: "10000"
+      - key: INR_MONTHLY_PAISE
+        value: "85000"
+      - key: INR_ANNUAL_PAISE
+        value: "850000"
       - key: PREMIUM_DAYS
         value: "31"
-      # Annual one-time order (cents). 10000 = $100/year.
-      - key: ANNUAL_AMOUNT_PAISE
-        value: "10000"
       - key: ANNUAL_DAYS
         value: "365"

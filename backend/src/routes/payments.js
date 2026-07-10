@@ -47,26 +47,23 @@ router.post("/api/subscription", async (req, res) => {
 
 /**
  * Create a Razorpay ORDER (Standard Checkout). Body: { plan ("monthly" |
- * "annual"), uid, currency, receipt }. The PLAN picks the price server-side
- * (the client never sends an amount for a plan); the plan name is stored in
- * the order notes so verification can grant the right duration. Returns
- * { order_id, amount, currency, plan }.
+ * "annual"), currency ("INR" | "USD"), uid, receipt }. The PLAN + CURRENCY pick
+ * the price server-side (the client never sends an amount); the plan name is
+ * stored in the order notes so verification can grant the right duration.
+ * Returns { order_id, amount, currency, plan }.
  */
 router.post("/api/create-order", async (req, res) => {
   const body = req.body || {};
   const uid = String(body.uid || "").trim();
-  const planName = String(body.plan || "monthly").toLowerCase().trim();
-  const plan = planFor(planName);
-  // A named plan is authoritative; only fall back to a caller-supplied amount
-  // when no plan is given (kept for backward compatibility).
-  const amount =
-    body.plan === undefined && body.amount !== undefined
-      ? Math.round(Number(body.amount))
-      : plan.amount;
-  const currency = String(body.currency || ORDER_CURRENCY).toUpperCase();
+  const planName = String(body.plan || "monthly").toLowerCase().trim() === "annual" ? "annual" : "monthly";
+  // Plan + currency are authoritative — the amount and the settlement currency
+  // both come from the server-side table (planFor validates/normalises both).
+  const plan = planFor(planName, body.currency);
+  const amount = plan.amount;
+  const currency = plan.currency;
   const receipt = String(body.receipt || `ftt_${Date.now()}`).slice(0, 40);
   if (!Number.isFinite(amount) || amount < 100) {
-    return res.status(400).json({ error: "amount must be an integer >= 100 (paise)." });
+    return res.status(400).json({ error: "amount must be an integer >= 100 (smallest currency unit)." });
   }
   const notes = { plan: planName };
   if (uid) notes.figma_uid = uid;
@@ -115,7 +112,9 @@ router.post("/api/verify-payment", async (req, res) => {
       console.error("order fetch after verify failed:", e && e.error ? e.error : e);
       return res.status(502).json({ error: "Payment verified but the order couldn't be confirmed — refresh your status in a minute." });
     }
-    const plan = planFor(order && order.notes ? order.notes.plan : "monthly");
+    // The order's own currency + stored plan name decide the expected price, so
+    // an INR order is checked against the INR price and a USD order the USD one.
+    const plan = planFor(order && order.notes ? order.notes.plan : "monthly", order && order.currency);
     if (!order || Number(order.amount) < plan.amount) {
       return res.status(400).json({ error: "Order amount doesn't cover the plan price." });
     }

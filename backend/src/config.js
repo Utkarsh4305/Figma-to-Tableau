@@ -15,14 +15,17 @@ const {
   RAZORPAY_WEBHOOK_SECRET,
   PORT = 3000,
   PRICE_LABEL = "$10/month",
-  // One-time order mode (Standard Checkout): price of one Premium period in
-  // the currency's smallest unit (cents for USD). Used when no plan id is set.
-  ORDER_AMOUNT_PAISE = "1000",
+  // Default currency when the client doesn't specify one. Indian visitors are
+  // billed in INR (unlocks UPI/netbanking); everyone else in USD (card-only,
+  // the only rail that carries a foreign currency).
   ORDER_CURRENCY = "USD",
+  // Per-currency, per-plan prices in the currency's smallest unit (cents for
+  // USD, paise for INR). Used in one-time-order mode (no RAZORPAY_PLAN_ID).
+  USD_MONTHLY_CENTS = "1000",
+  USD_ANNUAL_CENTS = "10000",
+  INR_MONTHLY_PAISE = "85000",
+  INR_ANNUAL_PAISE = "850000",
   PREMIUM_DAYS = "31",
-  // Annual one-time order: a single $100 payment granting ANNUAL_DAYS of
-  // Premium. Amount is in the currency's smallest unit: 10000 cents = $100.
-  ANNUAL_AMOUNT_PAISE = "10000",
   ANNUAL_DAYS = "365",
 } = process.env;
 
@@ -34,25 +37,58 @@ if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
 }
 
 const SUBSCRIPTION_MODE = !!RAZORPAY_PLAN_ID;
-const orderAmount = Math.round(Number(ORDER_AMOUNT_PAISE));
 const premiumDays = Math.max(1, Number(PREMIUM_DAYS) || 31);
-const annualAmount = Math.round(Number(ANNUAL_AMOUNT_PAISE));
 const annualDays = Math.max(1, Number(ANNUAL_DAYS) || 365);
-if (!SUBSCRIPTION_MODE && (!Number.isFinite(orderAmount) || orderAmount < 100)) {
-  console.error("ORDER_AMOUNT_PAISE must be a number >= 100 (paise).");
-  process.exit(1);
+const num = (v) => Math.round(Number(v));
+
+// Currencies we can take a payment in. INR keeps the full method list (UPI,
+// netbanking, wallets, cards); other currencies are card-only at Razorpay.
+const SUPPORTED_CURRENCIES = ["INR", "USD"];
+const DEFAULT_CURRENCY = SUPPORTED_CURRENCIES.includes(String(ORDER_CURRENCY).toUpperCase())
+  ? String(ORDER_CURRENCY).toUpperCase()
+  : "USD";
+
+// Server-authoritative one-time-order pricing. The client sends a plan NAME and
+// (optionally) a CURRENCY — never an amount or a day count — and the backend
+// maps them to the price and the Premium duration, so a cheap order can never
+// claim a long license or an undervalued currency.
+const PRICING = {
+  USD: {
+    monthly: { amount: num(USD_MONTHLY_CENTS), days: premiumDays },
+    annual: { amount: num(USD_ANNUAL_CENTS), days: annualDays },
+  },
+  INR: {
+    monthly: { amount: num(INR_MONTHLY_PAISE), days: premiumDays },
+    annual: { amount: num(INR_ANNUAL_PAISE), days: annualDays },
+  },
+};
+
+if (!SUBSCRIPTION_MODE) {
+  for (const cur of SUPPORTED_CURRENCIES) {
+    for (const plan of ["monthly", "annual"]) {
+      const a = PRICING[cur][plan].amount;
+      if (!Number.isFinite(a) || a < 100) {
+        console.error(`${cur} ${plan} price must be a number >= 100 (smallest currency unit).`);
+        process.exit(1);
+      }
+    }
+  }
 }
 
-// Server-authoritative one-time-order plans. The client sends a plan NAME only
-// (never an amount or a day count), and the backend maps it to the price and
-// the Premium duration — so a cheap order can never claim a long license.
-const PLANS = {
-  monthly: { amount: orderAmount, days: premiumDays },
-  annual: { amount: annualAmount, days: annualDays },
-};
-/** Resolve a plan name to its { amount, days }; unknown names fall back to monthly. */
-function planFor(name) {
-  return PLANS[String(name || "").toLowerCase().trim()] || PLANS.monthly;
+/** Normalise a requested currency to a supported one (defaults to DEFAULT_CURRENCY). */
+function currencyFor(currency) {
+  const c = String(currency || "").toUpperCase();
+  return SUPPORTED_CURRENCIES.includes(c) ? c : DEFAULT_CURRENCY;
+}
+
+/**
+ * Resolve a plan name + currency to { amount, days, currency }. Unknown plan
+ * names fall back to monthly; unknown currencies to DEFAULT_CURRENCY.
+ */
+function planFor(name, currency) {
+  const cur = currencyFor(currency);
+  const key = String(name || "").toLowerCase().trim() === "annual" ? "annual" : "monthly";
+  return { ...PRICING[cur][key], currency: cur };
 }
 
 module.exports = {
@@ -62,12 +98,13 @@ module.exports = {
   RAZORPAY_WEBHOOK_SECRET,
   PORT,
   PRICE_LABEL,
-  ORDER_CURRENCY,
+  ORDER_CURRENCY: DEFAULT_CURRENCY,
+  DEFAULT_CURRENCY,
+  SUPPORTED_CURRENCIES,
   SUBSCRIPTION_MODE,
-  orderAmount,
   premiumDays,
-  annualAmount,
   annualDays,
-  PLANS,
+  PRICING,
+  currencyFor,
   planFor,
 };

@@ -105,7 +105,7 @@ export async function openPremiumCheckout(opts: {
     order_id: order.order_id,
     amount: order.amount,
     currency: order.currency,
-    name: "Figma to Tableau",
+    name: "Pixelmentis",
     description: `Premium (${plan === "annual" ? "annual" : "monthly"}) — unlimited exports`,
     prefill: name ? { name } : undefined,
     notes: { figma_uid: uid },

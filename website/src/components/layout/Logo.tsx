@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 
 export default function Logo() {
   return (
-    <Link to="/" className="logo" aria-label="Figma to Tableau — home">
+    <Link to="/" className="logo" aria-label="Pixelmentis — home">
       <span className="logo__icon" aria-hidden="true">
         <svg width="32" height="32" viewBox="0 0 64 64" fill="none">
           <defs>
@@ -19,7 +19,7 @@ export default function Logo() {
         </svg>
       </span>
       <span>
-        Figma <em>to</em> Tableau
+        Pixel<em>mentis</em>
       </span>
     </Link>
   );

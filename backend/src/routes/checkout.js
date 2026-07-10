@@ -41,7 +41,7 @@ function checkoutPage(uid, name) {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Figma to Tableau — Premium</title>
+<title>Pixelmentis — Premium</title>
 <style>
   body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #0f1117; color: #e5e7eb;
          display: flex; align-items: center; justify-content: center; min-height: 100vh; }
@@ -59,7 +59,7 @@ function checkoutPage(uid, name) {
 </head>
 <body>
 <div class="card">
-  <h1>Figma to Tableau — Premium</h1>
+  <h1>Pixelmentis — Premium</h1>
   <p id="blurb"></p>
   <div class="price" id="price"></div>
   <button id="pay"></button>
@@ -83,7 +83,7 @@ function checkoutPage(uid, name) {
   function openModal(opts, verifyUrl, verifyBody) {
     var rzp = new Razorpay(Object.assign({
       key: BOOT.keyId,
-      name: "Figma to Tableau",
+      name: "Pixelmentis",
       description: "Premium — unlimited exports (" + BOOT.priceLabel + ")",
       prefill: { name: BOOT.name || undefined },
       notes: { figma_uid: BOOT.uid },

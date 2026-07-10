@@ -16,14 +16,13 @@ const {
   PORT = 3000,
   PRICE_LABEL = "$10/month",
   // One-time order mode (Standard Checkout): price of one Premium period in
-  // the currency's smallest unit (paise for INR). Used when no plan id is set.
-  ORDER_AMOUNT_PAISE = "85000",
-  ORDER_CURRENCY = "INR",
+  // the currency's smallest unit (cents for USD). Used when no plan id is set.
+  ORDER_AMOUNT_PAISE = "1000",
+  ORDER_CURRENCY = "USD",
   PREMIUM_DAYS = "31",
-  // Annual one-time order: a single ~$100 payment granting ANNUAL_DAYS of
-  // Premium. Amount is in the currency's smallest unit (paise for INR):
-  // 850000 = ₹8,500 ≈ $100.
-  ANNUAL_AMOUNT_PAISE = "850000",
+  // Annual one-time order: a single $100 payment granting ANNUAL_DAYS of
+  // Premium. Amount is in the currency's smallest unit: 10000 cents = $100.
+  ANNUAL_AMOUNT_PAISE = "10000",
   ANNUAL_DAYS = "365",
 } = process.env;
 

@@ -71,7 +71,7 @@ export default function Footer() {
           </div>
         </div>
         <div className="footer__bottom">
-          <span>&copy; {new Date().getFullYear()} Figma to Tableau. Not affiliated with Figma, Inc. or Salesforce/Tableau.</span>
+          <span>&copy; {new Date().getFullYear()} Pixelmentis. Not affiliated with Figma, Inc. or Salesforce/Tableau.</span>
           <span className="chip">
             <b>.twbx</b> Tableau 2026.2 ready
           </span>

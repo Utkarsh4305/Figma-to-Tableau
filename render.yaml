@@ -18,26 +18,26 @@ services:
     healthCheckPath: /healthz
     autoDeploy: true
     envVars:
-      # Razorpay TEST-MODE keys (baked in so the deployed backend can create
-      # orders). Test keys only ever move test money, but they still live in
-      # git history once pushed — NEVER put LIVE keys here; set those in the
-      # Render dashboard (Environment tab) instead, which overrides + redeploys.
+      # Razorpay keys are dashboard-managed (sync: false): LIVE credentials
+      # must never live in git. Set/rotate them in Render > Environment;
+      # blueprint syncs won't overwrite them. Saving there auto-redeploys.
       - key: RAZORPAY_KEY_ID
-        value: rzp_test_TBisZXcohsbIVD
+        sync: false
       - key: RAZORPAY_KEY_SECRET
-        value: oBZzQDdWLvbFuB189DDQkKPn
+        sync: false
       # Optional — add in the dashboard if you use them. A subscription plan id
       # switches checkout to monthly billing; without one it's one-time orders.
       # RAZORPAY_PLAN_ID, RAZORPAY_WEBHOOK_SECRET
-      # One-time-order pricing (paise). 85000 = ₹850. Change per your pricing.
+      # One-time-order pricing in the currency's smallest unit (cents for
+      # USD). 1000 = $10/month. Change per your pricing.
       - key: ORDER_AMOUNT_PAISE
-        value: "85000"
+        value: "1000"
       - key: ORDER_CURRENCY
-        value: INR
+        value: USD
       - key: PREMIUM_DAYS
         value: "31"
-      # Annual one-time order (paise). 850000 = ₹8,500 ≈ $100.
+      # Annual one-time order (cents). 10000 = $100/year.
       - key: ANNUAL_AMOUNT_PAISE
-        value: "850000"
+        value: "10000"
       - key: ANNUAL_DAYS
         value: "365"

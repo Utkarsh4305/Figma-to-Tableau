@@ -22,9 +22,24 @@ function money(amount, currency) {
   return sym + (amount / 100).toLocaleString("en-US");
 }
 
+/**
+ * Serialise a value for safe embedding inside an inline <script>. JSON.stringify
+ * alone is NOT enough: it leaves `<`, `>` and `&` untouched, so a value
+ * containing "</script>" would close the script element and inject markup
+ * (reflected XSS). Escaping each of those characters — plus the U+2028/U+2029
+ * line terminators that are illegal raw in a JS string — to its \uXXXX form
+ * keeps the JSON valid while making it impossible to break out of the tag.
+ */
+function jsonForScript(obj) {
+  return JSON.stringify(obj).replace(/[<>&\u2028\u2029]/g, (c) => {
+    return "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0");
+  });
+}
+
 router.get("/checkout", (req, res) => {
-  const uid = String(req.query.uid || "").trim();
-  const name = String(req.query.name || "").trim();
+  // Cap lengths so a hostile query string can't bloat the page or the notes.
+  const uid = String(req.query.uid || "").trim().slice(0, 120);
+  const name = String(req.query.name || "").trim().slice(0, 120);
   if (!uid) return res.status(400).send("Missing uid — open this page from the plugin's Upgrade button.");
   res.type("html").send(checkoutPage(uid, name));
 });
@@ -36,8 +51,9 @@ function checkoutPage(uid, name) {
     INR: `${money(PRICING.INR.monthly.amount, "INR")} — ${premiumDays} days`,
     USD: `${money(PRICING.USD.monthly.amount, "USD")} — ${premiumDays} days`,
   };
-  // Values are embedded as JSON to keep them safely escaped inside the script.
-  const boot = JSON.stringify({
+  // Values are embedded as JSON, escaped for a <script> context (jsonForScript),
+  // so a hostile uid/name can't break out of the tag.
+  const boot = jsonForScript({
     uid,
     name,
     subLabel: PRICE_LABEL,

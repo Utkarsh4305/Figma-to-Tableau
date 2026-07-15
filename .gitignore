@@ -19,3 +19,5 @@ __pycache__/
 # Local wireframe source (HTML design-doc + its renderer)
 SpecCard.dc.html
 support.js
+
+/.graphify/

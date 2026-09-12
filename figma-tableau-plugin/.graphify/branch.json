@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "branchName": "Main",
+  "worktreePath": "D:\\wireframe",
+  "upstream": "origin/Main",
+  "mergeBase": "d5b89997ca41524eb8352c13e4919e7af6a0cc28",
+  "firstSeenHead": "d5b89997ca41524eb8352c13e4919e7af6a0cc28",
+  "lastSeenHead": "d5b89997ca41524eb8352c13e4919e7af6a0cc28",
+  "lastAnalyzedHead": "d5b89997ca41524eb8352c13e4919e7af6a0cc28",
+  "stale": false,
+  "staleReason": null,
+  "staleSince": null,
+  "lifecycleEvent": null,
+  "createdAt": "2026-09-12T08:16:17.811Z",
+  "updatedAt": "2026-09-12T09:32:56.160Z"
+}

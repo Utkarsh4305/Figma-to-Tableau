@@ -153,12 +153,16 @@ export async function parseImport(buf: ArrayBuffer, fileName: string): Promise<P
     twb = await zip.files[twbName].async("string");
     // Carry every Data/ + Image/ asset verbatim (paths preserved so the imported
     // datasource connections — filename='Data/…' — still resolve in the output).
-    for (const name of Object.keys(zip.files)) {
-      const f = zip.files[name];
-      if (f.dir) continue;
-      if (/^Data\//i.test(name) || /^Image\//i.test(name)) {
-        assets.push({ path: name, bytes: await f.async("uint8array") });
-      }
+    // Decompressed together: these used to be awaited one at a time, which
+    // serialised the unpacking of a workbook carrying several extracts.
+    const assetNames = Object.keys(zip.files).filter(
+      (name) => !zip.files[name].dir && (/^Data\//i.test(name) || /^Image\//i.test(name))
+    );
+    const assetBytes = await Promise.all(
+      assetNames.map((name) => zip.files[name].async("uint8array"))
+    );
+    for (let i = 0; i < assetNames.length; i++) {
+      assets.push({ path: assetNames[i], bytes: assetBytes[i] });
     }
   }
 

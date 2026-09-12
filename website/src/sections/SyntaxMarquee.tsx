@@ -3,18 +3,18 @@
  * product in one scrolling line. Pauses on hover; chips tilt like stickers.
  */
 const CHIPS: Array<{ prefix: string; rest: string; color: string }> = [
-  { prefix: "SHEET/", rest: "Revenue Trend[line]", color: "#0d9488" },
-  { prefix: "KPI/", rest: "Conversion", color: "#d9689f" },
-  { prefix: "FILTER/", rest: "Region", color: "#18a0fb" },
-  { prefix: "Nav/", rest: "Overview", color: "#0aa268" },
-  { prefix: "SHEET/", rest: "Mix[pie]:filter", color: "#8b5e34" },
-  { prefix: "TEXT/", rest: "Q3 Summary", color: "#d9689f" },
-  { prefix: "BUTTON/", rest: "Details > Sales", color: "#0d9488" },
-  { prefix: "SHEET/", rest: "By Site[bar]", color: "#18a0fb" },
-  { prefix: "IMG/", rest: "Logo", color: "#0aa268" },
-  { prefix: "SHEET/", rest: "Heat[heatmap]:showTitle", color: "#8b5e34" },
-  { prefix: "CONTAINER/", rest: "Header", color: "#d9689f" },
-  { prefix: "URL/", rest: "status.example.com", color: "#18a0fb" },
+  { prefix: "SHEET/", rest: "Revenue Trend[line]", color: "#5f5580" },
+  { prefix: "KPI/", rest: "Conversion", color: "#9c4f63" },
+  { prefix: "FILTER/", rest: "Region", color: "#3f5f7a" },
+  { prefix: "Nav/", rest: "Overview", color: "#3d8254" },
+  { prefix: "SHEET/", rest: "Mix[pie]:filter", color: "#8a5733" },
+  { prefix: "TEXT/", rest: "Q3 Summary", color: "#9c4f63" },
+  { prefix: "BUTTON/", rest: "Details > Sales", color: "#5f5580" },
+  { prefix: "SHEET/", rest: "By Site[bar]", color: "#3f5f7a" },
+  { prefix: "IMG/", rest: "Logo", color: "#3d8254" },
+  { prefix: "SHEET/", rest: "Heat[heatmap]:showTitle", color: "#8a5733" },
+  { prefix: "CONTAINER/", rest: "Header", color: "#9c4f63" },
+  { prefix: "URL/", rest: "status.example.com", color: "#3f5f7a" },
 ];
 
 function ChipRow() {

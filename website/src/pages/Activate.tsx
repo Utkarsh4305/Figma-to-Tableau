@@ -5,19 +5,19 @@ import { CreditCard, MousePointerClick, PartyPopper } from "lucide-react";
 const STEPS = [
   {
     icon: CreditCard,
-    color: "#0d9488",
+    color: "#5f5580",
     title: "Pay through checkout",
     text: "Complete the Razorpay checkout you reached from the plugin (cards, UPI or netbanking). The license is written to your Figma account the moment payment verifies.",
   },
   {
     icon: MousePointerClick,
-    color: "#d9689f",
+    color: "#9c4f63",
     title: "Refresh in the plugin",
     text: "Back in Figma, open the plugin's Account tab and click “Refresh status”. The plugin also re-checks automatically once per session.",
   },
   {
     icon: PartyPopper,
-    color: "#0aa268",
+    color: "#3d8254",
     title: "That's it — no keys",
     text: "Premium is active: unlimited exports, and a 3-day offline grace period between license checks. Nothing to paste, nothing to install.",
   },

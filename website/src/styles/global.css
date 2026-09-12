@@ -1,72 +1,95 @@
 :root {
-  /* ── "Pastel teal" ──────────────────────────────────────
-     The spring-teal marker highlight is the anchor. Everything
-     else is built to sit *with* it: a deeper teal for anything
-     actionable (same hue family, not a clashing accent), and
-     soft professional pastels — dusty pink for Figma, warm tan
-     for Tableau — on a pale mint/blush paper. */
-  --bg: #f4fbf9;
-  --bg-elev: #e7f5f1;
-  --bg-warm: #eaf7f2;
-  --bg-soft: #fbf0f5;
-  --bg-card: rgba(255, 255, 255, 0.92);
-  --bg-glass: rgba(244, 251, 249, 0.6);
+  /* ── "Editorial warm charcoal" ──────────────────────────
+     The same palette the Figma plugin ships with (v24): flat
+     matte surfaces on a soft neutral fog canvas, crisp white
+     cards, authentic pastel fills (peach, mint, butter, lilac,
+     sky, rose), charcoal ink, and ONE muted-lavender accent.
+     No gradients, no glows — opening the plugin after the site
+     should feel like the same product, not a cousin. */
+  --bg: #eaecf1;            /* soft neutral fog canvas      */
+  --bg-elev: #f1f3f7;       /* recessed surface             */
+  --bg-hover: #e2e5eb;
+  --bg-warm: #fdede2;       /* peach wash                   */
+  --bg-soft: #f0ecf9;       /* lilac wash                   */
+  --bg-card: #ffffff;
+  --bg-glass: rgba(255, 255, 255, 0.78);
 
-  --border: rgba(15, 32, 28, 0.08);
-  --border-strong: rgba(15, 32, 28, 0.16);
+  --border: #d8dce4;        /* delicate neutral hairline    */
+  --border-strong: #c3c9d5;
 
-  --text: #122320;
-  --text-dim: #52645f;
-  --text-faint: #8fa39c;
+  --text: #1f2125;          /* deep matte charcoal ink      */
+  --text-dim: #646a77;
+  --text-faint: #969ca9;
+
+  /* Ink — every primary action is a solid matte charcoal pill */
+  --ink: #25282d;
+  --ink-soft: #3a3e46;
+  --on-ink: #ffffff;
 
   /* legacy names kept so nothing references a missing var —
-     values remapped to the pastel-teal palette */
-  --blue: #0d9488;           /* primary accent: deep professional teal, same family as the highlight */
-  --blue-light: #5eead4;
-  --blue-dark: #0b7a70;
-  --accent: #0d9488;
-  --accent-deep: #0b7a70;
-  --purple: #d9689f;         /* figma accent: dusty pastel pink */
-  --purple-light: #e58ab5;
-  --orange: #a67c52;         /* tableau accent: warm pastel tan */
-  --orange-deep: #8b5e34;
-  --cyan: #18a0fb;           /* figma sky */
-  --green: #0acf83;
-  --pink: #e58ab5;
-  --red: #ef4444;
-  --teal: #12b5a0;
-  --amber: #00d9a0;          /* the anchor: spring-teal marker highlight */
+     values remapped to the plugin's palette */
+  --blue: #7a6fa2;           /* primary accent: muted lavender */
+  --blue-light: #a79ccb;
+  --blue-dark: #5f5580;
+  --accent: #7a6fa2;
+  --accent-deep: #5f5580;
+  --purple: #7a6fa2;         /* figma accent: lilac family   */
+  --purple-light: #a79ccb;
+  --orange: #a8714a;         /* tableau accent: peach family */
+  --orange-deep: #8a5733;
+  --cyan: #4e6a80;           /* sky family                   */
+  --green: #3d8254;
+  --pink: #b06478;           /* rose family                  */
+  --red: #b54743;
+  --teal: #3d8254;
+  --amber: #966e14;          /* butter family                */
 
-  --grad-brand: linear-gradient(135deg, #0d9488 0%, #00d9a0 100%);
-  --grad-warm: linear-gradient(135deg, #a67c52 0%, #00d9a0 100%);
-  --grad-cyan: linear-gradient(135deg, #18a0fb 0%, #0acf83 100%);
-  --grad-green: linear-gradient(135deg, var(--green) 0%, var(--teal) 100%);
-  --grad-text: linear-gradient(120deg, #0d9488, #00d9a0);
-  --grad-hero: linear-gradient(180deg, #eaf7f2 0%, #f4fbf9 100%);
+  /* Authentic pastel card fills — flat solids, zero gradients */
+  --pastel-peach: #fdede2;   --pastel-peach-border: #f5d5c0;
+  --pastel-mint: #e5f6eb;    --pastel-mint-border: #c7ebd0;
+  --pastel-butter: #fef5dc;  --pastel-butter-border: #fae6ad;
+  --pastel-lav: #f0ecf9;     --pastel-lav-border: #dcd3f0;
+  --pastel-sky: #e8f2fa;     --pastel-sky-border: #cce1f2;
+  --pastel-rose: #fde8ec;    --pastel-rose-border: #f7c8d2;
 
-  /* faint grain for card surfaces so flat fills don't read as generic UI */
-  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+  /* "Gradients" are flat fills now — the names survive so older
+     rules keep resolving, but nothing actually ramps. */
+  --grad-brand: var(--ink);
+  --grad-warm: var(--pastel-peach);
+  --grad-cyan: var(--pastel-sky);
+  --grad-green: var(--pastel-mint);
+  --grad-text: var(--pastel-butter-border);
+  --grad-hero: var(--bg);
 
-  --font-display: "Clash Display", "Inter", "Segoe UI", system-ui, sans-serif;
-  --font-body: "Satoshi", "Inter", "Segoe UI", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  /* no grain: the plugin's surfaces are velvety matte, not textured */
+  --grain: none;
 
-  --radius-xs: 6px;
+  --font-display: "DM Serif Display", Georgia, "Times New Roman", serif;
+  --font-body: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "SF Mono", "Fira Code", Consolas, ui-monospace, monospace;
+
+  --radius-xs: 7px;
   --radius-sm: 10px;
   --radius: 16px;
-  --radius-lg: 20px;
-  --radius-xl: 28px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
   --container: 1180px;
   --nav-h: 72px;
 
-  --shadow-sm: 0 1px 2px rgba(18, 35, 32, 0.06), 0 4px 16px rgba(18, 35, 32, 0.05);
-  --shadow-card: 0 2px 8px rgba(18, 35, 32, 0.05), 0 12px 40px rgba(18, 35, 32, 0.07);
-  --shadow-hover: 0 6px 20px rgba(18, 35, 32, 0.07), 0 24px 64px rgba(18, 35, 32, 0.09);
-  --shadow-floating: 0 10px 40px rgba(18, 35, 32, 0.09), 0 40px 100px rgba(18, 35, 32, 0.11);
-  --shadow-blue: 0 4px 24px rgba(13, 148, 136, 0.26);
-  --shadow-blue-lg: 0 8px 40px rgba(13, 148, 136, 0.36);
-  --glow-blue: 0 0 80px -16px rgba(13, 148, 136, 0.4);
-  --glow-purple: 0 0 80px -16px rgba(217, 104, 159, 0.3);
+  /* Shadows stay whisper-quiet — the plugin leans on hairlines,
+     not on elevation. */
+  --shadow-sm: 0 1px 2px rgba(31, 33, 37, 0.04), 0 2px 10px rgba(31, 33, 37, 0.03);
+  --shadow-card: 0 2px 10px rgba(31, 33, 37, 0.04), 0 8px 28px rgba(31, 33, 37, 0.05);
+  --shadow-hover: 0 4px 14px rgba(31, 33, 37, 0.06), 0 16px 44px rgba(31, 33, 37, 0.07);
+  --shadow-floating: 0 6px 22px rgba(31, 33, 37, 0.07), 0 26px 70px rgba(31, 33, 37, 0.09);
+  --shadow-blue: 0 2px 8px rgba(37, 40, 45, 0.15);
+  --shadow-blue-lg: 0 4px 14px rgba(37, 40, 45, 0.22);
+  --glow-blue: none;
+  --glow-purple: none;
+
+  /* Motion vocabulary, matched to the plugin */
+  --ease-glide: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
 }
 
 *,
@@ -96,13 +119,13 @@ html {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, var(--accent), var(--accent-deep));
+  background: #c7ccd8;
   border-radius: 999px;
   border: 3px solid var(--bg-elev);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, var(--amber), var(--accent));
+  background: var(--accent);
 }
 
 body {
@@ -113,6 +136,10 @@ body {
   font-size: 16px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* same Inter cut as the plugin: single-storey l, rounder quotes */
+  font-feature-settings: "cv05" 1, "ss03" 1;
+  font-optical-sizing: auto;
   overflow-x: clip;
 }
 
@@ -137,10 +164,12 @@ button {
 
 h1, h2, h3, h4 {
   font-family: var(--font-display);
-  font-weight: 600;
-  line-height: 1.1;
+  /* DM Serif Display ships a single weight; asking for 600 only
+     gets a synthesised smear, so every heading sits at 400. */
+  font-weight: 400;
+  line-height: 1.16;
   margin: 0;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
 }
 
 p {
@@ -148,11 +177,12 @@ p {
 }
 
 ::selection {
-  background: rgba(0, 217, 160, 0.4);
+  background: rgba(122, 111, 162, 0.16);
+  color: var(--text);
 }
 
 :focus-visible {
-  outline: 2px solid var(--blue);
+  outline: 2px solid var(--ink);
   outline-offset: 3px;
   border-radius: 6px;
 }
@@ -190,24 +220,23 @@ p {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 16px;
+  padding: 6px 14px;
   border-radius: 999px;
-  border: 1.5px solid var(--text);
+  border: 1px solid var(--border);
   background: #fff;
   font-family: var(--font-body);
   font-size: 12.5px;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--text);
-  transform: rotate(-1.6deg);
-  box-shadow: 2.5px 2.5px 0 rgba(37, 29, 16, 0.14);
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  color: var(--text-dim);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.25s var(--ease-glide), color 0.25s var(--ease-glide);
 }
 
 .eyebrow:hover {
-  transform: rotate(0.5deg);
-  box-shadow: 1.5px 1.5px 0 rgba(37, 29, 16, 0.14);
+  border-color: var(--border-strong);
+  color: var(--text);
 }
 
 .eyebrow .dot {
@@ -230,11 +259,11 @@ p {
 }
 
 .section-heading h2 {
-  font-size: clamp(32px, 4.2vw, 52px);
-  font-weight: 600;
+  font-size: clamp(30px, 4vw, 48px);
+  font-weight: 400;
   margin: 18px 0 16px;
-  line-height: 1.12;
-  letter-spacing: -0.02em;
+  line-height: 1.14;
+  letter-spacing: -0.01em;
 }
 
 .section-heading p {
@@ -244,12 +273,13 @@ p {
 }
 
 /* ── Accent-word helpers ────────────────────────────────────
-   .grad-text = a spring-teal marker swipe behind ink text (the
-   old blue→purple gradient text is gone on purpose).
-   .grad-warm / .grad-cyan = flat candy colors. */
+   .grad-text = a marker swipe behind ink text, in the plugin's
+   buttercup pastel — the one card colour in the set that reads as
+   a highlighter rather than as a selection rectangle.
+   .grad-warm / .grad-cyan = flat pastel-family inks. */
 .grad-text {
   color: inherit;
-  background: linear-gradient(120deg, rgba(0, 217, 160, 0.55), rgba(0, 217, 160, 0.22));
+  background: var(--pastel-butter-border);
   border-radius: 0.35em 0.6em 0.4em 0.5em / 0.55em 0.35em 0.6em 0.4em;
   padding: 0.02em 0.14em;
   margin-inline: -0.06em;
@@ -266,7 +296,7 @@ p {
 }
 
 .word-figma {
-  color: var(--purple-light);
+  color: var(--purple);
 }
 
 .word-tableau {
@@ -281,7 +311,7 @@ p {
   gap: 8px;
   padding: 12px 26px;
   border-radius: 999px;
-  font-weight: 700;
+  font-weight: 600;
   font-size: 15px;
   letter-spacing: -0.01em;
   transition: transform 0.2s ease, box-shadow 0.25s ease, background 0.25s ease, border-color 0.25s ease, color 0.25s ease;
@@ -292,45 +322,32 @@ p {
   transform: translateY(1px) scale(0.98) !important;
 }
 
-/* Primary = solid indigo pill (no ink/black fill) */
+/* Primary = the plugin's solid matte charcoal pill. No ramp, no
+   sheen sweep: it lifts 1px and deepens its shadow, nothing else. */
 .btn--primary {
   position: relative;
-  overflow: hidden;
-  color: #fff;
-  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-deep) 100%);
+  color: var(--on-ink);
+  background: var(--ink);
   box-shadow: var(--shadow-blue);
 }
 
-.btn--primary::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.28) 50%, transparent 65%);
-  transform: translateX(-130%);
-  transition: transform 0.7s ease;
-  pointer-events: none;
-}
-
 .btn--primary:hover {
-  box-shadow: var(--shadow-blue-lg), 0 0 0 3px rgba(0, 217, 160, 0.22);
-  transform: translateY(-2px);
-}
-
-.btn--primary:hover::after {
-  transform: translateX(130%);
+  box-shadow: var(--shadow-blue-lg);
+  transform: translateY(-1px);
+  opacity: 0.96;
 }
 
 .btn--ghost {
   color: var(--text);
-  border: 1.5px solid var(--border-strong);
+  border: 1px solid var(--border);
   background: #fff;
 }
 
 .btn--ghost:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: rgba(13, 148, 136, 0.06);
-  transform: translateY(-2px);
+  border-color: var(--ink);
+  color: var(--text);
+  background: #fff;
+  transform: translateY(-1px);
 }
 
 .btn--quiet {
@@ -345,17 +362,15 @@ p {
 .btn--lg {
   padding: 15px 34px;
   font-size: 16px;
-  border-radius: 14px;
+  border-radius: 999px;
 }
 
 /* ── Glass card ─────────────────────────────────────────── */
 .glass {
   position: relative;
   border-radius: var(--radius-lg);
-  border: 1px solid rgba(13, 148, 136, 0.14);
+  border: 1px solid var(--border);
   background-color: var(--bg-card);
-  background-image: var(--grain);
-  backdrop-filter: blur(16px);
   box-shadow: var(--shadow-card);
 }
 
@@ -364,9 +379,9 @@ p {
 }
 
 .glass--hover:hover {
-  transform: translateY(-6px);
-  border-color: rgba(13, 148, 136, 0.3);
-  box-shadow: var(--shadow-hover), 0 0 48px -24px rgba(13, 148, 136, 0.25);
+  transform: translateY(-4px);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-hover);
 }
 
 /* ── Background grid ────────────────────────────────────── */
@@ -375,8 +390,8 @@ p {
   inset: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(37, 29, 16, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(37, 29, 16, 0.045) 1px, transparent 1px);
+    linear-gradient(rgba(31, 33, 37, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(31, 33, 37, 0.05) 1px, transparent 1px);
   background-size: 60px 60px;
   mask-image: radial-gradient(ellipse 90% 70% at 50% 30%, #000 20%, transparent 75%);
 }
@@ -386,27 +401,28 @@ p {
   position: absolute;
   border-radius: 50%;
   filter: blur(90px);
+  opacity: 0.85;
   pointer-events: none;
 }
 
 .orb--blue {
-  background: radial-gradient(circle, rgba(13, 148, 136, 0.2), transparent 65%);
+  background: radial-gradient(circle, rgba(122, 111, 162, 0.16), transparent 65%);
 }
 
 .orb--purple {
-  background: radial-gradient(circle, rgba(217, 104, 159, 0.16), transparent 65%);
+  background: radial-gradient(circle, rgba(220, 211, 240, 0.55), transparent 65%);
 }
 
 .orb--cyan {
-  background: radial-gradient(circle, rgba(24, 160, 251, 0.16), transparent 65%);
+  background: radial-gradient(circle, rgba(204, 225, 242, 0.6), transparent 65%);
 }
 
 .orb--orange {
-  background: radial-gradient(circle, rgba(0, 217, 160, 0.22), transparent 65%);
+  background: radial-gradient(circle, rgba(245, 213, 192, 0.6), transparent 65%);
 }
 
 .orb--pink {
-  background: radial-gradient(circle, rgba(255, 92, 168, 0.15), transparent 65%);
+  background: radial-gradient(circle, rgba(247, 200, 210, 0.5), transparent 65%);
 }
 
 /* ── Chip ───────────────────────────────────────────────── */
@@ -424,7 +440,7 @@ p {
 }
 
 .chip b {
-  color: var(--blue);
+  color: var(--text);
   font-weight: 700;
 }
 
@@ -463,5 +479,4 @@ p {
   height: 8px;
   border-radius: 50%;
   background: var(--green);
-  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
 }

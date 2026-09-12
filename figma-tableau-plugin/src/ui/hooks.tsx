@@ -122,7 +122,10 @@ function createUiSaver() {
     lastW = w; lastH = h; lastTab = tab;
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
-      toPlugin({ type: "save-ui-state", data: { width: lastW, height: lastH, tab: lastTab as any } });
+      toPlugin({
+        type: "save-ui-state",
+        data: { width: lastW, height: lastH, tab: lastTab as any },
+      });
     }, 600);
   };
 }

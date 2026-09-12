@@ -12,9 +12,9 @@ export default function FlowBeam() {
       <svg viewBox="0 0 160 60" className="beam__svg" preserveAspectRatio="none">
         <defs>
           <linearGradient id="beam-g" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0" stopColor="#4D8DFF" stopOpacity="0.2" />
-            <stop offset="0.5" stopColor="#8B5CF6" />
-            <stop offset="1" stopColor="#3BD6FF" stopOpacity="0.2" />
+            <stop offset="0" stopColor="#dcd3f0" stopOpacity="0.2" />
+            <stop offset="0.5" stopColor="#7a6fa2" />
+            <stop offset="1" stopColor="#cce1f2" stopOpacity="0.2" />
           </linearGradient>
         </defs>
         <line x1="0" y1="30" x2="160" y2="30" stroke="url(#beam-g)" strokeWidth="2" />
@@ -24,8 +24,7 @@ export default function FlowBeam() {
             key={i}
             r="3"
             cy="30"
-            fill="#9db9ff"
-            style={{ filter: "drop-shadow(0 0 6px #4D8DFF)" }}
+            fill="#7a6fa2"
             initial={{ cx: -6, opacity: 0 }}
             animate={{ cx: 166, opacity: [0, 1, 1, 0] }}
             transition={{ duration: 2.2, delay: i * 0.75, repeat: Infinity, ease: "easeInOut" }}

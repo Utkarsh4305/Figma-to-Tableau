@@ -227,7 +227,7 @@
 
 .docs__toc a:hover {
   color: var(--text);
-  background: rgba(18, 35, 32, 0.04);
+  background: var(--bg-elev);
 }
 
 .docs__toc a.is-active {
@@ -348,8 +348,8 @@
   gap: 12px;
   padding: 16px 20px;
   border-radius: var(--radius);
-  border: 1.5px solid rgba(0, 217, 160, 0.55);
-  background: rgba(0, 217, 160, 0.12);
+  border: 1px solid var(--pastel-butter-border);
+  background: var(--pastel-butter);
   color: var(--text-dim);
   font-size: 14.5px;
   line-height: 1.65;
@@ -524,7 +524,7 @@
 
 .license-check__form input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 4px rgba(13, 148, 136, 0.12);
+  box-shadow: 0 0 0 3px rgba(122, 111, 162, 0.16);
 }
 
 .license-result {

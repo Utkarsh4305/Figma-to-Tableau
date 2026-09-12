@@ -98,7 +98,11 @@ export async function logExport(): Promise<void> {
 }
 
 /** Persist the plugin UI state (window size + active tab) across sessions. */
-export async function saveUiState(data: { width: number; height: number; tab: string }): Promise<void> {
+export async function saveUiState(data: {
+  width: number;
+  height: number;
+  tab: string;
+}): Promise<void> {
   try {
     await figma.clientStorage.setAsync("ft-ui-state", data);
   } catch {

@@ -23,7 +23,7 @@ const BARS = [0.85, 0.62, 0.74, 0.43, 0.91, 0.56, 0.78];
 
 export default function Demo() {
   return (
-    <section className="section" id="demo" style={{ background: "linear-gradient(180deg, #eaf7f2 0%, #f4fbf9 100%)" }}>
+    <section className="section" id="demo" style={{ background: "var(--bg)" }}>
       <div className="orb orb--cyan"   style={{ width: 360, height: 360, top: 60,    left: "-4%"  }} />
       <div className="orb orb--orange" style={{ width: 280, height: 280, bottom: 60, right: "6%"  }} />
       <div className="container">
@@ -59,9 +59,9 @@ export default function Demo() {
                   <div key={f} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: "var(--text-dim)" }}>
                     <span style={{
                       width: 22, height: 22, borderRadius: "50%",
-                      background: "rgba(13,148,136,0.08)", border: "1.5px solid rgba(13,148,136,0.25)",
+                      background: "var(--pastel-mint)", border: "1px solid var(--pastel-mint-border)",
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "#0d9488", flexShrink: 0, fontSize: 12, fontWeight: 700
+                      color: "#1b3826", flexShrink: 0, fontSize: 12, fontWeight: 700
                     }}>✓</span>
                     {f}
                   </div>
@@ -74,9 +74,9 @@ export default function Demo() {
               <div className="playground__builder-header">
                 <span className="playground__builder-title">Drag components</span>
                 <div className="playground__builder-actions">
-                  <span style={{ background: "#ff5f56" }} />
-                  <span style={{ background: "#ffbd2e" }} />
-                  <span style={{ background: "#27c93f" }} />
+                  <span style={{ background: "#f0bdc2" }} />
+                  <span style={{ background: "#f3dfae" }} />
+                  <span style={{ background: "#bfdfc9" }} />
                 </div>
               </div>
               <div className="playground__grid">
@@ -84,7 +84,7 @@ export default function Demo() {
                   <motion.div
                     key={c.label}
                     className={`playground__card ${c.wide ? "playground__card--wide" : ""}`}
-                    whileHover={{ y: -4, rotate: -0.6, boxShadow: "0 10px 36px rgba(244,81,44,0.14)" }}
+                    whileHover={{ y: -4, boxShadow: "0 16px 44px rgba(31,33,37,0.07)" }}
                     whileTap={{ scale: 0.97 }}
                     drag
                     dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
@@ -119,7 +119,7 @@ export default function Demo() {
                       <div className="playground__kpi-value">
                         <CountUp to={k.value} prefix={k.prefix} suffix={k.suffix} decimals={k.decimals} />
                       </div>
-                      <div style={{ fontSize: 11, fontWeight: 700, marginTop: 4, color: k.up ? "#0aa268" : "#e14b4b", display: "flex", alignItems: "center", gap: 3 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, marginTop: 4, color: k.up ? "#3d8254" : "#b54743", display: "flex", alignItems: "center", gap: 3 }}>
                         {k.up
                           ? <TrendingUp size={11} strokeWidth={2.5} />
                           : <TrendingDown size={11} strokeWidth={2.5} />}
@@ -140,7 +140,7 @@ export default function Demo() {
                         key={i}
                         style={{
                           flex: 1, borderRadius: "4px 4px 0 0",
-                          background: "linear-gradient(180deg, var(--accent) 0%, var(--amber) 100%)",
+                          background: "var(--accent)",
                           height: `${h * 100}%`,
                           opacity: 0.7 + h * 0.3,
                         }}

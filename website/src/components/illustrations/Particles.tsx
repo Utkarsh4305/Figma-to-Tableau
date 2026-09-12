@@ -10,7 +10,7 @@ interface Particle {
   color: string;
 }
 
-const COLORS = ["#F4512C", "#A259FF", "#18A0FB", "#FFB524", "#0ACF83"];
+const COLORS = ["#f5d5c0", "#dcd3f0", "#cce1f2", "#fae6ad", "#c7ebd0", "#f7c8d2"];
 
 export default function Particles() {
   const canvasRef = useRef<HTMLCanvasElement>(null);

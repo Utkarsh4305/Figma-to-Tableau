@@ -1,16 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <defs>
-    <linearGradient id="ftBadge" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#0d9488"/>
-      <stop offset="1" stop-color="#00d9a0"/>
-    </linearGradient>
-  </defs>
-  <!-- brand badge -->
-  <rect width="64" height="64" rx="16" fill="url(#ftBadge)"/>
-  <!-- ascending dashboard bars (design → data) -->
-  <rect x="17.5" y="32" width="7.5" height="15" rx="2.6" fill="#ffffff" opacity="0.55"/>
-  <rect x="28.25" y="25" width="7.5" height="22" rx="2.6" fill="#ffffff" opacity="0.78"/>
+  <!-- brand badge: matte charcoal squircle, same mark the plugin ships -->
+  <rect width="64" height="64" rx="16" fill="#25282d"/>
+  <rect x="0.5" y="0.5" width="63" height="63" rx="15.5" stroke="#ffffff" stroke-opacity="0.16"/>
+  <!-- ascending dashboard bars (design to data) -->
+  <rect x="17.5" y="32" width="7.5" height="15" rx="2.6" fill="#ffffff" opacity="0.42"/>
+  <rect x="28.25" y="25" width="7.5" height="22" rx="2.6" fill="#ffffff" opacity="0.7"/>
   <rect x="39" y="18" width="7.5" height="29" rx="2.6" fill="#ffffff"/>
-  <!-- accent node -->
-  <circle cx="42.75" cy="12.5" r="3.4" fill="#c6fff0"/>
+  <!-- accent node: muted lavender -->
+  <circle cx="42.75" cy="12.5" r="3.4" fill="#c6b8f0"/>
 </svg>

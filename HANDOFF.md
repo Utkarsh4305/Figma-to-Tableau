@@ -608,7 +608,15 @@ tracks live here:
    Formerly `payment-server/`. See `backend/README.md`.
 4. **`website/`** — the standalone marketing site (Vite + React + TS +
    framer-motion). Premium CTAs in the plugin open its `/upgrade` page, which
-   hands off to the backend checkout. See `website/README.md`.
+   hands off to the backend checkout. See `website/README.md`. Since
+   2026-09-12 it wears the **same theme as the plugin UI** ("Editorial Pastel
+   & Matte B&W"): tokens in `website/src/styles/global.css` mirror
+   `src/ui/styles.css` — fog canvas `#eaecf1`, white cards on `#d8dce4`
+   hairlines, charcoal ink `#1f2125`, matte-charcoal `#25282d` CTA pills,
+   muted-lavender `#7a6fa2` accent, the six flat pastel fills, DM Serif
+   Display headings (weight 400 only) + Inter body, and zero gradients or
+   glows. The nav logo and both favicons carry the plugin's `icon.svg` mark
+   verbatim. Keep the two palettes in step when either one moves.
 
 The plugin's goal is **parity with the LaDataViz "Figma to Tableau" plugin**: an
 exported dashboard that *looks like the Figma design*, where the text stays text

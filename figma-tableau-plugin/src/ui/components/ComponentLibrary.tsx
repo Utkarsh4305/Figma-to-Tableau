@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { LibraryComponentId, UiToPlugin } from "../../shared/types";
 import { svgProps as sharedSvgProps } from "../icons";
 
@@ -149,7 +149,19 @@ const COMPONENTS: ComponentDef[] = [
 ];
 
 export default function ComponentLibrary() {
-  const categories = [...new Set(COMPONENTS.map((c) => c.category))];
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const matches = q
+    ? COMPONENTS.filter((c) => `${c.label} ${c.desc} ${c.category}`.toLowerCase().includes(q))
+    : COMPONENTS;
+
+  // While searching, category headings are noise between a handful of
+  // results — one flat grid gets the eye to the match faster.
+  const groups: Array<[string, typeof COMPONENTS]> = q
+    ? [[`${matches.length} match${matches.length === 1 ? "" : "es"}`, matches]]
+    : [...new Set(COMPONENTS.map((c) => c.category))].map(
+        (cat) => [cat, COMPONENTS.filter((c) => c.category === cat)] as [string, typeof COMPONENTS]
+      );
 
   return (
     <div>
@@ -158,12 +170,20 @@ export default function ComponentLibrary() {
         Pre-built components with correct naming conventions. Click to insert beside
         your dashboard, or drag one straight onto the canvas.
       </div>
+      <input
+        type="text"
+        className="template-search"
+        placeholder={`Search ${COMPONENTS.length} components…`}
+        value={query}
+        autoFocus
+        onChange={(e) => setQuery(e.target.value)}
+      />
 
-      {categories.map((cat) => (
+      {groups.map(([cat, items]) => (
         <div key={cat} style={{ marginBottom: 22 }}>
           <div className="section-label" style={{ marginBottom: 10 }}>{cat}</div>
           <div className="library-grid">
-            {COMPONENTS.filter((c) => c.category === cat).map((c) => (
+            {items.map((c) => (
               <div
                 key={c.id}
                 role="button"
@@ -241,6 +261,11 @@ export default function ComponentLibrary() {
           </div>
         </div>
       ))}
+      {matches.length === 0 && (
+        <div className="template-none">
+          No component matches “{query}” — try “kpi”, “chart” or “filter”.
+        </div>
+      )}
     </div>
   );
 }

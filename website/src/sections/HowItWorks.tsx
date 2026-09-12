@@ -66,9 +66,9 @@ export default function HowItWorks() {
               <defs>
                 {/* userSpaceOnUse: bbox gradients vanish on zero-height (horizontal) lines */}
                 <linearGradient id="tl-grad" gradientUnits="userSpaceOnUse" x1="125" y1="0" x2="875" y2="0">
-                  <stop offset="0" stopColor="#0d9488" />
-                  <stop offset="0.45" stopColor="#e58ab5" />
-                  <stop offset="1" stopColor="#00d9a0" />
+                  <stop offset="0" stopColor="#5f5580" />
+                  <stop offset="0.45" stopColor="#b06478" />
+                  <stop offset="1" stopColor="#7a6fa2" />
                 </linearGradient>
                 {/* explicit region: the default %-of-bbox mask region collapses on a zero-height line */}
                 <mask id="tl-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="1000" height="4">

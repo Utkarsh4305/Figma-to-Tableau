@@ -11,22 +11,43 @@ import { buildLibraryFrame, buildDefaultFrame } from "./builders";
  * caption text (harmless — the layer NAME still carries the Tableau mapping). */
 export let preloadedLabelFont: FontName | null = null;
 
-/** Best-effort: load a usable font for the placeholder labels. */
+/** In-flight (or settled) probe, so the work below happens exactly once
+ * per session no matter how many callers ask. */
+let labelFontProbe: Promise<FontName | null> | null = null;
+
+/**
+ * Best-effort: load a usable font for the placeholder labels.
+ *
+ * Every insert, template apply and add-sheets used to re-run this, paying
+ * an async round-trip to the font host per click — and on a machine
+ * without Inter, three of them (two rejections, then Arial). It resolves
+ * to the same answer every time, so it is probed once and the result is
+ * handed to every later caller synchronously.
+ */
 export async function loadLabelFont(): Promise<FontName | null> {
-  for (const f of [
-    { family: "Inter", style: "Regular" },
-    { family: "Roboto", style: "Regular" },
-    { family: "Arial", style: "Regular" },
-  ]) {
-    try {
-      await figma.loadFontAsync(f);
-      preloadedLabelFont = f;
-      return f;
-    } catch {
-      /* try next */
+  if (preloadedLabelFont) return preloadedLabelFont;
+  if (labelFontProbe) return labelFontProbe;
+
+  labelFontProbe = (async () => {
+    for (const f of [
+      { family: "Inter", style: "Regular" },
+      { family: "Roboto", style: "Regular" },
+      { family: "Arial", style: "Regular" },
+    ]) {
+      try {
+        await figma.loadFontAsync(f);
+        preloadedLabelFont = f;
+        return f;
+      } catch {
+        /* try next */
+      }
     }
-  }
-  return null;
+    // Nothing loaded. Leave the probe settled so we don't retry the same
+    // three failures on every subsequent insert.
+    return null;
+  })();
+
+  return labelFontProbe;
 }
 
 /** Nearest frame-like ancestor of `node` (inclusive) we can appendChild into, so

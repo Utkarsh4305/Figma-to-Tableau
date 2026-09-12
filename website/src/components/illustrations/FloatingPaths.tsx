@@ -11,7 +11,7 @@ const BEAMS = [
     d: "M-20,120 C160,30 400,60 620,210",
     gradient: "beam-blue",
     delay: 0.5,
-    pulse: "#0d9488",
+    pulse: "#7a6fa2",
     pulseDur: "7s",
     pulseDelay: "1.4s",
   },
@@ -19,7 +19,7 @@ const BEAMS = [
     d: "M-20,250 C180,190 430,170 620,330",
     gradient: "beam-purple",
     delay: 0.9,
-    pulse: "#e58ab5",
+    pulse: "#b06478",
     pulseDur: "9s",
     pulseDelay: "2.6s",
   },
@@ -27,7 +27,7 @@ const BEAMS = [
     d: "M-20,400 C220,360 400,440 620,410",
     gradient: "beam-orange",
     delay: 1.3,
-    pulse: "#00d9a0",
+    pulse: "#8a5733",
     pulseDur: "8s",
     pulseDelay: "3.4s",
   },
@@ -43,19 +43,19 @@ export default function FloatingPaths() {
     >
       <defs>
         <linearGradient id="beam-blue" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0" stopColor="#0d9488" stopOpacity="0" />
-          <stop offset="0.5" stopColor="#0d9488" />
-          <stop offset="1" stopColor="#e58ab5" stopOpacity="0.2" />
+          <stop offset="0" stopColor="#7a6fa2" stopOpacity="0" />
+          <stop offset="0.5" stopColor="#a79ccb" />
+          <stop offset="1" stopColor="#dcd3f0" stopOpacity="0.2" />
         </linearGradient>
         <linearGradient id="beam-purple" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0" stopColor="#e58ab5" stopOpacity="0" />
-          <stop offset="0.5" stopColor="#dd6fe6" />
-          <stop offset="1" stopColor="#18a0fb" stopOpacity="0.2" />
+          <stop offset="0" stopColor="#f7c8d2" stopOpacity="0" />
+          <stop offset="0.5" stopColor="#d99aab" />
+          <stop offset="1" stopColor="#cce1f2" stopOpacity="0.2" />
         </linearGradient>
         <linearGradient id="beam-orange" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0" stopColor="#00d9a0" stopOpacity="0" />
-          <stop offset="0.5" stopColor="#4de8c2" />
-          <stop offset="1" stopColor="#00d9a0" stopOpacity="0.15" />
+          <stop offset="0" stopColor="#f5d5c0" stopOpacity="0" />
+          <stop offset="0.5" stopColor="#cba98d" />
+          <stop offset="1" stopColor="#f5d5c0" stopOpacity="0.15" />
         </linearGradient>
       </defs>
 

@@ -35,16 +35,16 @@ const SHEET_OPTIONS = [
 ];
 
 const SECTIONS = [
-  { id: "getting-started", label: "Getting started", color: "#0d9488" },
-  { id: "prefixes", label: "Layer prefixes", color: "#d9689f" },
-  { id: "chart-types", label: "Chart types", color: "#18a0fb" },
-  { id: "options", label: "Sheet options", color: "#0aa268" },
-  { id: "navigation", label: "Navigation", color: "#8b5e34" },
-  { id: "swap", label: "Worksheet swap", color: "#0d9488" },
-  { id: "export-modes", label: "Export modes", color: "#d9689f" },
-  { id: "templates", label: "Templates", color: "#18a0fb" },
-  { id: "plans", label: "Plans & limits", color: "#0aa268" },
-  { id: "troubleshooting", label: "Troubleshooting", color: "#8b5e34" },
+  { id: "getting-started", label: "Getting started", color: "#5f5580" },
+  { id: "prefixes", label: "Layer prefixes", color: "#9c4f63" },
+  { id: "chart-types", label: "Chart types", color: "#3f5f7a" },
+  { id: "options", label: "Sheet options", color: "#3d8254" },
+  { id: "navigation", label: "Navigation", color: "#8a5733" },
+  { id: "swap", label: "Worksheet swap", color: "#5f5580" },
+  { id: "export-modes", label: "Export modes", color: "#9c4f63" },
+  { id: "templates", label: "Templates", color: "#3f5f7a" },
+  { id: "plans", label: "Plans & limits", color: "#3d8254" },
+  { id: "troubleshooting", label: "Troubleshooting", color: "#8a5733" },
 ];
 
 /** Highlights the ToC entry of the section currently in view. */

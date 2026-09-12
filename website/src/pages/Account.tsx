@@ -72,7 +72,7 @@ export default function Account() {
           >
             {state.license.premium ? (
               <>
-                <span className="license-result__icon" style={{ background: "rgba(10,207,131,0.15)", color: "#0aa268" }}>
+                <span className="license-result__icon" style={{ background: "#e5f6eb", color: "#3d8254" }}>
                   <BadgeCheck size={20} strokeWidth={2.2} />
                 </span>
                 <div>
@@ -88,7 +88,7 @@ export default function Account() {
               </>
             ) : (
               <>
-                <span className="license-result__icon" style={{ background: "rgba(255,181,36,0.18)", color: "#b97e0a" }}>
+                <span className="license-result__icon" style={{ background: "#fef5dc", color: "#8a6d1f" }}>
                   <CircleDashed size={20} strokeWidth={2.2} />
                 </span>
                 <div>
@@ -109,7 +109,7 @@ export default function Account() {
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <span className="license-result__icon" style={{ background: "rgba(239,68,68,0.12)", color: "#d33" }}>
+            <span className="license-result__icon" style={{ background: "var(--pastel-rose)", color: "var(--red)" }}>
               <WifiOff size={19} strokeWidth={2.2} />
             </span>
             <div>

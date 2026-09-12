@@ -312,6 +312,7 @@ export default function DashboardTemplates() {
         className="template-search"
         placeholder={`Search ${TEMPLATES.length} templates…`}
         value={query}
+        autoFocus
         onChange={(e) => setQuery(e.target.value)}
       />
       <div className="templates-grid">

@@ -20,8 +20,9 @@ export async function insertLibraryComponent(componentId: string): Promise<void>
   const f = buildLibraryFrame(componentId, font);
   if (!f) return;
 
-  f.x = originX + (Object.keys(LIBRARY_COMPONENTS).indexOf(componentId) % 3) * (t.w + 24);
-  f.y = originY + Math.floor(Object.keys(LIBRARY_COMPONENTS).indexOf(componentId) / 3) * (t.h + 24);
+  const slot = Object.keys(LIBRARY_COMPONENTS).indexOf(componentId);
+  f.x = originX + (slot % 3) * (t.w + 24);
+  f.y = originY + Math.floor(slot / 3) * (t.h + 24);
   parent.appendChild(f);
   figma.currentPage.selection = [f];
   figma.viewport.scrollAndZoomIntoView([f]);

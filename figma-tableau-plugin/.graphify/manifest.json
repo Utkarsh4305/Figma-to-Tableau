@@ -1,0 +1,234 @@
+{
+  "D:/wireframe/figma-tableau-plugin/scripts/build-ui.mjs": {
+    "mtime": 1789202705189.3242,
+    "hash": "2a6187e58c097c5dea74dbb338c288f1"
+  },
+  "D:/wireframe/figma-tableau-plugin/scripts/generate-icon.mjs": {
+    "mtime": 1783143996433.9126,
+    "hash": "267881a45030d6e9692da32d5ff91897"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/actionsXml.ts": {
+    "mtime": 1783060189601.7546,
+    "hash": "5aa704d00eae21ca2c54adc3d8375672"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/builders.ts": {
+    "mtime": 1783059343915.1863,
+    "hash": "826b6eb873bcf936890e4911716a43c3"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/code.ts": {
+    "mtime": 1789202705198.4817,
+    "hash": "d686fb6d746af0972525c1d5b940effd"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/csv.ts": {
+    "mtime": 1782314290354.5427,
+    "hash": "48db7f4b026a40c831c96a87f073c0c3"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/dashboardXml.ts": {
+    "mtime": 1783060175306.6392,
+    "hash": "4612086883f34c843f3ac0de5d8cbf7b"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/datasourceXml.ts": {
+    "mtime": 1783059515657.2317,
+    "hash": "dd7649ddc420ccaa8cac0403ddd2c608"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/domainData.ts": {
+    "mtime": 1783059340572.6885,
+    "hash": "4498cc78f948045c5c81c3d9c0d2c930"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/drop.ts": {
+    "mtime": 1789204092922.2192,
+    "hash": "740353d1f06cd483a647d4b0c43768b8"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/exporter.ts": {
+    "mtime": 1783058586177.4153,
+    "hash": "53ac32fa7dd953b0ef53b743ead9b81a"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/faithful.ts": {
+    "mtime": 1783060342863.5486,
+    "hash": "3fbebd39cfc98e18582a01e096e0f0fe"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/faithfulSpec.ts": {
+    "mtime": 1783059406579.4688,
+    "hash": "5ca16b90413f155cd2ad6ad387c5fd2d"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/faithful/colorGeometry.ts": {
+    "mtime": 1783059382296.9248,
+    "hash": "8898470d58b00630aff98875b72a43f8"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/faithful/rasterization.ts": {
+    "mtime": 1783059413456.519,
+    "hash": "6286f4b9eaef5b0c9a9043c21e319f5e"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/faithful/textFitting.ts": {
+    "mtime": 1783059525501.4783,
+    "hash": "d19a7759a96c49986371e748c3eb8e49"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/faithful/textRuns.ts": {
+    "mtime": 1783059388948.6516,
+    "hash": "23c42f32fc5134224e539464461fa178"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/faithful/zoneParsers.ts": {
+    "mtime": 1783059374258.8506,
+    "hash": "a14366132dc5a78e57b6ad7cd487ace6"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/insert.ts": {
+    "mtime": 1789204092932.7139,
+    "hash": "479ebfe9948bdefae4d9ce2d24f39c39"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/layoutTree.ts": {
+    "mtime": 1783059323505.125,
+    "hash": "6f2cc3fa294a65a05cef37edf79eaedd"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/messaging.ts": {
+    "mtime": 1783059953065.8318,
+    "hash": "5f9f1bd43f007b5807a34a31bbb02994"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/parser.ts": {
+    "mtime": 1783058540768.6287,
+    "hash": "dd6578ed77a114f1c0c3bf2e4cd777b0"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/persistence.ts": {
+    "mtime": 1789202705177.673,
+    "hash": "49db7a496bd83a772721af8e0dd0c040"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/seed.ts": {
+    "mtime": 1783059984585.784,
+    "hash": "f10c729444af51c7118b1236a868ad84"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/templates.ts": {
+    "mtime": 1783059394222.6604,
+    "hash": "804cedafe68da03a9da8463ce6fc4703"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/twbImport.ts": {
+    "mtime": 1789204092925.3982,
+    "hash": "ed41dc892bd5e30b936177e5ce53ba2f"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/twbxBuilder.ts": {
+    "mtime": 1783058575468.3745,
+    "hash": "67bc0bc6554d890faf6fd40339a03f30"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/windowsXml.ts": {
+    "mtime": 1783060183673.2715,
+    "hash": "b561047476e321eb5740f225ed7ed4e1"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/workbookGenerator.ts": {
+    "mtime": 1783060415588.5056,
+    "hash": "b9beba31f7b8e894e76b4f36337f1d7b"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/worksheetXml.ts": {
+    "mtime": 1783060240013.2976,
+    "hash": "a60469701fa03f1520d6763e479df1d4"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/xlsx.ts": {
+    "mtime": 1782351646819.7883,
+    "hash": "ca6d1f97e73c184b8ee976334873cd8d"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/plugin/xmlUtils.ts": {
+    "mtime": 1783059405728.1606,
+    "hash": "362cfb0f57829e3b4bcc6aec89ac5549"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/shared/constants.ts": {
+    "mtime": 1783763933483.4414,
+    "hash": "2b6e3fb5809ccfbbdd82e73cbdea971e"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/shared/spec.ts": {
+    "mtime": 1783052770810.891,
+    "hash": "918c72e8b809c813cf0b8c0d5469b049"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/shared/types.ts": {
+    "mtime": 1789202705183.271,
+    "hash": "25ff52924d1d0c8fa3592bf315549f53"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/ui/App.tsx": {
+    "mtime": 1789204994372.9656,
+    "hash": "811844e01b14c45d39e9343bab79bebe"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/ui/components/ComponentLibrary.tsx": {
+    "mtime": 1789203196544.8213,
+    "hash": "930f16f6700fc83019d6de02ca3bb4f0"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/ui/hooks.tsx": {
+    "mtime": 1789202705170.613,
+    "hash": "337e47956d7318774e6ff794dc2e9912"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/ui/icons.tsx": {
+    "mtime": 1789203373682.6436,
+    "hash": "b62d552cf5c572c3aef097d0a4fb0569"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/ui/main.tsx": {
+    "mtime": 1789202705148.1704,
+    "hash": "35f6f65071fdb6b82c62a6c60804e22f"
+  },
+  "D:/wireframe/figma-tableau-plugin/src/ui/templates/DashboardTemplates.tsx": {
+    "mtime": 1789203179263.9097,
+    "hash": "4fdb4f457d8f5cbbaa57cd7728a960b4"
+  },
+  "D:/wireframe/figma-tableau-plugin/test/faithful_capture_smoke.ts": {
+    "mtime": 1782985144091.2644,
+    "hash": "df8d2dbcc55f698a735dd136fb2c8e9a"
+  },
+  "D:/wireframe/figma-tableau-plugin/test/faithful_dupname_smoke.ts": {
+    "mtime": 1783059920496.9055,
+    "hash": "761e80fc2d4765db7d4497ad5b133e63"
+  },
+  "D:/wireframe/figma-tableau-plugin/test/faithful_features_smoke.ts": {
+    "mtime": 1783059919163.392,
+    "hash": "fd44dba774d6fa86527b8c4d30855666"
+  },
+  "D:/wireframe/figma-tableau-plugin/test/faithful_flow_smoke.ts": {
+    "mtime": 1783059919796.1035,
+    "hash": "429296df5956b7b2a298f984873189b8"
+  },
+  "D:/wireframe/figma-tableau-plugin/test/faithful_multi_smoke.ts": {
+    "mtime": 1783059921194.1665,
+    "hash": "9c21bb01240cb158126da49da05b1201"
+  },
+  "D:/wireframe/figma-tableau-plugin/test/faithful_nav_smoke.ts": {
+    "mtime": 1783059921792.1792,
+    "hash": "127b99bed82cc4b39b295927cb866692"
+  },
+  "D:/wireframe/figma-tableau-plugin/test/faithful_navlink_smoke.ts": {
+    "mtime": 1783059922464.8896,
+    "hash": "5cd6a09d689ed02f6886d2247ad30c4e"
+  },
+  "D:/wireframe/figma-tableau-plugin/test/faithful_navsheet_smoke.ts": {
+    "mtime": 1783059923160.0232,
+    "hash": "bad6c7d95f677b0d67aa7067fe4117fc"
+  },
+  "D:/wireframe/figma-tableau-plugin/test/faithful_smoke.ts": {
+    "mtime": 1783059918534.0032,
+    "hash": "817e47dba274d52b1e16b71deb56241e"
+  },
+  "D:/wireframe/figma-tableau-plugin/test/lds_smoke.ts": {
+    "mtime": 1783045201471.2686,
+    "hash": "54037c4810c8f46205731afee31dde6e"
+  },
+  "D:/wireframe/figma-tableau-plugin/test/spec_smoke.ts": {
+    "mtime": 1782318746308.1992,
+    "hash": "32fbfb19e4102dff09030c42939da48d"
+  },
+  "D:/wireframe/figma-tableau-plugin/test/twb_import_dupdash_smoke.ts": {
+    "mtime": 1783059925129.135,
+    "hash": "c7a1e7b0b422efb5cc0cbf5c1fe53040"
+  },
+  "D:/wireframe/figma-tableau-plugin/test/twb_import_entity_smoke.ts": {
+    "mtime": 1783059926389.1934,
+    "hash": "62e7d858d957358ac36e3ebedd922c76"
+  },
+  "D:/wireframe/figma-tableau-plugin/test/twb_import_match_smoke.ts": {
+    "mtime": 1783059925717.635,
+    "hash": "0cd941a5a45907ba24af4c5a9ffdfa50"
+  },
+  "D:/wireframe/figma-tableau-plugin/test/twb_import_share_smoke.ts": {
+    "mtime": 1783059924439.6638,
+    "hash": "3138864a67085ad16fdfc87747f3fc9c"
+  },
+  "D:/wireframe/figma-tableau-plugin/test/twb_import_smoke.ts": {
+    "mtime": 1783059923780.2673,
+    "hash": "72a84f496000aaa6013221e4d1fb884d"
+  },
+  "D:/wireframe/figma-tableau-plugin/icon.svg": {
+    "mtime": 1783143953065.7793,
+    "hash": "ce80764a2a8aca3bcce140d612114beb"
+  }
+}

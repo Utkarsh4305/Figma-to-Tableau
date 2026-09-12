@@ -13,6 +13,7 @@ const FEEDBACK_WEBHOOK_URL = "https://discord.com/api/webhooks/15225112359694499
 import ComponentLibrary from "./components/ComponentLibrary";
 import DashboardTemplates from "./templates/DashboardTemplates";
 import { TAB_ICONS, SUBTAB_ICONS, SYNTAX_ICONS, ACCOUNT_ICONS, type SyntaxIconName } from "./icons";
+import { Segmented, Accordion } from "./controls";
 import { useExportConfig, useWindowSize, useToast, useImport } from "./hooks";
 
 function toPlugin(msg: any) {
@@ -62,31 +63,38 @@ function SyntaxTab() {
       </div>
       <div className="syntax-list">
         {SYNTAX_PREFIXES.map((s) => (
-          <details key={s.tag} className="syntax-acc">
-            <summary className="syntax-acc-summary">
-              <span className="syntax-icon">{SYNTAX_ICONS[s.icon]}</span>
-              <span className="syntax-acc-main">
-                <code className="syntax-tag">{s.tag}</code>
-                <span className="syntax-acc-title">{s.title}</span>
-              </span>
-              <span className="syntax-chev" aria-hidden="true" />
-            </summary>
+          <Accordion
+            key={s.tag}
+            variant="acc--syntax"
+            summary={
+              <>
+                <span className="syntax-icon">{SYNTAX_ICONS[s.icon]}</span>
+                <span className="syntax-acc-main">
+                  <code className="syntax-tag">{s.tag}</code>
+                  <span className="syntax-acc-title">{s.title}</span>
+                </span>
+              </>
+            }
+          >
             <div className="syntax-acc-body">{s.desc}</div>
-          </details>
+          </Accordion>
         ))}
       </div>
 
       <div className="section-label syntax-section-gap">Modifiers &amp; navigation</div>
       <div className="syntax-list">
-        <details className="syntax-acc">
-          <summary className="syntax-acc-summary">
-            <span className="syntax-icon">{SYNTAX_ICONS["chart-tag"]}</span>
-            <span className="syntax-acc-main">
-              <code className="syntax-tag">[type]</code>
-              <span className="syntax-acc-title">Chart types</span>
-            </span>
-            <span className="syntax-chev" aria-hidden="true" />
-          </summary>
+        <Accordion
+          variant="acc--syntax"
+          summary={
+            <>
+              <span className="syntax-icon">{SYNTAX_ICONS["chart-tag"]}</span>
+              <span className="syntax-acc-main">
+                <code className="syntax-tag">[type]</code>
+                <span className="syntax-acc-title">Chart types</span>
+              </span>
+            </>
+          }
+        >
           <div className="syntax-acc-body">
             <div className="syntax-acc-lead">
               Append a tag to a <code className="syntax-inline-code">SHEET/</code>{" "}
@@ -106,17 +114,20 @@ function SyntaxTab() {
               ))}
             </div>
           </div>
-        </details>
+        </Accordion>
 
-        <details className="syntax-acc">
-          <summary className="syntax-acc-summary">
-            <span className="syntax-icon">{SYNTAX_ICONS.options}</span>
-            <span className="syntax-acc-main">
-              <code className="syntax-tag">:option</code>
-              <span className="syntax-acc-title">Sheet options</span>
-            </span>
-            <span className="syntax-chev" aria-hidden="true" />
-          </summary>
+        <Accordion
+          variant="acc--syntax"
+          summary={
+            <>
+              <span className="syntax-icon">{SYNTAX_ICONS.options}</span>
+              <span className="syntax-acc-main">
+                <code className="syntax-tag">:option</code>
+                <span className="syntax-acc-title">Sheet options</span>
+              </span>
+            </>
+          }
+        >
           <div className="syntax-acc-body">
             <div className="syntax-acc-lead">
               Suffixes stack after the name/tag — e.g.{" "}
@@ -134,17 +145,20 @@ function SyntaxTab() {
               ))}
             </div>
           </div>
-        </details>
+        </Accordion>
 
-        <details className="syntax-acc">
-          <summary className="syntax-acc-summary">
-            <span className="syntax-icon">{SYNTAX_ICONS.target}</span>
-            <span className="syntax-acc-main">
-              <code className="syntax-tag">&gt; Target</code>
-              <span className="syntax-acc-title">Navigation targets</span>
-            </span>
-            <span className="syntax-chev" aria-hidden="true" />
-          </summary>
+        <Accordion
+          variant="acc--syntax"
+          summary={
+            <>
+              <span className="syntax-icon">{SYNTAX_ICONS.target}</span>
+              <span className="syntax-acc-main">
+                <code className="syntax-tag">&gt; Target</code>
+                <span className="syntax-acc-title">Navigation targets</span>
+              </span>
+            </>
+          }
+        >
           <div className="syntax-acc-body">
             <b>Nav/</b> reads the layer's Figma prototype interaction — wire a
             “Navigate to” connection from the button (or anything inside it) to the
@@ -154,7 +168,7 @@ function SyntaxTab() {
             after “&gt;” or “-&gt;”; the name must match another exported dashboard
             (the frame's name). Both export as native Tableau navigation actions.
           </div>
-        </details>
+        </Accordion>
       </div>
     </div>
   );
@@ -167,6 +181,20 @@ export default function App() {
   const [tab, setTab] = useState<"dashboard" | "library" | "account">("dashboard");
   const [frameNames, setFrameNames] = useState<string[]>([]);
   const [parsing, setParsing] = useState(false);
+
+  // True once the panel has scrolled at all; the header raises its hairline
+  // and a soft shadow only then, so it reads as one surface with the page
+  // until there is something to separate it from.
+  const [scrolled, setScrolled] = useState(false);
+
+  // Name of the workbook currently being read, or null. Drives the upload
+  // button's busy state.
+  const [importing, setImporting] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Lets the Ctrl/Cmd+Enter handler call the exporter without the effect
+  // having to depend on a function rebuilt on every render.
+  const exportFaithfulRef = useRef<(() => void) | null>(null);
 
   const { setStatus, busy, setBusy, toastEl } = useToast();
   const { layoutMode, setLayoutMode, layoutModeRef, includeBgRef } = useExportConfig();
@@ -557,9 +585,46 @@ export default function App() {
   const exportsLeft = Math.max(0, FREE_EXPORT_LIMIT - account.exportCount);
   const limitReached = !account.premium && account.exportCount >= FREE_EXPORT_LIMIT;
 
+  // Every tab switch goes through here, so persisting the choice can never be
+  // forgotten at a call site and the scroll position always starts clean.
+  const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const next = e.currentTarget.scrollTop > 2;
+    setScrolled((was) => (was === next ? was : next));
+  };
+
+  const goTab = (id: "dashboard" | "library" | "account") => {
+    setTab(id);
+    setScrolled(false);
+    scrollRef.current?.scrollTo({ top: 0 });
+    const sz = currentSizeRef.current;
+    saveUiState.current(sz.w, sz.h, id);
+  };
+
+  // Keyboard first. Ctrl/Cmd+1..3 jump between tabs and Ctrl/Cmd+Enter
+  // exports — the two things done often enough that reaching for the mouse
+  // is the slow path. Kept off plain keys so typing in a field is untouched.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+      const jump = { "1": "dashboard", "2": "library", "3": "account" } as const;
+      const target = jump[e.key as keyof typeof jump];
+      if (target) {
+        e.preventDefault();
+        goTab(target);
+        return;
+      }
+      if (e.key === "Enter" && tab === "dashboard" && spec && !busy && !limitReached) {
+        e.preventDefault();
+        exportFaithfulRef.current?.();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tab, spec, busy, limitReached]);
+
   const exportFaithful = () => {
     if (limitReached) {
-      setTab("account");
+      goTab("account");
       return;
     }
     pendingFaithfulRef.current = true;
@@ -573,14 +638,21 @@ export default function App() {
     });
   };
 
+  exportFaithfulRef.current = exportFaithful;
+
   // Upload an existing Tableau workbook to swap its REAL worksheets in for the
   // demo sample-data sheets. We only parse here; the actual substitution happens
   // at export, name-matching each imported sheet to a SHEET/<name> layer.
   const onImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setImporting(file.name);
     try {
-      const parsed = await parseImport(await file.arrayBuffer(), file.name);
+      const buf = await file.arrayBuffer();
+      // Let the browser paint the busy state before the parse takes the
+      // main thread; without this the spinner never appears on a big file.
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+      const parsed = await parseImport(buf, file.name);
       importedRef.current = parsed;
       setImportedNames(parsed.worksheetNames);
       // Pre-check every sheet so the user can add them all in one click.
@@ -598,6 +670,10 @@ export default function App() {
       setImportedNames([]);
       setCheckedSheets({});
       setStatus({ kind: "err", text: `Couldn't read ${file.name}: ${(err as Error).message}` });
+    } finally {
+      setImporting(null);
+      // Clear the input so re-picking the SAME file fires change again.
+      e.target.value = "";
     }
   };
 
@@ -615,46 +691,36 @@ export default function App() {
   const [librarySubTab, setLibrarySubTab] = useState<"components" | "templates" | "syntax">("components");
 
   const librarySubBar = (
-    <div className="sub-tab-bar">
-      {([
-        ["components", "Components"],
-        ["templates",  "Templates"],
-        ["syntax",     "Syntax"],
-      ] as const).map(([id, label]) => (
-        <button
-          key={id}
-          className={`sub-tab-btn ${librarySubTab === id ? "active" : ""}`}
-          onClick={() => setLibrarySubTab(id)}
-        >
-          <span className="tab-icon">{SUBTAB_ICONS[id]}</span>
-          {label}
-        </button>
-      ))}
+    <div className="sub-tab-bar" data-scrolled={scrolled}>
+      <Segmented
+        ariaLabel="Library sections"
+        value={librarySubTab}
+        onChange={setLibrarySubTab}
+        segments={[
+          { id: "components", label: "Components", icon: SUBTAB_ICONS.components },
+          { id: "templates",  label: "Templates",  icon: SUBTAB_ICONS.templates },
+          { id: "syntax",     label: "Syntax",     icon: SUBTAB_ICONS.syntax },
+        ]}
+      />
     </div>
   );
 
-  // ── Top-level tabs
+  // ── Top app header ────────────────────────────────────────────────────────
+  // Nothing but the tab nav. Figma already puts the plugin's name in the
+  // window title bar directly above, so a second wordmark was repeating it.
   const tabBar = (
-    <div className="tab-bar">
-      {([
-        ["dashboard", "Dashboard"],
-        ["library",   "Library"],
-        ["account",   "Account"],
-      ] as const).map(([id, label]) => (
-        <button
-          key={id}
-          className={`tab-btn ${tab === id ? "active" : ""}`}
-          onClick={() => {
-            setTab(id);
-            const s = currentSizeRef.current;
-            saveUiState.current(s.w, s.h, id);
-          }}
-        >
-          <span className="tab-icon">{TAB_ICONS[id]}</span>
-          {label}
-        </button>
-      ))}
-    </div>
+    <header className="app-header" data-scrolled={scrolled}>
+      <Segmented
+        ariaLabel="Main navigation"
+        value={tab}
+        onChange={goTab}
+        segments={[
+          { id: "dashboard", label: "Dashboard", icon: TAB_ICONS.dashboard, hint: "Dashboard (Ctrl/⌘ 1)" },
+          { id: "library",   label: "Library",   icon: TAB_ICONS.library,   hint: "Library (Ctrl/⌘ 2)" },
+          { id: "account",   label: "Account",   icon: TAB_ICONS.account,   hint: "Account (Ctrl/⌘ 3)" },
+        ]}
+      />
+    </header>
   );
 
   // ── Tab: Dashboard (Analyze + Export) ─────────────────────────────────────
@@ -668,7 +734,7 @@ export default function App() {
             <div className="limit-note">
               All {FREE_EXPORT_LIMIT} free exports used — Premium is unlimited.
             </div>
-            <button className="btn-primary" onClick={() => setTab("account")}>
+            <button className="btn-primary" onClick={() => goTab("account")}>
               Upgrade — {PREMIUM_PRICE_LABEL}
             </button>
           </>
@@ -696,7 +762,7 @@ export default function App() {
     const body = spec ? (
       <>
         <div>
-          <div className="section-label">Selection</div>
+          <div className="section-label">Selected Frame</div>
           <div className="frame-card" title={frameNames.join(", ")}>
             <span className="frame-dot" />
             <div className="frame-info">
@@ -719,7 +785,7 @@ export default function App() {
           </div>
         </div>
         <div>
-          <div className="section-label">Export</div>
+          <div className="section-label">Export Settings</div>
           <div className="export-card">
             <div className="export-row">
               <div className="field-label">Workbook name</div>
@@ -791,15 +857,20 @@ export default function App() {
             </div>
           </div>
 
-            <details className="spec-details import-accordion">
-              <summary className="field-label import-summary">
-                Use my real Tableau sheets
-                {importedNames.length > 0 ? (
-                  <span className="import-badge">{importedNames.length} loaded</span>
-                ) : (
-                  <span className="import-optional">optional</span>
-                )}
-              </summary>
+            <Accordion
+              variant="acc--import"
+              defaultOpen={importedNames.length > 0}
+              summary={
+                <>
+                  <span className="import-summary-label">Use my real Tableau sheets</span>
+                  {importedNames.length > 0 ? (
+                    <span className="import-badge">{importedNames.length} loaded</span>
+                  ) : (
+                    <span className="import-optional">optional</span>
+                  )}
+                </>
+              }
+            >
               <div className="spec-details-body">
                 <input
                   id="twb-upload"
@@ -808,12 +879,26 @@ export default function App() {
                   accept=".twbx,.twb"
                   onChange={onImportFile}
                 />
-                <label htmlFor="twb-upload" className="upload-btn">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 16V4m0 0L7 9m5-5 5 5" />
-                    <path d="M4 17v2a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19v-2" />
-                  </svg>
-                  {importedNames.length ? "Replace workbook (.twb / .twbx)" : "Upload workbook (.twb / .twbx)"}
+                <label
+                  htmlFor="twb-upload"
+                  className="upload-btn"
+                  data-busy={importing ? "true" : undefined}
+                  aria-busy={!!importing}
+                >
+                  {importing ? (
+                    <>
+                      <span className="spinner" />
+                      Reading {importing}…
+                    </>
+                  ) : (
+                    <>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 16V4m0 0L7 9m5-5 5 5" />
+                        <path d="M4 17v2a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19v-2" />
+                      </svg>
+                      {importedNames.length ? "Replace workbook (.twb / .twbx)" : "Upload workbook (.twb / .twbx)"}
+                    </>
+                  )}
                 </label>
                 {importedNames.length > 0 && (
                   <div className="import-list" style={{ marginTop: 8 }}>
@@ -851,7 +936,7 @@ export default function App() {
                   </div>
                 )}
               </div>
-            </details>
+            </Accordion>
           </div>
         </div>
       </>
@@ -866,7 +951,7 @@ export default function App() {
           <div className="error-card">{parseError}</div>
         ) : (
           <div className="onboard">
-            <div className="onboard-title">Design → Tableau in three steps</div>
+            <div className="onboard-serif">Design → Tableau</div>
             <ol className="onboard-steps">
               <li>
                 <b>Select a frame</b> on the canvas. Select several and each
@@ -897,8 +982,8 @@ export default function App() {
     return (
       <>
         {tabBar}
-        <div className="scroll-area">
-          {body}
+        <div className="scroll-area" ref={scrollRef} onScroll={onScroll}>
+          <div key={tab} className="panel-anim">{body}</div>
         </div>
         {dashboardFooter}
         {resizeHandle}
@@ -917,8 +1002,8 @@ export default function App() {
       <>
         {tabBar}
         {librarySubBar}
-        <div className="scroll-area">
-          {content}
+        <div className="scroll-area" ref={scrollRef} onScroll={onScroll}>
+          <div key={`${tab}:${librarySubTab}`} className="panel-anim">{content}</div>
         </div>
         {resizeHandle}
       </>
@@ -940,8 +1025,9 @@ export default function App() {
     return (
       <>
         {tabBar}
-        <div className="scroll-area">
+        <div className="scroll-area" ref={scrollRef} onScroll={onScroll}>
           {toastEl}
+          <div key={tab} className="panel-anim account-stack">
           <div>
             <div className="section-label">Profile</div>
             <div className="account-card account-profile">
@@ -956,7 +1042,7 @@ export default function App() {
 
           <div>
             <div className="section-label">Plan</div>
-            <div className="account-card">
+            <div className="account-card account-card--plan">
               <div className="account-row-head">
                 <span className="account-row-icon">{ACCOUNT_ICONS.plan}</span>
                 <div>
@@ -1015,7 +1101,7 @@ export default function App() {
 
           <div>
             <div className="section-label">Data &amp; storage</div>
-            <div className="account-card">
+            <div className="account-card account-card--storage">
               <div className="account-row-head">
                 <span className="account-row-icon">{ACCOUNT_ICONS.storage}</span>
                 <div>
@@ -1041,7 +1127,7 @@ export default function App() {
           {FEEDBACK_WEBHOOK_URL && (
             <div>
               <div className="section-label">Feedback</div>
-              <div className="account-card">
+              <div className="account-card account-card--feedback">
                 <textarea
                   className="feedback-input"
                   rows={3}
@@ -1061,6 +1147,7 @@ export default function App() {
               </div>
             </div>
           )}
+          </div>
         </div>
         {resizeHandle}
       </>

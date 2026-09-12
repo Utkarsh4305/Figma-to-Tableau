@@ -1,13 +1,18 @@
+<!--
+  Plugin launch icon — 128×128 (64 viewBox).
+
+  The mark is unchanged in shape (three ascending dashboard bars and an
+  accent node) but restated in the plugin's palette: a matte charcoal
+  squircle (#25282d, the CTA ink) carrying chalk-white bars and one
+  muted-lavender accent (#7a6fa2 family). No gradients, a 1px inner
+  hairline — the same vocabulary as the UI. Charcoal reads cleanly on
+  both Figma's light and dark plugin lists.
+-->
 <svg width="128" height="128" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="ftBadge" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#0d9488"/>
-      <stop offset="1" stop-color="#00d9a0"/>
-    </linearGradient>
-  </defs>
-  <rect width="64" height="64" rx="16" fill="url(#ftBadge)"/>
-  <rect x="17.5" y="32" width="7.5" height="15" rx="2.6" fill="#ffffff" opacity="0.55"/>
-  <rect x="28.25" y="25" width="7.5" height="22" rx="2.6" fill="#ffffff" opacity="0.78"/>
+  <rect width="64" height="64" rx="16" fill="#25282d"/>
+  <rect x="0.5" y="0.5" width="63" height="63" rx="15.5" stroke="#ffffff" stroke-opacity="0.16"/>
+  <rect x="17.5" y="32" width="7.5" height="15" rx="2.6" fill="#ffffff" opacity="0.42"/>
+  <rect x="28.25" y="25" width="7.5" height="22" rx="2.6" fill="#ffffff" opacity="0.7"/>
   <rect x="39" y="18" width="7.5" height="29" rx="2.6" fill="#ffffff"/>
-  <circle cx="42.75" cy="12.5" r="3.4" fill="#c6fff0"/>
+  <circle cx="42.75" cy="12.5" r="3.4" fill="#c6b8f0"/>
 </svg>

@@ -48,6 +48,8 @@ export const TAB_ICONS: Record<"dashboard" | "library" | "account", ReactNode> =
   ),
 };
 
+// ── Light / dark toggle icons ────────────────────────────────────────────────
+
 // ── Library sub-tab icons ────────────────────────────────────────────────────
 
 export const SUBTAB_ICONS: Record<"components" | "templates" | "syntax", ReactNode> = {

@@ -26,7 +26,7 @@ export default function Login() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
         >
-          <span className="license-result__icon" style={{ background: "rgba(162,89,255,0.14)", color: "var(--purple)" }}>
+          <span className="license-result__icon" style={{ background: "var(--pastel-lav)", color: "#29213d" }}>
             <Figma size={19} strokeWidth={2} />
           </span>
           <div>
@@ -44,7 +44,7 @@ export default function Login() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
         >
-          <span className="license-result__icon" style={{ background: "rgba(244,81,44,0.12)", color: "var(--accent)" }}>
+          <span className="license-result__icon" style={{ background: "var(--pastel-peach)", color: "#3d2518" }}>
             <KeyRound size={19} strokeWidth={2.1} />
           </span>
           <div>

@@ -17,7 +17,7 @@ import { FREE_EXPORT_LIMIT, PREMIUM_PRICE_LABEL } from "../shared/constants";
 import { applyTemplate } from "./templates";
 import { post } from "./messaging";
 
-figma.showUI(__html__, { width: UI_SIZE.width, height: UI_SIZE.height, themeColors: true });
+figma.showUI(__html__, { width: UI_SIZE.width, height: UI_SIZE.height });
 
 async function parseAndSend(): Promise<void> {
   try {

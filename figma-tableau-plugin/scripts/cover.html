@@ -1,0 +1,250 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Figma to Tableau — community cover</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+<style>
+/* ═══════════════════════════════════════════════════════════════════
+   Figma Community cover art — 1920 × 960 (listed at 960 × 480).
+
+   Every colour here is lifted verbatim from src/ui/styles.css, so the
+   listing image and the plugin window read as one product:
+   "Editorial Pastel & Matte B&W" — a glare-free neutral fog canvas,
+   flat pastel cards with 1px hairlines, matte charcoal pills, and
+   DM Serif Display for the one display line. No gradients anywhere.
+   ═══════════════════════════════════════════════════════════════════ */
+:root {
+  --bg:        #eaecf1;
+  --card-bg:   #ffffff;
+  --border:    #d8dce4;
+  --text:      #1f2125;
+  --text-2:    #646a77;
+  --text-3:    #969ca9;
+  --ink:       #25282d;   /* matte charcoal — CTA / active pill */
+  --accent:    #7a6fa2;   /* muted lavender */
+
+  --peach:  #fdede2;  --peach-border:  #f5d5c0;  --peach-text:  #3d2518;
+  --mint:   #e5f6eb;  --mint-border:   #c7ebd0;  --mint-text:   #1b3826;
+  --butter: #fef5dc;  --butter-border: #fae6ad;  --butter-text: #3d3314;
+  --sky:    #e8f2fa;  --sky-border:    #cce1f2;  --sky-text:    #182c3c;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  width: 1920px; height: 960px;
+  font-family: Inter, "Segoe UI", system-ui, sans-serif;
+  font-feature-settings: "cv05" 1, "ss03" 1;
+  font-optical-sizing: auto;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* Stationery grid — the faintest possible graph paper, the same idea
+   as the canvas the plugin itself is drawn on. */
+.sheet {
+  position: relative;
+  width: 1920px; height: 960px;
+  background:
+    repeating-linear-gradient(to right,  rgba(37,40,45,.035) 0 1px, transparent 1px 64px),
+    repeating-linear-gradient(to bottom, rgba(37,40,45,.035) 0 1px, transparent 1px 64px),
+    var(--bg);
+  display: flex; align-items: center; gap: 64px;
+  padding: 96px 104px;
+}
+
+/* ── Left: the pitch ─────────────────────────────────────────── */
+.pitch { flex: 0 0 760px; }
+
+.brand { display: flex; align-items: center; gap: 20px; margin-bottom: 40px; }
+.brand-mark { width: 76px; height: 76px; border-radius: 19px; }
+.brand-name { font-size: 27px; font-weight: 600; letter-spacing: -.4px; color: var(--text); }
+.brand-name .muted { color: var(--text-3); font-weight: 500; }
+
+h1 {
+  font-family: "DM Serif Display", Georgia, serif;
+  font-weight: 400;
+  font-size: 92px; line-height: 1.06; letter-spacing: -1.6px;
+  color: var(--text);
+}
+/* The marker is a band sized to the word, not to the line box — a
+   background on the span itself fills the whole 1.06 leading and reads
+   as a filled rectangle rather than a stroke of highlighter. */
+h1 .mark { position: relative; z-index: 0; }
+h1 .mark::before {
+  content: ""; position: absolute; z-index: -1;
+  left: -.05em; right: -.05em; bottom: .15em; height: .58em;
+  background: #e7e0f6;           /* flat lavender, no gradient */
+  border-radius: 8px;
+}
+
+.sub {
+  margin-top: 30px;
+  font-size: 24px; line-height: 1.5; color: var(--text-2);
+  max-width: 700px;
+}
+.sub b { color: var(--text); font-weight: 600; }
+
+.chips { display: flex; gap: 14px; margin-top: 44px; }
+.chip {
+  height: 52px; display: flex; align-items: center; padding: 0 26px;
+  border-radius: 26px; font-size: 17px; font-weight: 600; letter-spacing: -.05px;
+  background: var(--card-bg); border: 1px solid #d5d9e1; color: #555b68;
+}
+.chip--ink { background: var(--ink); border-color: var(--ink); color: #fff; }
+
+/* ── Right: Figma frame → .twbx ──────────────────────────────── */
+.flow { flex: 1; display: flex; align-items: center; justify-content: flex-end; gap: 26px; }
+
+.card {
+  flex: none;          /* the KPI row has a min-content width: let it
+                          overflow rather than silently squash */
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: 0 2px 14px rgba(0,0,0,.04);
+  padding: 18px;
+}
+.card-head {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 11px; font-weight: 600; letter-spacing: .7px; text-transform: uppercase;
+  color: var(--text-3);
+  padding: 2px 2px 14px;
+}
+.dot { width: 9px; height: 9px; border-radius: 50%; }
+
+/* Figma side — dashed pastel zones, named the way the plugin reads them */
+.frame { width: 340px; }
+.zones { display: flex; flex-direction: column; gap: 10px; }
+.zone {
+  border-radius: 12px; border: 1.5px dashed;
+  padding: 11px 13px;
+  font-family: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  font-size: 14px; font-weight: 500; letter-spacing: -.2px;
+}
+.zone--sheet  { background: var(--sky);    border-color: var(--sky-border);    color: var(--sky-text);    height: 142px; }
+.zone--kpi    { background: var(--peach);  border-color: var(--peach-border);  color: var(--peach-text);  height: 74px; flex: 1; }
+.zone--filter { background: var(--mint);   border-color: var(--mint-border);   color: var(--mint-text);   height: 74px; flex: 1; }
+.zone--nav    { background: var(--butter); border-color: var(--butter-border); color: var(--butter-text); height: 58px; }
+.zone-row { display: flex; gap: 10px; }
+.spark { margin-top: 12px; display: block; width: 100%; height: auto; }
+
+/* The transform */
+.arrow { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.arrow-pill {
+  width: 64px; height: 64px; border-radius: 50%;
+  background: var(--ink); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(37,40,45,.15);
+}
+.arrow-label {
+  font-size: 11px; font-weight: 700; letter-spacing: 1.1px;
+  text-transform: uppercase; color: var(--text-2);
+}
+
+/* Tableau side */
+.twbx { width: 432px; }
+.kpis { display: flex; gap: 10px; }
+.kpi { flex: 1; border-radius: 12px; border: 1px solid; padding: 12px 13px; }
+.kpi-label { font-size: 10px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; opacity: .62; }
+.kpi-value { font-size: 26px; font-weight: 700; letter-spacing: -.7px; margin-top: 3px; }
+.kpi--a { background: var(--peach);  border-color: var(--peach-border);  color: var(--peach-text); }
+.kpi--b { background: var(--mint);   border-color: var(--mint-border);   color: var(--mint-text); }
+.kpi--c { background: var(--butter); border-color: var(--butter-border); color: var(--butter-text); }
+
+.chart {
+  margin-top: 10px; height: 196px;
+  border-radius: 12px; border: 1px solid var(--border);
+  background: #f7f8fb;
+  padding: 18px 18px 0;
+  display: flex; align-items: flex-end; gap: 14px;
+}
+.bar { flex: 1; border-radius: 5px 5px 2px 2px; background: var(--ink); }
+.bar--accent { background: var(--accent); }
+
+/* Version badge */
+.badge {
+  position: absolute; top: 46px; right: 48px;
+  display: flex; align-items: center; gap: 10px;
+  height: 46px; padding: 0 22px; border-radius: 23px;
+  background: var(--ink); color: #fff;
+  font-size: 15px; font-weight: 600; letter-spacing: -.1px;
+}
+</style>
+
+<div class="sheet">
+  <div class="badge"><span class="dot" style="background:#7fd0a3"></span>Opens in Tableau 2026.2</div>
+
+  <!-- ── the pitch ─────────────────────────────────────────── -->
+  <section class="pitch">
+    <div class="brand">
+      <img class="brand-mark" src="../icon.svg" alt="" />
+      <div class="brand-name">Figma <span class="muted">to</span> Tableau</div>
+    </div>
+
+    <h1>Design once.<br />Generate in<br /><span class="mark">Tableau.</span></h1>
+
+    <p class="sub">
+      Name your layers, hit export, and a real <b>.twbx</b> downloads —
+      layout, worksheets, KPIs, filters and navigation already wired.
+    </p>
+
+    <div class="chips">
+      <div class="chip chip--ink">.twbx export</div>
+      <div class="chip">Pixel-faithful</div>
+      <div class="chip">No rebuilding</div>
+    </div>
+  </section>
+
+  <!-- ── Figma frame → workbook ────────────────────────────── -->
+  <section class="flow">
+    <div class="card frame">
+      <div class="card-head"><span class="dot" style="background:#7a6fa2"></span>Figma frame</div>
+      <div class="zones">
+        <div class="zone zone--sheet">
+          SHEET/Trend[line]
+          <svg class="spark" viewBox="0 0 286 68" fill="none">
+            <path d="M2 56 L42 42 L82 48 L122 26 L162 32 L202 12 L246 20 L284 6"
+                  stroke="#182c3c" stroke-width="3" stroke-linecap="round"
+                  stroke-linejoin="round" opacity=".5" />
+          </svg>
+        </div>
+        <div class="zone-row">
+          <div class="zone zone--kpi">KPI/Revenue</div>
+          <div class="zone zone--filter">FILTER/Region</div>
+        </div>
+        <div class="zone zone--nav">Nav/Detail →</div>
+      </div>
+    </div>
+
+    <div class="arrow">
+      <div class="arrow-pill">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 12h15M13 6l6 6-6 6" />
+        </svg>
+      </div>
+      <div class="arrow-label">Export</div>
+    </div>
+
+    <div class="card twbx">
+      <div class="card-head"><span class="dot" style="background:#3d8254"></span>Tableau · .twbx</div>
+      <div class="kpis">
+        <div class="kpi kpi--a"><div class="kpi-label">Revenue</div><div class="kpi-value">$128K</div></div>
+        <div class="kpi kpi--b"><div class="kpi-label">Users</div><div class="kpi-value">8,347</div></div>
+        <div class="kpi kpi--c"><div class="kpi-label">Churn</div><div class="kpi-value">1.2%</div></div>
+      </div>
+      <div class="chart">
+        <div class="bar" style="height:54%"></div>
+        <div class="bar" style="height:72%"></div>
+        <div class="bar" style="height:46%"></div>
+        <div class="bar" style="height:86%"></div>
+        <div class="bar" style="height:64%"></div>
+        <div class="bar bar--accent" style="height:97%"></div>
+      </div>
+    </div>
+  </section>
+</div>

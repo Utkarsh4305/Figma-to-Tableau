@@ -16,7 +16,7 @@ const POSTS: Post[] = [
   {
     date: "July 2026",
     tag: "Release",
-    color: "#0d9488",
+    color: "#5f5580",
     title: "Image mode: when you just want the pixels",
     excerpt:
       "Sometimes the deliverable isn't a live dashboard — it's a picture of one. Image is now a third export mode alongside Floating and Tiled.",
@@ -39,7 +39,7 @@ const POSTS: Post[] = [
   {
     date: "July 2026",
     tag: "Engineering",
-    color: "#d9689f",
+    color: "#9c4f63",
     title: "Making tiled dashboards behave",
     excerpt:
       "Tableau's tiled layout engine has opinions. Four round-trips with real workbooks taught us which layout hints it actually honors — and which ones silently produce sliver columns.",
@@ -69,7 +69,7 @@ const POSTS: Post[] = [
   {
     date: "July 2026",
     tag: "Product",
-    color: "#0aa268",
+    color: "#3d8254",
     title: "Free plan, Premium, and how licensing works",
     excerpt:
       "The full feature set is free for your first 15 exports. Here's how the license model works and why there are no license keys to paste.",
@@ -92,7 +92,7 @@ const POSTS: Post[] = [
   {
     date: "June 2026",
     tag: "Engineering",
-    color: "#8b5e34",
+    color: "#8a5733",
     title: "Text that never clips",
     excerpt:
       "Tableau renders text about 1.5x larger than Figma and mangles partially-overlapping text zones. The fitting engine measures every string and makes clipping impossible.",
@@ -120,7 +120,7 @@ const POSTS: Post[] = [
   {
     date: "June 2026",
     tag: "Engineering",
-    color: "#18a0fb",
+    color: "#3f5f7a",
     title: "Navigation buttons Tableau actually loads",
     excerpt:
       "Figma prototype links become native Tableau navigation. Getting there meant discovering that Tableau's own <button> object crashes floating dashboards.",

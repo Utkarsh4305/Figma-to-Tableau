@@ -152,9 +152,9 @@ export default function Hero() {
               <motion.div
                 className="hero__arrow-icon"
                 animate={{ boxShadow: [
-                  "0 6px 28px rgba(13,148,136,0.45)",
-                  "0 6px 40px rgba(13,148,136,0.7)",
-                  "0 6px 28px rgba(13,148,136,0.45)",
+                  "0 4px 14px rgba(31,33,37,0.12)",
+                  "0 8px 22px rgba(31,33,37,0.18)",
+                  "0 4px 14px rgba(31,33,37,0.12)",
                 ]}}
                 transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
               >

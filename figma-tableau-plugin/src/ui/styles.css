@@ -1,40 +1,287 @@
+/* ─── Type ────────────────────────────────────────────────────────────
+   Inter for the interface, DM Serif Display for the editorial headings.
+   Inter was named in font-family from the start but never actually
+   loaded, so on Windows every word fell through to the Segoe UI
+   fallback. It is a variable face here: one file covers 400–700, and
+   `opsz` lets it re-cut itself for the 10px labels as well as the 20px
+   display line.                                                        */
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:opsz,wght@14..32,400..700&display=swap');
+
+/* ═══════════════════════════════════════════════════════════════════
+   THEME TOKENS — the plugin follows Figma's own appearance.
+
+   A tiny inline script in dist/index.html stamps data-theme="light"
+   or "dark" on <html> before first paint (read from Figma's
+   figma-dark / figma-light class, or the injected --figma-color-bg),
+   and main.tsx keeps it in sync if the theme is switched while the
+   plugin window is open.
+
+   :root                  → LIGHT  "warm paper"
+   :root[data-theme=dark] → DARK   "warm charcoal"
+
+   Everything below this block is written against tokens only — no
+   literal colours — so both themes stay in step.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ─────────────────────────────────────────────────────────────────
+   LIGHT THEME — "Editorial Pastel & Matte B&W" (Inspired by Reference)
+   ─────────────────────────────────────────────────────────────────
+   Atmosphere: Soft, tactile, organized, calm editorial Japanese stationery.
+   Canvas: Soft glare-free light neutral fog (#eaecf1) — zero cream/yellow.
+   Cards: Flat, distinct, authentic pastel fills (Peach, Mint, Butter, Lilac, Sky).
+   Navigation: Clean brand top row + floating Segmented Pill Control (Week/Month/Year style).
+   CTA: Solid matte charcoal pill button (#25282d) with crisp white text.
+   Gradients: NONE — pure, flat, velvety matte surfaces with crisp 1px borders.
+   ───────────────────────────────────────────────────────────────── */
 :root {
-  /* Map our tokens to Figma's theme CSS variables so the plugin feels native
-     in both dark and light mode. Figma injects --figma-color-* on the <html>
-     element when themeColors: true is set in showUI(). The fallback values
-     are our original dark palette, so the UI works identically as before when
-     the variables aren't present (dev mode, older Figma versions). */
-  --bg:          var(--figma-color-bg, #111111);
-  --bg-2:        var(--figma-color-bg-secondary, #1a1a1a);
-  --bg-3:        var(--figma-color-bg-tertiary, #222222);
-  --bg-hover:    var(--figma-color-bg-hover, #2a2a2a);
-  --border:      var(--figma-color-border, #2e2e2e);
-  --border-focus:var(--figma-color-border-selected, #555555);
-  --text:        var(--figma-color-text, #f0f0f0);
-  --text-2:      var(--figma-color-text-secondary, #888888);
-  --text-3:      var(--figma-color-text-tertiary, #555555);
-  --red:         var(--figma-color-text-danger, #f87171);
-  --amber:       var(--figma-color-text-warning, #fbbf24);
-  --blue:        var(--figma-color-text-brand, #60a5fa);
-  --accent:      var(--figma-color-text-brand, #60a5fa);
-  --radius:      8px;
-  --radius-sm:   6px;
-  --blue-bg:     rgba(96, 165, 250, 0.12);
-  --blue-border: #1f2d3d;
-  --red-border:  #3d1f1f;
-  --amber-border: #3d2e1a;
+  color-scheme: light;
+
+  /* Surfaces — glare-free, soft neutral foundation */
+  --bg:          #eaecf1;   /* soft neutral light fog canvas */
+  --bg-top:      #eaecf1;   /* seamless header */
+  --bg-2:        #ffffff;   /* crisp white base */
+  --bg-3:        #f1f3f7;   /* recessed inputs */
+  --bg-hover:    #e2e5eb;
+
+  /* Borders & Dividers */
+  --border:      #d8dce4;   /* delicate neutral hairline */
+  --border-focus:#25282d;
+
+  /* Text hierarchy — soft matte charcoal ink */
+  --text:        #1f2125;   /* deep matte charcoal black */
+  --text-2:      #646a77;   /* balanced slate subtext */
+  --text-3:      #969ca9;   /* tertiary labels */
+
+  /* Navigation — Floating Segmented Pill Track */
+  --nav-track-bg:          #dde1ea;
+  --nav-track-border:      #d2d7e2;
+  --nav-pill-active-bg:    #25282d;   /* solid dark ink pill */
+  --nav-pill-active-fg:    #ffffff;
+  --sub-tab-active-bg:     #25282d;
+  --sub-tab-active-border: #25282d;
+  --sub-tab-active-fg:     #ffffff;
+
+  /* Primary CTA Button (Reference "check in" / "next" dark matte pill) */
+  --cta-bg:           #25282d;
+  --cta-fg:           #ffffff;
+  --cta-ring:         rgba(37, 40, 45, 0.2);
+  --cta-shadow:       0 2px 8px rgba(37, 40, 45, 0.15);
+  --cta-hover-shadow: 0 4px 14px rgba(37, 40, 45, 0.22);
+
+  /* Segmented Pill Chips (Reference "tired" / "unmotivated" pills) */
+  --chip-bg:            #ffffff;
+  --chip-border:        #d5d9e1;
+  --chip-text:          #555b68;
+  --chip-active-bg:     #25282d;
+  --chip-active-border: #25282d;
+  --chip-active-text:   #ffffff;
+  --chip-active-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+
+  /* Default Card Base */
+  --card-bg:          #ffffff;
+  --card-border:      #d8dce4;
+  --card-shadow:      0 2px 10px rgba(0, 0, 0, 0.03);
+
+  /* Icon wells */
+  --icon-well-bg:     #ffffff;
+  --icon-well-border: rgba(0, 0, 0, 0.06);
+  --icon-well-color:  #25282d;
+
+  /* Accordion bg */
+  --accordion-bg:     #e8f2fa;
+
+  /* Usage meter */
+  --meter-alpha:      1;
+
+  /* Frame Selection Card */
+  --frame-card-bg:     #f0ecf9;
+  --frame-card-border: #dcd3f0;
+  --frame-card-shadow: 0 2px 10px rgba(122, 111, 162, 0.06);
+
+  /* ── Authentic Reference Pastel Palette (Flat solids, zero gradients) ── */
+  --pastel-peach:        #fdede2;   /* Peach / Coral card */
+  --pastel-peach-border: #f5d5c0;
+  --pastel-peach-text:   #3d2518;
+  --pastel-peach-text-2:  #7a5b45;
+  --pastel-peach-well:   #ffffff;
+  --pastel-peach-chip:  #ffffff;
+  --pastel-peach-accent: #3d2518;
+  --pastel-peach-hover:          #fce5d6;
+  --pastel-peach-hover-border:   #f0c4a8;
+  --pastel-peach-on-accent:      #ffffff;
+
+  --pastel-mint:         #e5f6eb;   /* Mint / Sage card */
+  --pastel-mint-border:  #c7ebd0;
+  --pastel-mint-text:    #1b3826;
+  --pastel-mint-text-2:   #4a7059;
+  --pastel-mint-well:    #ffffff;
+  --pastel-mint-chip:   #ffffff;
+  --pastel-mint-accent:  #1b3826;
+  --pastel-mint-hover:           #d8f1df;
+  --pastel-mint-hover-border:    #b2e4c0;
+  --pastel-mint-on-accent:       #ffffff;
+
+  --pastel-butter:       #fef5dc;   /* Buttercup / Vanilla card */
+  --pastel-butter-border:#fae6ad;
+  --pastel-butter-text:  #3d3314;
+  --pastel-butter-text-2: #7a6838;
+  --pastel-butter-well:  #ffffff;
+  --pastel-butter-chip: #ffffff;
+  --pastel-butter-accent:#3d3314;
+  --pastel-butter-hover:         #fceecc;
+  --pastel-butter-hover-border:  #f7dc96;
+  --pastel-butter-on-accent:     #ffffff;
+
+  --pastel-lav:          #f0ecf9;   /* Lavender / Lilac card */
+  --pastel-lav-border:   #dcd3f0;
+  --pastel-lav-text:     #29213d;
+  --pastel-lav-text-2:    #5f5580;
+  --pastel-lav-well:     #ffffff;
+  --pastel-lav-chip:    #ffffff;
+  --pastel-lav-accent:   #29213d;
+  --pastel-lav-hover:            #eae4f6;
+  --pastel-lav-hover-border:     #cfc2eb;
+  --pastel-lav-on-accent:        #ffffff;
+
+  --pastel-sky:          #e8f2fa;   /* Powder Blue / Sky card */
+  --pastel-sky-border:   #cce1f2;
+  --pastel-sky-text:     #182c3c;
+  --pastel-sky-text-2:    #4e6a80;
+  --pastel-sky-well:     #ffffff;
+  --pastel-sky-chip:    #ffffff;
+  --pastel-sky-accent:   #182c3c;
+  --pastel-sky-hover:            #dbe9f5;
+  --pastel-sky-hover-border:     #b6d4ec;
+  --pastel-sky-on-accent:        #ffffff;
+
+  --pastel-rose:         #fde8ec;   /* Blush / Rose card */
+  --pastel-rose-border:  #f7c8d2;
+  --pastel-rose-text:    #3d1c25;
+  --pastel-rose-text-2:   #7d5361;
+  --pastel-rose-well:    #ffffff;
+  --pastel-rose-chip:   #ffffff;
+  --pastel-rose-accent:  #3d1c25;
+  --pastel-rose-hover:           #fbdae1;
+  --pastel-rose-hover-border:    #f2b4c2;
+  --pastel-rose-on-accent:       #ffffff;
+
+  /* Frame Selection Card */
+  --frame-dot:         #7a6fa2;
+  --frame-dot-glow:    none;
+  --accent:            #7a6fa2;
+  --accent-bg:         rgba(122, 111, 162, 0.08);
+  --accent-border:     rgba(122, 111, 162, 0.22);
+  --accent-select:     rgba(122, 111, 162, 0.16);
+  --tab-active:        #25282d;
+
+  /* Badges */
+  --badge-bg:          #ede8f8;
+  --badge-border:      #dad2f0;
+  --badge-text:        #63578c;
+
+  /* Semantics */
+  --red:    #b54743;
+  --amber:  #966e14;
+  --green:  #3d8254;
+  --red-border:  rgba(181, 71, 67, 0.22);
+  --amber-border:rgba(150, 110, 20, 0.22);
+
+  --shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23969ca9' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+
+  /* Legacy aliases */
+  --blue:        var(--accent);
+  --blue-bg:     var(--accent-bg);
+  --blue-border: var(--accent-border);
+
+  /* ── Type scale ────────────────────────────────────────────────
+     Seven steps, each a legible jump from the last, replacing the
+     dozen near-identical sizes this file had accumulated. Tracking
+     travels with size: display sizes tighten, small caps open up,
+     because at 10px the default spacing reads as a smudge. */
+  --fs-display: 20px;   /* the serif "Design → Tableau" line   */
+  --fs-title:   17px;   /* serif card headings                 */
+  --fs-cta:     13px;   /* the primary button                  */
+  --fs-body:    12px;   /* default                             */
+  --fs-ui:      11.5px; /* buttons, tabs, field values         */
+  --fs-sm:      11px;   /* descriptions, list copy             */
+  --fs-xs:      10px;   /* section labels, meta, badges        */
+
+  --tr-display: -0.5px;
+  --tr-title:   -0.3px;
+  --tr-ui:      -0.05px;
+  --tr-caps:     0.6px;  /* uppercase section labels            */
+
+  /* Radii */
+  --radius:    16px;
+  --radius-sm: 10px;
+  --radius-xs:  7px;
+
+  /* ── Motion ────────────────────────────────────────────────────
+     One easing vocabulary, so nothing in the UI moves in a way the
+     rest of it doesn't. `glide` is a decelerating expo curve: fast
+     departure, long soft settle — it reads as weight rather than
+     speed, which is what makes an interface feel expensive.
+     `spring` overshoots slightly, for things that pop into being. */
+  --ease-glide:  cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --ease-swift:  cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Press feedback has to beat the eye (<100ms) or it feels laggy;
+     travel wants long enough to be followed. */
+  --dur-press: 90ms;
+  --dur-fast:  160ms;
+  --dur-base:  240ms;
+  --dur-slow:  380ms;
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
+/* Everything below honours the OS "reduce motion" setting. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
-html, body { height: 100%; overflow: hidden; }
+/* ─────────────────────────────────────────────────────────────────
+   DARK THEME — "Chalk on Charcoal"
+   ─────────────────────────────────────────────────────────────────
+   Dark is NOT light with darker fills. A pastel is high-lightness and
+   low-chroma by definition, so darkening one only yields brown, olive
+   or plum. Dark therefore inverts light's ROLES, not its values:
+
+       light : pastel fill  + charcoal ink
+       dark  : charcoal fill + pastel ink
+
+   Atmosphere: Calm matte charcoal, drawn on in soft coloured chalk.
+   Canvas: Deep matte slate-black (#0d0e11).
+   Cards: Near-neutral charcoal (L≈12%) holding only a whisper of their
+          family's temperature, so a grid reads as one quiet plane.
+   Colour: Lives in the FOREGROUND — chalk glyphs, hairlines, tick marks
+          and headings, at L≈78% and low chroma, i.e. genuine pastels.
+   Chips: Things that sit ON a card (icon wells, Apply pills, plan pills,
+          step badges, code) are soft tinted chips;
+/* Text selection uses the pastel accent, never the system blue   */
+::selection      { background: var(--accent-select); color: var(--text); }
+::-moz-selection { background: var(--accent-select); color: var(--text); }
+
+html, body { height: 100%; overflow: hidden; background: var(--bg); }
 
 body {
   font-family: Inter, "Segoe UI", system-ui, sans-serif;
-  font-size: 12px;
+  font-size: var(--fs-body);
+  line-height: 1.5;
   color: var(--text);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* cv05: single-storey l, so "l" and "I" stop colliding in layer names.
+     ss03: a rounder, less mechanical comma and quote set. */
+  font-feature-settings: "cv05" 1, "ss03" 1;
+  font-optical-sizing: auto;
+  text-rendering: optimizeLegibility;
 }
 
 #root {
@@ -44,25 +291,43 @@ body {
   overflow: hidden;
 }
 
-/* ── Scroll area ─────────────────────────────────────────── */
+/* ── Scroll area ─────────────────────────────────────────────── */
 .scroll-area {
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: 18px;
+  padding: 20px 20px 24px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
+  /* Standard properties only. Chromium ignores ::-webkit-scrollbar the
+     moment scrollbar-width or scrollbar-color is set, so specifying both
+     left the panel on the full-width system bar. */
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: #c7ccd8 transparent;
 }
 
-.scroll-area::-webkit-scrollbar { width: 3px; }
-.scroll-area::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 4px;
+/* ── Editorial heading (serif display) ───────────────────────── */
+.editorial-heading {
+  font-family: 'DM Serif Display', Georgia, serif;
+  letter-spacing: var(--tr-display);
+  font-size: var(--fs-display);
+  font-weight: 400;
+  line-height: 1.2;
+  color: var(--text);
+  letter-spacing: -0.3px;
+  margin-bottom: 2px;
 }
 
-/* ── Empty state ─────────────────────────────────────────── */
+/* ── Section label ───────────────────────────────────────────── */
+.section-label {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: var(--tr-caps);
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 9px;
+}
+/* ── Empty state ─────────────────────────────────────────────── */
 .empty-state {
   flex: 1;
   display: flex;
@@ -75,337 +340,289 @@ body {
 }
 
 .empty-sub {
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: var(--text-2);
   line-height: 1.6;
   max-width: 220px;
 }
 
-/* ── Section label ───────────────────────────────────────── */
-.section-label {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.7px;
-  color: var(--text-3);
-  margin-bottom: 8px;
-}
-
-/* ── Frame card ──────────────────────────────────────────── */
+/* ── Frame card (Selection) ──────────────────────────────────── */
 .frame-card {
-  background: var(--bg-2);
-  border: 1px solid var(--border);
+  background: var(--frame-card-bg);
+  border: 1px solid var(--frame-card-border);
   border-radius: var(--radius);
-  padding: 14px 16px;
+  padding: 16px 18px;
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 13px;
+  box-shadow: var(--frame-card-shadow, var(--card-shadow));
+  transition: all 0.2s ease;
 }
 
 .frame-info { flex: 1; min-width: 0; }
 
 .frame-name {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--fs-body);
+  font-weight: 500;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: -0.1px;
 }
 
 .frame-meta {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-2);
-  margin-top: 2px;
+  margin-top: 3px;
+  line-height: 1.45;
 }
 
+/* Accent dot — flat solid dot in both themes (ZERO GLOW) */
 .frame-dot {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: var(--blue);
+  background: var(--frame-dot);
+  box-shadow: none;
   flex: 0 0 auto;
 }
 
 .frame-breakdown {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-2);
-  margin-top: 4px;
+  margin-top: 5px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.frame-breakdown.warn {
-  color: var(--amber);
-}
+.frame-breakdown.warn { color: var(--amber); }
 
-/* ── Export card ─────────────────────────────────────────── */
+/* ── Export card (Flat container) ────────────────────────────── */
 .export-card {
-  background: var(--bg-2);
-  border: 1px solid var(--border);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
   border-radius: var(--radius);
   overflow: hidden;
+  box-shadow: var(--card-shadow);
 }
 
 .export-row {
-  padding: 14px 16px;
+  padding: 16px 18px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .export-row + .export-row {
   border-top: 1px solid var(--border);
 }
 
+/* ── Field labels ────────────────────────────────────────────── */
 .field-label {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--text-2);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--text-3);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.55px;
 }
 
-.import-hint {
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--text-2);
-}
-
-.import-hint code,
-.import-list code {
-  font-size: 10.5px;
-  padding: 1px 4px;
-  border-radius: 4px;
-  background: var(--bg-3);
-  border: 1px solid var(--border);
-}
-
-.import-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.import-list-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-2);
-}
-
-.link-btn {
-  background: none;
-  border: none;
-  color: var(--accent);
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0;
-  font-family: inherit;
-}
-
-.link-btn:hover { text-decoration: underline; }
-
-.import-items {
-  display: flex;
-  flex-direction: column;
-  max-height: 168px;
-  overflow-y: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-3);
-}
-
-.import-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
-  font-size: 12px;
-  color: var(--text);
-  cursor: pointer;
-}
-
-.import-item + .import-item {
-  border-top: 1px solid var(--border);
-}
-
-.import-item input {
-  margin: 0;
-}
-
-.btn-secondary {
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-3);
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-  transition: border-color 0.15s, background 0.15s;
-}
-
-.btn-secondary:hover:not(:disabled) {
-  border-color: var(--border-focus);
-  background: var(--bg-hover);
-}
-
-.btn-secondary:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
+/* ── Text inputs ─────────────────────────────────────────────── */
 input[type="text"],
 input[type="number"],
 select {
   width: 100%;
-  padding: 8px 10px;
+  padding: 9px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg-3);
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--fs-body);
   font-family: inherit;
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color 0.18s, box-shadow 0.18s;
   -webkit-appearance: none;
+  letter-spacing: -0.1px;
 }
 
-input:focus, select:focus {
-  border-color: var(--blue);
-  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.15);
+input[type="text"]::placeholder { color: var(--text-3); }
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
 }
 
 select {
   cursor: pointer;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23555' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-image: var(--select-chevron);
   background-repeat: no-repeat;
   background-position: right 10px center;
   padding-right: 28px;
 }
 
-/* ── Spec details accordion ─────────────────────────────── */
-.spec-details {
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-
-
-
-.spec-details-summary {
-  cursor: pointer;
-  padding: 10px 14px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-2);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  user-select: none;
-  list-style: none;
+/* ── Export toggles (Pill chips for radios, clean checkboxes) ── */
+.toggle-row {
   display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
   align-items: center;
-  gap: 6px;
 }
 
-.spec-details-summary::-webkit-details-marker { display: none; }
-
-/* Accordion chevron: a crisp CSS-drawn arrow (rotates to point down on open). */
-.spec-details-summary::before {
-  content: "";
-  flex: 0 0 auto;
-  width: 5px;
-  height: 5px;
-  border-right: 1.5px solid var(--text-3);
-  border-bottom: 1.5px solid var(--text-3);
-  transform: rotate(-45deg);
-  transition: transform 0.18s ease;
-  margin-right: 2px;
-}
-
-.spec-details[open] .spec-details-summary::before {
-  transform: rotate(45deg);
-}
-
-.spec-details-body {
-  border-top: 1px solid var(--border);
-  padding: 10px 16px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-
-/* Import accordion nested inside export card */
-.import-accordion {
-  border: none;
-  border-radius: 0;
-  border-top: 1px solid var(--border);
-}
-
-.import-summary {
-  display: flex !important;
+/* Radio chips: Tactile rounded pill selector (Inspired by Image 1 & 2) */
+.toggle-item:has(input[type="radio"]) {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  padding: 14px 16px;
-  user-select: none;
-  list-style: none;
-}
-
-.import-summary::-webkit-details-marker { display: none; }
-
-.import-summary::before {
-  content: "";
-  flex: 0 0 auto;
-  width: 5px;
-  height: 5px;
-  border-right: 1.5px solid var(--text-3);
-  border-bottom: 1.5px solid var(--text-3);
-  transform: rotate(-45deg);
-  transition: transform 0.18s ease;
-  margin-right: 2px;
-}
-
-.import-accordion[open] .import-summary::before {
-  transform: rotate(45deg);
-}
-
-.import-accordion .spec-details-body {
-  padding: 0 16px 14px;
-}
-
-/* Badge on the import summary: how many real sheets are armed for the swap. */
-.import-badge {
-  margin-left: auto;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: none;
-  letter-spacing: 0;
-  color: var(--blue);
-  background: var(--blue-bg);
-  border: 1px solid var(--blue-border);
+  justify-content: center;
+  padding: 6px 14px;
   border-radius: 999px;
-  padding: 1px 8px;
+  border: 1px solid var(--chip-border);
+  background: var(--chip-bg);
+  color: var(--chip-text);
+  font-size: var(--fs-ui);
+  font-weight: 500;
+  letter-spacing: 0.1px;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
 }
 
-.import-optional {
-  margin-left: auto;
-  font-size: 10px;
+.toggle-item:has(input[type="radio"]):hover {
+  border-color: var(--border-focus);
+  color: var(--text);
+}
+
+.toggle-item:has(input[type="radio"]) input[type="radio"] {
+  display: none;
+}
+
+.toggle-item:has(input[type="radio"]:checked) {
+  background: var(--chip-active-bg);
+  border-color: var(--chip-active-border);
+  color: var(--chip-active-text);
+  box-shadow: var(--chip-active-shadow);
+  font-weight: 600;
+}
+
+/* Checkbox toggle items */
+.toggle-item:has(input[type="checkbox"]) {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--fs-ui);
+  color: var(--text-2);
+  cursor: pointer;
+  padding: 3px 2px;
+  transition: color 0.15s;
+}
+
+.toggle-item:has(input[type="checkbox"]):hover {
+  color: var(--text);
+}
+
+/* Drawn rather than delegated. `accent-color` hands Chromium's own
+   checkbox a tint, which is why these read as heavy system squares next
+   to everything else here — wrong size, wrong radius, wrong tick. This
+   is the same box the rest of the UI would draw, with the tick scaling
+   in from nothing so a toggle has a moment. */
+.toggle-item input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  margin: 0;
+  flex: 0 0 auto;
+  border: 1.5px solid var(--chip-border);
+  border-radius: 5px;
+  background: var(--bg-2);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-swift),
+              border-color var(--dur-fast) var(--ease-swift),
+              transform var(--dur-press) var(--ease-swift);
+}
+
+.toggle-item:hover input[type="checkbox"] { border-color: var(--border-focus); }
+
+.toggle-item input[type="checkbox"]:checked {
+  background: var(--cta-bg);
+  border-color: var(--cta-bg);
+}
+
+/* The tick is two borders of a rotated box — crisper at this size than
+   any glyph, and it can be scaled from the corner. */
+.toggle-item input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  left: 4.5px;
+  top: 1.5px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--cta-fg);
+  border-width: 0 1.8px 1.8px 0;
+  border-radius: 0 0 1px 0;
+  transform: rotate(45deg) scale(0.4);
+  transform-origin: 50% 50%;
+  opacity: 0;
+  transition: transform var(--dur-base) var(--ease-spring),
+              opacity var(--dur-press) var(--ease-swift);
+}
+
+.toggle-item input[type="checkbox"]:checked::after {
+  transform: rotate(45deg) scale(1);
+  opacity: 1;
+}
+
+.toggle-item input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.toggle-item input[type="checkbox"]:checked + span {
+  color: var(--text);
   font-weight: 500;
-  text-transform: none;
-  letter-spacing: 0;
+}
+
+/* ── Layout hint text ────────────────────────────────────────── */
+.layout-hint {
+  font-size: var(--fs-xs);
+  line-height: 1.55;
   color: var(--text-3);
 }
 
-/* Hidden real file input; the styled label triggers it. */
+/* ── Import / Tableau Sheets accordion ───────────────────────── */
+/* Badge: imported sheet count */
+.import-badge {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--badge-text);
+  background: var(--badge-bg);
+  border: 1px solid var(--badge-border);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+/* "optional" metadata pill */
+.import-optional {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0.2px;
+  color: var(--text-3);
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+/* ── Upload button ───────────────────────────────────────────── */
 .file-input-hidden {
   position: absolute;
   width: 1px;
@@ -421,115 +638,257 @@ select {
   justify-content: center;
   gap: 7px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 9px 12px;
   border: 1px dashed var(--border-focus);
   border-radius: var(--radius-sm);
   background: var(--bg-3);
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 600;
+  color: var(--text-2);
+  font-size: var(--fs-ui);
+  font-weight: 500;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
 }
 
 .upload-btn:hover {
-  border-color: var(--blue);
+  border-color: var(--accent);
+  color: var(--text);
   background: var(--bg-hover);
 }
 
-.spec-detail-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 11px;
-}
-
-.spec-detail-label {
+/* ── Import list ─────────────────────────────────────────────── */
+.import-hint {
+  font-size: var(--fs-sm);
+  line-height: 1.5;
   color: var(--text-2);
 }
 
-.spec-detail-value {
+.import-hint code,
+.import-list code {
+  font-size: var(--fs-xs);
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-3);
+  border: 1px solid var(--border);
   color: var(--text);
-  font-weight: 500;
 }
 
-/* ── Analyze section (dashboard tab) ────────────────────── */
-/* ── Footer ──────────────────────────────────────────────── */
-.plugin-footer {
-  flex: 0 0 auto;
-  position: relative;
+.import-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.import-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+  transition: opacity 0.15s;
+}
+
+.link-btn:hover { opacity: 0.7; }
+
+.import-items {
+  display: flex;
+  flex-direction: column;
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-3);
+}
+
+.import-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 11px;
+  font-size: var(--fs-ui);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.import-item:hover { background: var(--bg-hover); }
+
+.import-item + .import-item {
   border-top: 1px solid var(--border);
-  padding: 14px 18px;
+}
+
+.import-item input { margin: 0; accent-color: var(--accent); }
+
+/* ── Generic spec details accordion ─────────────────────────── */
+.spec-details {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.spec-details[open] .spec-details-summary::before {
+  transform: rotate(45deg);
+}
+
+.spec-details-body {
+  border-top: 1px solid var(--border);
+  padding: 12px 18px 14px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.btn-primary {
+/* ── Spec detail row ─────────────────────────────────────────── */
+.spec-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--fs-sm);
+}
+
+.spec-detail-label { color: var(--text-2); }
+.spec-detail-value { color: var(--text); font-weight: 500; }
+
+/* ── Secondary button ────────────────────────────────────────── */
+.btn-secondary {
   width: 100%;
-  padding: 12px;
-  border: none;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--text);
-  color: var(--bg);
-  font-weight: 600;
-  font-size: 13px;
+  background: var(--bg-3);
+  color: var(--text);
+  font-size: var(--fs-ui);
+  font-weight: 500;
   cursor: pointer;
   font-family: inherit;
+  transition: border-color 0.18s, background 0.18s, color 0.18s;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--border-focus);
+  background: var(--bg-hover);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+/* ── Footer ──────────────────────────────────────────────────── */
+.plugin-footer {
+  flex: 0 0 auto;
+  position: relative;
+  border-top: 1px solid var(--border);
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ── Primary CTA button (Distinctive pill in both themes) ────── */
+.btn-primary {
+  width: 100%;
+  padding: 14px 22px;
+  border: none;
+  border-radius: 999px;
+  background: var(--cta-bg);
+  color: var(--cta-fg);
+  font-weight: 600;
+  font-size: var(--fs-cta);
+  font-family: inherit;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  transition: opacity 0.15s;
   letter-spacing: -0.1px;
+  box-shadow: var(--cta-shadow);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.btn-primary:hover  { opacity: 0.88; }
-.btn-primary:active { opacity: 0.78; }
+.btn-primary:hover:not(:disabled) {
+  opacity: 0.96;
+  transform: translateY(-1px);
+  box-shadow: var(--cta-hover-shadow);
+}
+
+.btn-primary:active:not(:disabled) {
+  opacity: 0.88;
+  transform: translateY(0);
+}
 
 .btn-primary:disabled {
-  opacity: 0.4;
+  opacity: 0.32;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
+/* ── Spinner ─────────────────────────────────────────────────── */
 .spinner {
   width: 13px;
   height: 13px;
-  border: 1.5px solid rgba(0,0,0,0.25);
-  border-top-color: #000;
+  border: 1.5px solid var(--cta-ring);
+  border-top-color: var(--cta-fg);
   border-radius: 50%;
-  animation: spin 0.7s linear infinite;
+  animation: spin 0.75s linear infinite;
   flex: 0 0 auto;
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── Status bar ──────────────────────────────────────────── */
+/* ── Exports left / limit note ───────────────────────────────── */
+.exports-left {
+  font-size: var(--fs-xs);
+  text-align: center;
+  color: var(--text-3);
+  letter-spacing: 0.1px;
+}
+
+.limit-note {
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  text-align: center;
+  color: var(--text-2);
+}
+
+/* ── Toast notifications ─────────────────────────────────────── */
 .toast {
   position: absolute;
-  bottom: calc(100% + 8px);
-  left: 18px;
-  right: 18px;
+  bottom: calc(100% + 10px);
+  left: 20px;
+  right: 20px;
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 9px 10px 9px 14px;
+  gap: 9px;
+  padding: 10px 12px 10px 16px;
   border-radius: var(--radius-sm);
-  font-size: 11px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
   color: var(--text);
   border: 1px solid var(--border);
   background: var(--bg-3);
   max-height: 45vh;
   overflow-y: auto;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow);
   animation: toast-in 0.2s ease-out;
   z-index: 10;
 }
 
-.toast.ok   { color: var(--blue);  border-color: var(--blue-border); }
-.toast.err  { color: var(--red);   border-color: var(--red-border); }
-.toast.warn { color: var(--amber); border-color: var(--amber-border); }
+.toast.ok   { color: var(--accent); border-color: var(--accent-border); }
+.toast.err  { color: var(--red);    border-color: var(--red-border); }
+.toast.warn { color: var(--amber);  border-color: var(--amber-border); }
 
 .toast-icon { flex: 0 0 auto; }
 
@@ -544,9 +903,9 @@ select {
   background: none;
   border: none;
   color: inherit;
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: pointer;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   line-height: 1.5;
   padding: 0 2px;
   font-family: inherit;
@@ -559,33 +918,34 @@ select {
   to   { opacity: 1; transform: none; }
 }
 
-/* ── Build tag ───────────────────────────────────────────── */
+/* ── Build tag ───────────────────────────────────────────────── */
 .build-tag {
   text-align: center;
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: var(--text-3);
 }
 
-/* ── Error / no frame ────────────────────────────────────── */
+/* ── Error card ──────────────────────────────────────────────── */
 .error-card {
   background: var(--bg-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 12px 14px;
-  font-size: 11px;
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  font-size: var(--fs-sm);
   color: var(--text-2);
   line-height: 1.6;
 }
 
+/* ── Scratch / start-from-scratch button ─────────────────────── */
 .scratch-btn {
   display: block;
   width: 100%;
-  padding: 9px;
+  padding: 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-2);
-  font-size: 11px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   cursor: pointer;
   font-family: inherit;
@@ -593,180 +953,189 @@ select {
   margin-top: 8px;
 }
 
-.scratch-btn:hover { color: var(--text); border-color: #444; }
+.scratch-btn:hover { color: var(--text); border-color: var(--border-focus); }
 
-/* ── Sub-tab bar ─────────────────────────────────────────── */
-.sub-tab-bar {
+/* ── Top app header ──────────────────────────────────────────── */
+.app-header {
   flex: 0 0 auto;
   display: flex;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-2);
+  flex-direction: column;
+  padding: 12px 18px 11px;
+  background: var(--bg-top);
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--dur-base) var(--ease-swift),
+              box-shadow var(--dur-base) var(--ease-swift);
 }
 
-.sub-tab-btn {
-  flex: 1;
-  padding: 9px 8px;
-  background: none;
-  border: none;
-  color: var(--text-2);
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+/* The hairline under the nav only appears once there is content scrolled
+   beneath it, so the header reads as one surface with the page until it
+   has something to separate itself from. */
+.app-header[data-scrolled="true"] {
+  border-bottom-color: var(--border);
+  box-shadow: 0 6px 18px -14px rgba(0, 0, 0, 0.45);
 }
 
-.sub-tab-btn:hover {
-  color: var(--text);
-  background: var(--bg-hover);
+/* The charcoal strip. Full-bleed and flush to the top so it meets Figma's
+   own title bar with no seam — the iframe can't style that bar, so the
+   only way to hide the join is to match it. Kept deliberately short: it
+   carries a wordmark and a status chip, nothing that needs room. */
+/* Plan chip — surfaces the export budget on every tab, and is itself the
+   shortcut to Account, so checking or upgrading never costs a hunt. */
+/* ── Segmented control ────────────────────────────────────────────
+   One component, two uses: the main nav and the Library sub-nav. The
+   active pill is a single element that TRAVELS between segments
+   rather than a background that blinks on and off — that movement is
+   what tells the eye the two tabs are the same surface, and it is the
+   difference between "instant" and "abrupt". Segments are equal
+   width, so the indicator needs no measuring: its width is a fraction
+   of the track and its offset is a multiple of its own width. */
+.seg {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--seg-count), 1fr);
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--nav-track-bg);
+  border: 1px solid var(--nav-track-border);
+  isolation: isolate;
 }
 
-.sub-tab-btn.active {
-  color: var(--blue);
-  border-bottom-color: var(--blue);
+.seg-indicator {
+  position: absolute;
+  z-index: 0;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 6px) / var(--seg-count));
+  border-radius: 999px;
+  background: var(--nav-pill-active-bg);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  transform: translateX(calc(var(--seg-index) * 100%));
+  transition: transform var(--dur-base) var(--ease-glide);
 }
 
-/* ── Tab bar ─────────────────────────────────────────────── */
-.tab-bar {
-  flex: 0 0 auto;
-  display: flex;
-  gap: 2px;
-  padding: 8px 12px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.tab-btn {
-  flex: 1;
-  padding: 8px 6px;
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: none;
-  color: var(--text-2);
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-}
-
-.tab-btn:hover { color: var(--text); }
-.tab-btn.active { color: var(--text); border-bottom-color: var(--blue); }
-
-/* Icon chip inside the main tab / sub-tab buttons. */
-.tab-btn,
-.sub-tab-btn {
-  display: flex;
+.seg-btn {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
+  min-width: 0;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: var(--fs-ui);
+  font-weight: 500;
+  letter-spacing: 0.1px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: color var(--dur-base) var(--ease-glide);
 }
 
-.tab-icon {
+.seg-btn:hover { color: var(--text); }
+
+.seg-btn[aria-selected="true"] {
+  color: var(--nav-pill-active-fg);
+  font-weight: 600;
+}
+
+.seg-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.seg-btn .tab-icon {
   display: inline-flex;
   align-items: center;
-  flex: 0 0 auto;
+  opacity: 0.7;
+  transition: opacity var(--dur-base) var(--ease-glide);
 }
 
-.tab-icon svg { display: block; }
+.seg-btn[aria-selected="true"] .tab-icon { opacity: 1; }
+.seg-btn .tab-icon svg { display: block; }
 
-/* ── Syntax tab ──────────────────────────────────────────── */
+/* Sub-nav: the Library's three sections, spanning the full width so the
+   track reads as one continuous line under the main nav. */
+/* The Library's second nav is the same control as the main one — same
+   track, same ink pill — stacked directly beneath it, so the two read as
+   one navigation block rather than two different ideas. */
+.sub-tab-bar {
+  flex: 0 0 auto;
+  padding: 0 18px 11px;
+  background: var(--bg-top);
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--dur-base) var(--ease-swift),
+              box-shadow var(--dur-base) var(--ease-swift);
+}
+
+/* On the Library tab the sub-nav is the last chrome above the page, so it
+   takes the scrolled hairline and the header hands it over — otherwise the
+   line would be drawn between the two navs. */
+.sub-tab-bar[data-scrolled="true"] {
+  border-bottom-color: var(--border);
+  box-shadow: 0 6px 18px -14px rgba(0, 0, 0, 0.45);
+}
+
+.app-header[data-scrolled="true"]:has(+ .sub-tab-bar) {
+  border-bottom-color: transparent;
+  box-shadow: none;
+}
+
+/* The two tracks sit close enough to be one block. */
+.app-header:has(+ .sub-tab-bar) { padding-bottom: 8px; }
+
+/* Panel transition — each tab's content arrives with a short rise so the
+   switch has a direction, and the eye is told where the new thing came
+   from instead of being handed a replaced screen. */
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.panel-anim {
+  animation: panel-in var(--dur-base) var(--ease-glide) both;
+}
+
+/* ── Syntax tab ──────────────────────────────────────────────── */
 .syntax-intro {
-  font-size: 11px;
-  line-height: 1.65;
+  font-size: var(--fs-sm);
+  line-height: 1.7;
   color: var(--text-2);
   margin-bottom: 14px;
 }
 
-.syntax-list { display: flex; flex-direction: column; gap: 10px; }
+.syntax-list { display: flex; flex-direction: column; gap: 8px; }
 
 .syntax-tag {
   display: inline-block;
-  font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 4px;
+  font-size: var(--fs-xs);
+  padding: 2px 7px;
+  border-radius: var(--radius-xs);
   background: var(--bg-3);
   border: 1px solid var(--border);
-  color: var(--blue);
-  margin-bottom: 5px;
+  color: var(--text);
+  margin-bottom: 4px;
+  font-family: "SF Mono", "Fira Code", Consolas, monospace;
 }
 
-.syntax-title { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
-.syntax-desc { font-size: 11px; line-height: 1.65; color: var(--text-2); }
+.syntax-title { font-size: var(--fs-body); font-weight: 500; color: var(--text); margin-bottom: 2px; }
+.syntax-desc  { font-size: var(--fs-sm); line-height: 1.65; color: var(--text-2); }
 
-/* Collapsible syntax rows: one calm line per convention (icon + tag + title),
-   the full description only on demand — keeps the reference from reading as a
-   wall of text. */
-.syntax-acc {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-2);
-  overflow: hidden;
-}
-
-.syntax-acc-summary {
-  list-style: none;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 12px;
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.15s;
-}
-
-.syntax-acc-summary::-webkit-details-marker { display: none; }
-
-.syntax-acc-summary:hover { background: var(--bg-hover); }
-
-.syntax-acc-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.syntax-acc .syntax-tag {
-  margin-bottom: 0;
-  align-self: flex-start;
-}
-
-.syntax-acc-title {
-  font-size: 10.5px;
-  color: var(--text-2);
-}
-
-.syntax-chev {
-  flex: 0 0 auto;
-  width: 5px;
-  height: 5px;
-  border-right: 1.5px solid var(--text-3);
-  border-bottom: 1.5px solid var(--text-3);
-  transform: rotate(-45deg);
-  transition: transform 0.18s ease, border-color 0.15s;
-  margin-right: 3px;
-}
-
-.syntax-acc-summary:hover .syntax-chev { border-color: var(--text-2); }
-
-.syntax-acc[open] .syntax-chev { transform: rotate(45deg); }
-
-.syntax-acc[open] .syntax-acc-summary {
-  border-bottom: 1px solid var(--border);
-}
-
+/* Collapsible syntax accordion rows */
 .syntax-acc-body {
-  padding: 12px;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   line-height: 1.65;
   color: var(--text-2);
 }
 
 .syntax-acc-body b { color: var(--text); font-weight: 600; }
-
 .syntax-acc-lead { margin-bottom: 10px; }
+
 .syntax-icon {
   flex: 0 0 auto;
   display: inline-flex;
@@ -774,23 +1143,24 @@ select {
   justify-content: center;
   width: 26px;
   height: 26px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
   background: var(--bg-3);
-  color: var(--blue);
+  color: var(--text-2);
   margin-top: 1px;
 }
 
 .syntax-icon svg { display: block; }
 
-.syntax-section-gap { margin-top: 20px; }
+.syntax-section-gap { margin-top: 22px; }
 
 .syntax-inline-code {
-  font-size: 10.5px;
-  padding: 1px 4px;
-  border-radius: 4px;
+  font-size: var(--fs-xs);
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
   background: var(--bg-3);
   border: 1px solid var(--border);
-  color: var(--blue);
+  color: var(--text);
+  font-family: "SF Mono", "Fira Code", Consolas, monospace;
 }
 
 .syntax-table {
@@ -805,23 +1175,20 @@ select {
   gap: 8px;
 }
 
-.syntax-table-row .syntax-tag {
-  flex: 0 0 auto;
-  margin-bottom: 0;
-}
+.syntax-table-row .syntax-tag { flex: 0 0 auto; margin-bottom: 0; }
 
 .syntax-table-cell {
   flex: 1;
   min-width: 0;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   line-height: 1.6;
   color: var(--text-2);
 }
 
-.syntax-mark { color: var(--text); font-weight: 600; }
+.syntax-mark { color: var(--text); font-weight: 500; }
 .syntax-note { color: var(--text-2); }
 
-/* ── Component Library tab ────────────────────────────────── */
+/* ── Component Library tab ───────────────────────────────────── */
 .library-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -832,26 +1199,82 @@ select {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 16px 10px;
-  border: 1px solid var(--border);
+  gap: 9px;
+  padding: 18px 10px;
+  border: 1px solid var(--card-border);
   border-radius: var(--radius-sm);
-  background: var(--bg-2);
+  background: var(--card-bg);
   color: var(--text);
   cursor: pointer;
   font-family: inherit;
-  transition: border-color 0.15s, background 0.15s, transform 0.15s, box-shadow 0.15s;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   -webkit-user-drag: element;
   user-select: none;
 }
 
-.library-card:hover {
-  border-color: var(--border-focus);
-  background: var(--bg-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+/* Light Theme: Rotating authentic flat pastels (Peach, Mint, Sky, Buttercup) */
+.library-card:nth-child(4n + 1) {
+  background: var(--pastel-peach);
+  border-color: var(--pastel-peach-border);
+  color: var(--pastel-peach-text);
+}
+.library-card:nth-child(4n + 1):hover {
+  background: var(--pastel-peach-hover);
+  border-color: var(--pastel-peach-hover-border);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(220, 140, 100, 0.12);
 }
 
+.library-card:nth-child(4n + 2) {
+  background: var(--pastel-mint);
+  border-color: var(--pastel-mint-border);
+  color: var(--pastel-mint-text);
+}
+.library-card:nth-child(4n + 2):hover {
+  background: var(--pastel-mint-hover);
+  border-color: var(--pastel-mint-hover-border);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(80, 180, 120, 0.12);
+}
+
+.library-card:nth-child(4n + 3) {
+  background: var(--pastel-sky);
+  border-color: var(--pastel-sky-border);
+  color: var(--pastel-sky-text);
+}
+.library-card:nth-child(4n + 3):hover {
+  background: var(--pastel-sky-hover);
+  border-color: var(--pastel-sky-hover-border);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(100, 160, 220, 0.12);
+}
+
+.library-card:nth-child(4n + 4) {
+  background: var(--pastel-butter);
+  border-color: var(--pastel-butter-border);
+  color: var(--pastel-butter-text);
+}
+.library-card:nth-child(4n + 4):hover {
+  background: var(--pastel-butter-hover);
+  border-color: var(--pastel-butter-hover-border);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(220, 180, 80, 0.12);
+}
+
+/* In light mode: crisp white collectible icon well */
+.library-icon {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  color: #25282d;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.library-card:hover .library-icon {
+  background: #ffffff;
+  color: #1f2125;
+}
+
+/* The icon well each library card carries. */
 .library-icon {
   display: inline-flex;
   align-items: center;
@@ -859,59 +1282,127 @@ select {
   width: 38px;
   height: 38px;
   border-radius: var(--radius-sm);
-  background: var(--bg-3);
-  color: var(--blue);
+  transition: all 0.18s ease;
 }
 
-.library-icon svg {
-  display: block;
-}
+.library-icon svg { display: block; }
 
 .library-label {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--fs-sm);
+  font-weight: 500;
   text-align: center;
-  color: var(--text);
+  color: inherit;
 }
+/* ── Dashboard Templates tab ─────────────────────────────────── */
+.template-search { margin-bottom: 14px; }
 
-/* ── Dashboard Templates tab ──────────────────────────────── */
-.template-search {
-  margin-bottom: 14px;
+/* The Apply pill lives inside .template-head, a flex row, but it also
+   carries .btn-secondary - a full-width block button. Without this it
+   stretches across the row and crushes the title beside it. Opt out of
+   that sizing and shrink to a compact pill; colour comes from the
+   per-theme blocks below. */
+.template-apply-sm {
+  flex: 0 0 auto;
+  width: auto;
+  align-self: center;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  line-height: 1.4;
+  white-space: nowrap;
 }
 
 .templates-grid {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .template-card {
-  padding: 14px 16px;
-  border: 1px solid var(--border);
+  padding: 16px 18px;
+  border: 1px solid var(--card-border);
   border-radius: var(--radius);
-  background: var(--bg-2);
+  background: var(--card-bg);
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+  gap: 12px;
+  box-shadow: var(--shadow);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.template-card:hover {
-  border-color: var(--border-focus);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-  transform: translateY(-1px);
+/* Light Theme: Rotating authentic pastel template cards */
+.template-card:nth-child(4n + 1) {
+  background: var(--pastel-peach);
+  border-color: var(--pastel-peach-border);
+}
+.template-card:nth-child(4n + 1):hover {
+  background: var(--pastel-peach-hover);
+  border-color: var(--pastel-peach-hover-border);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(220, 140, 100, 0.12);
 }
 
+.template-card:nth-child(4n + 2) {
+  background: var(--pastel-mint);
+  border-color: var(--pastel-mint-border);
+}
+.template-card:nth-child(4n + 2):hover {
+  background: var(--pastel-mint-hover);
+  border-color: var(--pastel-mint-hover-border);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(80, 180, 120, 0.12);
+}
+
+.template-card:nth-child(4n + 3) {
+  background: var(--pastel-sky);
+  border-color: var(--pastel-sky-border);
+}
+.template-card:nth-child(4n + 3):hover {
+  background: var(--pastel-sky-hover);
+  border-color: var(--pastel-sky-hover-border);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(100, 160, 220, 0.12);
+}
+
+.template-card:nth-child(4n + 4) {
+  background: var(--pastel-lav);
+  border-color: var(--pastel-lav-border);
+}
+.template-card:nth-child(4n + 4):hover {
+  background: var(--pastel-lav-hover);
+  border-color: var(--pastel-lav-hover-border);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(150, 130, 200, 0.12);
+}
+
+/* In light mode: clean white wells & action pills */
+.template-icon {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  color: #25282d;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.template-apply-sm {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  color: #25282d;
+  font-weight: 600;
+}
+.template-apply-sm:hover {
+  background: #25282d;
+  border-color: #25282d;
+  color: #ffffff;
+}
 .template-head {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-.template-headinfo {
-  flex: 1;
-  min-width: 0;
-}
+.template-headinfo { flex: 1; min-width: 0; }
 
 .template-icon {
   flex: 0 0 auto;
@@ -921,9 +1412,7 @@ select {
   width: 36px;
   height: 36px;
   border-radius: var(--radius-sm);
-  background: rgba(96, 165, 250, 0.1);
-  border: 1px solid rgba(96, 165, 250, 0.16);
-  color: var(--blue);
+  transition: all 0.18s ease;
 }
 
 .template-icon svg {
@@ -933,8 +1422,8 @@ select {
 }
 
 .template-label {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--fs-body);
+  font-weight: 500;
   letter-spacing: -0.1px;
   color: var(--text);
   white-space: nowrap;
@@ -943,14 +1432,14 @@ select {
 }
 
 .template-meta-line {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-3);
   margin-top: 3px;
   letter-spacing: 0.1px;
 }
 
 .template-desc {
-  font-size: 11px;
+  font-size: var(--fs-sm);
   line-height: 1.6;
   color: var(--text-2);
   display: -webkit-box;
@@ -959,45 +1448,26 @@ select {
   overflow: hidden;
 }
 
-.template-apply-sm {
-  flex: 0 0 auto;
-  width: auto;
-  padding: 6px 14px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-3);
-  color: var(--text);
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-  transition: border-color 0.15s, background 0.15s, color 0.15s;
-}
-
-.template-apply-sm:hover {
-  border-color: var(--blue);
-  background: var(--blue-bg);
-  color: var(--blue);
-}
-
 .template-none {
-  padding: 14px;
-  font-size: 11px;
+  padding: 16px;
+  font-size: var(--fs-sm);
   color: var(--text-2);
   text-align: center;
   border: 1px dashed var(--border);
   border-radius: var(--radius);
 }
 
-/* ── Account tab ──────────────────────────────────────────── */
+/* ── Account tab ─────────────────────────────────────────────── */
 .account-card {
-  background: var(--bg-2);
-  border: 1px solid var(--border);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
   border-radius: var(--radius);
-  padding: 14px 16px;
+  padding: 16px 18px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 13px;
+  box-shadow: var(--shadow);
+  transition: all 0.18s ease;
 }
 
 .account-card + .account-card { margin-top: 10px; }
@@ -1005,30 +1475,118 @@ select {
 .account-profile {
   flex-direction: row;
   align-items: center;
-  gap: 12px;
+  gap: 13px;
 }
 
+/* Light Theme: Distinct authentic pastels per account card */
+.account-profile {
+  background: var(--pastel-lav);
+  border-color: var(--pastel-lav-border);
+}
+.account-profile .avatar {
+  background: #ffffff;
+  border: 1px solid var(--pastel-lav-border);
+  color: var(--pastel-lav-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.account-profile .plan-pill {
+  background: #ffffff;
+  border: 1px solid var(--pastel-lav-border);
+  color: var(--pastel-lav-text);
+  font-weight: 600;
+}
+
+.account-card--plan {
+  background: var(--pastel-peach);
+  border-color: var(--pastel-peach-border);
+}
+.account-card--plan .account-row-icon {
+  background: #ffffff;
+  border: 1px solid var(--pastel-peach-border);
+  color: var(--pastel-peach-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.account-card--plan .usage-meter {
+  background: #ffffff;
+  border: 1px solid var(--pastel-peach-border);
+}
+.account-card--plan .usage-meter-fill {
+  background: #25282d;
+}
+.account-card--plan .btn-secondary {
+  background: #ffffff;
+  border: 1px solid var(--pastel-peach-border);
+  color: var(--pastel-peach-text);
+}
+.account-card--plan .btn-secondary:hover:not(:disabled) {
+  background: var(--pastel-peach-hover);
+  border-color: var(--pastel-peach-hover-border);
+}
+
+.account-card--storage {
+  background: var(--pastel-sky);
+  border-color: var(--pastel-sky-border);
+}
+.account-card--storage .account-row-icon {
+  background: #ffffff;
+  border: 1px solid var(--pastel-sky-border);
+  color: var(--pastel-sky-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.account-card--storage .btn-secondary {
+  background: #ffffff;
+  border: 1px solid var(--pastel-sky-border);
+  color: var(--pastel-sky-text);
+}
+.account-card--storage .btn-secondary:hover:not(:disabled) {
+  background: var(--pastel-sky-hover);
+  border-color: var(--pastel-sky-hover-border);
+}
+
+.account-card--feedback {
+  background: var(--pastel-butter);
+  border-color: var(--pastel-butter-border);
+}
+.account-card--feedback .feedback-input {
+  background: #ffffff;
+  border: 1px solid var(--pastel-butter-border);
+  color: var(--pastel-butter-text);
+}
+.account-card--feedback .feedback-input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(37, 40, 45, 0.1);
+}
+.account-card--feedback .btn-secondary {
+  background: #ffffff;
+  border: 1px solid var(--pastel-butter-border);
+  color: var(--pastel-butter-text);
+}
+.account-card--feedback .btn-secondary:hover:not(:disabled) {
+  background: var(--pastel-butter-hover);
+  border-color: var(--pastel-butter-hover-border);
+}
+/* ── Account card internals ──────────────────────────────────── */
 .avatar {
   flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--bg-3);
   border: 1px solid var(--border);
-  color: var(--blue);
-  font-size: 13px;
-  font-weight: 700;
+  color: var(--text);
+  font-size: var(--fs-cta);
+  font-weight: 600;
   letter-spacing: 0.5px;
 }
 
 .account-profile-info { flex: 1; min-width: 0; }
 
 .account-name {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--fs-body);
+  font-weight: 500;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -1036,19 +1594,19 @@ select {
 }
 
 .account-sub {
-  font-size: 11px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
   color: var(--text-2);
-  margin-top: 1px;
+  margin-top: 2px;
 }
 
 .plan-pill {
   flex: 0 0 auto;
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--blue);
-  background: var(--blue-bg);
-  border: 1px solid var(--blue-border);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--accent);
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
   border-radius: 999px;
   padding: 2px 9px;
 }
@@ -1056,7 +1614,7 @@ select {
 .account-row-head {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 11px;
 }
 
 .account-row-head > div { flex: 1; min-width: 0; }
@@ -1066,11 +1624,12 @@ select {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-3);
-  color: var(--blue);
+  width: 27px;
+  height: 27px;
+  border-radius: var(--radius-xs);
+  background: var(--icon-well-bg);
+  border: 1px solid var(--icon-well-border);
+  color: var(--icon-well-color);
   margin-top: 1px;
 }
 
@@ -1080,14 +1639,14 @@ select {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
   padding-left: 2px;
 }
 
 .plan-features li {
   position: relative;
-  padding-left: 16px;
-  font-size: 11px;
+  padding-left: 17px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
   color: var(--text-2);
 }
@@ -1096,15 +1655,15 @@ select {
   content: "✓";
   position: absolute;
   left: 0;
-  color: var(--blue);
-  font-weight: 700;
+  color: var(--text-2);
+  font-weight: 600;
 }
 
-.account-clear-btn { width: auto; align-self: flex-start; padding: 7px 12px; }
+.account-clear-btn { width: auto; align-self: flex-start; padding: 7px 13px; }
 
-/* Free-plan usage meter (exports used out of FREE_EXPORT_LIMIT) */
+/* ── Usage meter ─────────────────────────────────────────────── */
 .usage-meter {
-  height: 6px;
+  height: 5px;
   border-radius: 999px;
   background: var(--bg-3);
   border: 1px solid var(--border);
@@ -1114,40 +1673,33 @@ select {
 .usage-meter-fill {
   height: 100%;
   border-radius: 999px;
-  background: var(--blue);
-  transition: width 0.2s;
+  background: var(--accent);
+  opacity: var(--meter-alpha);
+  transition: width 0.25s;
 }
 
-/* Footer notes around the export button (free plan) */
-.exports-left {
-  margin-top: 6px;
-  font-size: 10px;
-  text-align: center;
-  color: var(--text-2);
-}
-
-.limit-note {
-  margin-bottom: 8px;
-  font-size: 11px;
-  line-height: 1.5;
-  text-align: center;
-  color: var(--text-2);
-}
-
+/* ── Feedback textarea ───────────────────────────────────────── */
 .feedback-input {
   width: 100%;
-  padding: 8px 10px;
+  padding: 9px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg-3);
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--fs-body);
   font-family: inherit;
   outline: none;
   resize: vertical;
-  transition: border-color 0.15s;
+  transition: border-color 0.18s;
+  line-height: 1.5;
 }
-.feedback-input:focus { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.15); }
+
+.feedback-input::placeholder { color: var(--text-3); }
+
+.feedback-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
 
 .account-note {
   flex-direction: row;
@@ -1155,19 +1707,45 @@ select {
   gap: 10px;
 }
 
-/* ── Onboarding (no frame selected) ───────────────────────── */
+/* ── Onboarding (no frame selected) ─────────────────────────── */
 .onboard {
-  background: var(--bg-2);
-  border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 18px 16px;
+  padding: 20px 18px 22px;
+  box-shadow: var(--shadow);
+  transition: all 0.18s ease;
+}
+
+.onboard {
+  background: var(--pastel-butter);
+  border: 1px solid var(--pastel-butter-border);
+}
+.onboard-steps li::before {
+  background: #ffffff;
+  border: 1px solid var(--pastel-butter-border);
+  color: var(--pastel-butter-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.onboard-steps code {
+  background: #ffffff;
+  border: 1px solid var(--pastel-butter-border);
+  color: var(--pastel-butter-text);
+}
+/* Editorial serif heading on the onboarding card */
+.onboard-serif {
+  font-family: 'DM Serif Display', Georgia, serif;
+  font-size: var(--fs-title);
+  font-weight: 400;
+  color: var(--text);
+  line-height: 1.25;
+  letter-spacing: -0.2px;
+  margin-bottom: 12px;
 }
 
 .onboard-title {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--fs-body);
+  font-weight: 500;
   color: var(--text);
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .onboard-steps {
@@ -1175,19 +1753,19 @@ select {
   counter-reset: step;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 13px;
 }
 
 .onboard-steps li {
   counter-increment: step;
   position: relative;
-  padding-left: 28px;
-  font-size: 11px;
-  line-height: 1.55;
+  padding-left: 29px;
+  font-size: var(--fs-sm);
+  line-height: 1.6;
   color: var(--text-2);
 }
 
-.onboard-steps li b { color: var(--text); font-weight: 600; }
+.onboard-steps li b { color: var(--text); font-weight: 500; }
 
 .onboard-steps li::before {
   content: counter(step);
@@ -1200,27 +1778,18 @@ select {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: var(--bg-3);
-  border: 1px solid var(--border);
-  color: var(--blue);
-  font-size: 10px;
-  font-weight: 700;
+  font-size: var(--fs-xs);
+  font-weight: 600;
 }
 
 .onboard-steps code {
-  font-size: 10.5px;
-  padding: 1px 4px;
-  border-radius: 4px;
-  background: var(--bg-3);
-  border: 1px solid var(--border);
-  color: var(--blue);
+  font-size: var(--fs-xs);
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  font-family: "SF Mono", "Fira Code", Consolas, monospace;
 }
 
-/* ── Resize: corner grip + size-preset button ─────────────── */
-/* The grip is a VISIBLE chip (bg + border + glyph), not a bare cursor zone —
-   the iframe edge itself never shows a resize arrow inside Figma, so the
-   affordance has to live inside the UI. Inset from the exact corner so the
-   pointer events land in the iframe, not on Figma's window border. */
+/* ── Resize handle ───────────────────────────────────────────── */
 .resize-handle {
   position: fixed;
   right: 2px;
@@ -1232,66 +1801,306 @@ select {
   color: var(--text-3);
   z-index: 30;
   touch-action: none;
+  opacity: 0.4;
+  transition: opacity 0.15s;
 }
 
-.resize-handle:hover {
-  color: var(--text-2);
-}
-
+.resize-handle:hover { opacity: 0.8; }
 .resize-handle svg { display: block; }
 
-/* ── Keyboard focus ───────────────────────────────────────── */
+/* ── Keyboard focus ──────────────────────────────────────────── */
 button:focus-visible,
 [role="button"]:focus-visible,
 summary:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 1px;
-  border-radius: var(--radius-sm);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
 }
-
-/* ── Layout mode pills ────────────────────────────────────── */
-.layout-hint {
-  font-size: 10px;
-  line-height: 1.5;
-  color: var(--text-3);
-}
-
-/* ── Export options toggles ───────────────────────────────── */
-.toggle-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 8px;
-}
-
-.toggle-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text);
-  cursor: pointer;
-}
-
-.toggle-item input {
-  margin: 0;
-  accent-color: var(--blue);
-}
-
-.shelf-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .shelf-label {
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: var(--text-2);
   white-space: nowrap;
 }
+/* ── Accordion ────────────────────────────────────────────────────
+   <details> opens with no transition at all, which is exactly the
+   "instantaneous" jolt this replaces. Animating to an unknown height
+   needs `grid-template-rows: 0fr -> 1fr`: the row resolves to the
+   content's real height at both ends, so the browser can interpolate
+   between them without anyone measuring anything. */
+.acc {
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  background: var(--card-bg);
+  overflow: hidden;
+  transition: border-color var(--dur-fast) var(--ease-swift),
+              background var(--dur-fast) var(--ease-swift);
+}
 
-.shelf-row select {
+.acc:hover { border-color: var(--border-focus); }
+.acc[data-open="true"] { border-color: var(--accent-border); }
+
+.acc-summary {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-ui);
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-swift);
+}
+
+.acc-summary:hover { background: var(--bg-hover); }
+.acc-summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.acc-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; }
+
+.acc-chev {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  color: var(--text-3);
+  transition: transform var(--dur-base) var(--ease-glide),
+              color var(--dur-fast) var(--ease-swift);
+}
+
+.acc-chev svg { display: block; }
+.acc[data-open="true"] .acc-chev { transform: rotate(180deg); color: var(--text-2); }
+
+.acc-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dur-base) var(--ease-glide);
+}
+
+.acc[data-open="true"] .acc-panel { grid-template-rows: 1fr; }
+
+.acc-panel-clip { overflow: hidden; min-height: 0; }
+
+/* The body fades slightly behind the height so the text doesn't appear
+   to be squeezed out of a closing box. */
+.acc-panel-body {
+  padding: 0 13px 13px;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity var(--dur-fast) var(--ease-swift),
+              transform var(--dur-base) var(--ease-glide);
+}
+
+.acc[data-open="true"] .acc-panel-body {
+  opacity: 1;
+  transform: none;
+  transition-delay: 60ms;
+}
+
+/* ── Accordion variants ───────────────────────────────────────────────── */
+
+/* Syntax rows keep the pastel rotation the rest of the Library uses, and
+   the white wells the light theme puts under every icon and code chip. */
+.syntax-icon {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  color: #25282d;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.syntax-tag {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  color: #25282d;
+}
+
+.syntax-acc-main {
   flex: 1;
-  font-size: 11px;
-  padding: 4px 22px 4px 8px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.syntax-acc-title {
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+
+.acc--syntax .syntax-tag { margin-bottom: 0; align-self: flex-start; }
+.acc--syntax:nth-child(4n + 1) { background: #fdfaf7; border-color: #f2e7dd; }
+.acc--syntax:nth-child(4n + 2) { background: #f7fcf9; border-color: #daf0e2; }
+.acc--syntax:nth-child(4n + 3) { background: #f6f9fc; border-color: #dcebf6; }
+.acc--syntax:nth-child(4n + 4) { background: #f9f7fc; border-color: #e5def5; }
+
+.acc--syntax .acc-summary { align-items: flex-start; }
+.acc--syntax .acc-main { align-items: flex-start; }
+.acc--syntax .acc-chev { margin-top: 3px; }
+.acc--syntax .acc-panel-body { padding: 0 13px 13px; }
+
+/* The import row is a full-bleed band at the foot of the Export card, so
+   it loses the card's radius and takes the sky wash instead. */
+.acc--import {
+  border: none;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--accordion-bg);
+}
+
+.acc--import:hover,
+.acc--import[data-open="true"] { border-color: var(--border); }
+.acc--import .acc-summary { padding: 13px 18px; color: var(--text-2); }
+.acc--import .acc-summary:hover { color: var(--text); background: transparent; }
+.acc--import .acc-panel-body { padding: 0 18px 16px; }
+
+/* ── Import row summary ───────────────────────────────────────────────── */
+.import-summary-label {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  letter-spacing: 0.55px;
+  text-transform: uppercase;
+  color: inherit;
+}
+
+.import-badge,
+.import-optional { margin-left: 0; }
+
+/* ── Press feedback ───────────────────────────────────────────────────────
+   A control that only changes colour on click feels like a picture of a
+   button. Every actionable surface gives the same small, fast recoil —
+   short enough (90ms) to land before the eye asks for it. */
+.btn-primary:active:not(:disabled)   { transform: scale(0.985); }
+.btn-secondary:active:not(:disabled),
+.upload-btn:active,
+.scratch-btn:active,
+.link-btn:active                     { transform: scale(0.98); }
+.library-card:active,
+.template-card:active                { transform: translateY(0) scale(0.99); }
+.template-apply-sm:active:not(:disabled) { transform: scale(0.94); }
+
+.btn-secondary,
+.upload-btn,
+.scratch-btn,
+.link-btn,
+.template-apply-sm {
+  transition: background var(--dur-fast) var(--ease-swift),
+              border-color var(--dur-fast) var(--ease-swift),
+              color var(--dur-fast) var(--ease-swift),
+              transform var(--dur-press) var(--ease-swift);
+}
+
+/* Cards ride the glide curve — they travel further, so they need the
+   longer settle that makes the motion read as weight. */
+.library-card,
+.template-card,
+.frame-card,
+.account-card {
+  transition: background var(--dur-base) var(--ease-glide),
+              border-color var(--dur-base) var(--ease-glide),
+              box-shadow var(--dur-base) var(--ease-glide),
+              transform var(--dur-base) var(--ease-glide);
+}
+
+/* ── Scrolling ────────────────────────────────────────────────────────────
+   Programmatic jumps (tab switches, anchor moves) glide; a wheel or
+   trackpad still scrolls at native speed. `overscroll-behavior` stops a
+   scroll that runs out of panel from chaining into the Figma canvas
+   behind the plugin. */
+.scroll-area {
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+
+/* The thumb darkens while the pointer is in the panel, so it stays out of
+   the way when you're only reading. */
+.scroll-area:hover { scrollbar-color: var(--text-3) transparent; }
+
+/* ── Fields ───────────────────────────────────────────────────────────────
+   The focus ring grows from the border rather than snapping on, so moving
+   between fields reads as one continuous thing. */
+input[type="text"],
+.feedback-input,
+.template-search {
+  transition: border-color var(--dur-fast) var(--ease-swift),
+              box-shadow var(--dur-base) var(--ease-glide),
+              background var(--dur-fast) var(--ease-swift);
+}
+
+/* Checkboxes and radios get the same recoil as buttons, so a toggle feels
+   like something you pressed rather than something that just changed. */
+.toggle-item input { transition: transform var(--dur-press) var(--ease-spring); }
+.toggle-item:active input { transform: scale(0.88); }
+.toggle-item {
+  transition: color var(--dur-fast) var(--ease-swift);
+}
+
+/* ── Numerals ─────────────────────────────────────────────────────────────
+   Counts that tick down ("12 left", "3 of 15") must not reflow as their
+   digits change — lining tabular figures keep every glyph one width. */
+.exports-left,
+.import-badge,
+.frame-meta,
+.template-meta-line,
+.account-sub,
+.usage-meter + * {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Toast ────────────────────────────────────────────────────────────────
+   Rises into place instead of appearing, so a message that arrives while
+   the user is looking elsewhere still registers in peripheral vision. */
+.toast {
+  animation: toast-in var(--dur-slow) var(--ease-spring) both;
+}
+
+/* .spec-details-body carries the padding and rule of the old <details>
+   shell; inside the accordion both are already provided. */
+.acc--import .spec-details-body {
+  border-top: none;
+  padding: 0;
+}
+
+/* The Account tab is one vertical stack; the sections used to be bare
+   siblings relying on the scroll area's gap. */
+.account-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Optical tracking ─────────────────────────────────────────────────────
+   Inter is drawn on a generous sidebearing, which is right at reading
+   size and too loose at label size and too airy at display size. These
+   pull each end back to where it should sit. */
+.onboard-serif {
+  letter-spacing: var(--tr-title);
+}
+.import-summary-label,
+.field-label {
+  letter-spacing: var(--tr-caps);
+  font-weight: 600;
+}
+
+/* Code keeps its own tracking — monospace is already even. */
+.syntax-tag,
+.syntax-inline-code,
+.onboard-steps code {
+  letter-spacing: 0;
+}
+
+/* ── Upload button, busy ──────────────────────────────────────────────── */
+.upload-btn[data-busy="true"] {
+  pointer-events: none;
+  color: var(--text-2);
+  border-style: solid;
+  cursor: progress;
+}
+
+.upload-btn[data-busy="true"] .spinner {
+  border-color: var(--border);
+  border-top-color: var(--text-2);
 }

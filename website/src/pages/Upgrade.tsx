@@ -85,7 +85,7 @@ export default function Upgrade() {
           <ul className="plan__features">
             <li><Check size={15} strokeWidth={2.4} /> Unlimited .twbx exports — no more {FREE_EXPORT_LIMIT}-export cap</li>
             <li><Check size={15} strokeWidth={2.4} /> All export modes, worksheet swapping, navigation</li>
-            <li><Check size={15} strokeWidth={2.4} /> License tied to your Figma account, 3-day offline grace</li>
+            <li><Check size={15} strokeWidth={2.4} /> License tied to your Figma account</li>
             <li><Check size={15} strokeWidth={2.4} /> Priority support</li>
           </ul>
 
@@ -135,16 +135,14 @@ export default function Upgrade() {
           <h2>What happens next</h2>
           <ol>
             <li>
-              <b>Pick monthly or annual, pay once.</b> Razorpay handles cards, UPI and netbanking on a secure
-              checkout — annual saves ~2 months versus monthly.
+              <b>Pick monthly or annual, pay once.</b>Annual saves ~2 months versus monthly.
             </li>
             <li>
               <b>Your license activates server-side.</b> It's keyed to your Figma user id — no license keys to
               paste, nothing to install.
             </li>
             <li>
-              <b>Export without limits.</b> The plugin re-checks your license once per session and keeps
-              working offline for 3 days between checks.
+              <b>Export without limits.</b> The plugin re-checks your license once and it is activated.
             </li>
           </ol>
           <p className="upgrade__aside-links">
